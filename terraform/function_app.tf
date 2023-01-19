@@ -40,9 +40,9 @@ resource "azurerm_linux_function_app" "app" {
     "repository_api_application_audience"        = format("api://portal-repository-%s", var.environment)
     "repository_api_path_prefix"                 = "repository-v2"
     "map_redirect_base_url"                      = "https://redirect.xtremeidiots.net"
-    "map_redirect_api_key"                       = "@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=map-redirect-api-key)"
+    "map_redirect_api_key"                       = format("@Microsoft.KeyVault(VaultName=%s;SecretName=map-redirect-api-key)", azurerm_key_vault.kv.name)
     "xtremeidiots_forums_base_url"               = "https://www.xtremeidiots.com"
-    "xtremeidiots_forums_api_key"                = "@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=xtremeidiots-forums-api-key)"
+    "xtremeidiots_forums_api_key"                = format("@Microsoft.KeyVault(VaultName=%s;SecretName=xtremeidiots-forums-api-key)", azurerm_key_vault.kv.name)
     "appdata_storage_connectionstring"           = format("@Microsoft.KeyVault(VaultName=%s;SecretName=%s)", azurerm_key_vault.kv.name, azurerm_key_vault_secret.app_data_storage_connection_string_secret.name)
     "xtremeidiots_ftp_certificate_thumbprint"    = "65173167144EA988088DA20915ABB83DB27645FA"
   }
