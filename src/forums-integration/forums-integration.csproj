@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <RootNamespace>XtremeIdiots.Portal.ForumsIntegration</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="XtremeIdiots.InvisionCommunity" Version="1.0.31" />
+    <PackageReference Include="XtremeIdiots.Portal.RepositoryApi.Abstractions" Version="1.0.841" />
+  </ItemGroup>
+
+</Project>

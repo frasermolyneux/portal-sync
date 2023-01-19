@@ -1,0 +1,118 @@
+# This workflow is used once a feature has been merged into main, it will perform lightweight CI and deploy through all the environments to production.
+
+name: Release to Production
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+
+jobs:
+  dotnet-func-ci:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: frasermolyneux/actions/dotnet-func-ci@main
+      with:
+        dotnet-project: "portal-sync"
+        dotnet-version: 7.0.x
+        src-folder: "src"
+
+  terraform-plan-and-apply-dev:
+    environment: Development
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: frasermolyneux/actions/terraform-plan-and-apply@main
+        with:
+          terraform-folder: "terraform"
+          terraform-var-file: "tfvars/dev.tfvars"
+          terraform-backend-file: "backends/dev.backend.hcl"
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - id: terraform-output
+        shell: bash
+        run: |
+          cd terraform
+          echo "function_app_name=$(terraform output -raw function_app_name)" >> $GITHUB_OUTPUT
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_USE_OIDC: true
+
+    outputs:
+      function_app_name: ${{ steps.terraform-output.outputs.function_app_name }}
+
+  function-app-deploy-dev:
+    environment: Development
+    runs-on: ubuntu-latest
+    needs: [dotnet-func-ci, terraform-plan-and-apply-dev]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: frasermolyneux/actions/deploy-function-app@main
+        with:
+          function-app-artifact-name: "portal-sync"
+          function-app-name: ${{ needs.terraform-plan-and-apply-dev.outputs.function_app_name }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  terraform-plan-and-apply-prd:
+    environment: Production
+    runs-on: ubuntu-latest
+    needs: [function-app-deploy-dev]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: frasermolyneux/actions/terraform-plan-and-apply@main
+        with:
+          terraform-folder: "terraform"
+          terraform-var-file: "tfvars/prd.tfvars"
+          terraform-backend-file: "backends/prd.backend.hcl"
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - id: terraform-output
+        shell: bash
+        run: |
+          cd terraform
+          echo "function_app_name=$(terraform output -raw function_app_name)" >> $GITHUB_OUTPUT
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_USE_OIDC: true
+
+    outputs:
+      function_app_name: ${{ steps.terraform-output.outputs.function_app_name }}
+
+  function-app-deploy-prd:
+    environment: ProductionWebApps
+    runs-on: ubuntu-latest
+    needs: [dotnet-func-ci, terraform-plan-and-apply-prd]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: frasermolyneux/actions/deploy-function-app@main
+        with:
+          function-app-artifact-name: "portal-sync"
+          function-app-name: ${{ needs.terraform-plan-and-apply-prd.outputs.function_app_name }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
