@@ -1,5 +1,5 @@
 subscription_id         = "32444f38-32f4-409f-889c-8e8aa2b5b4d1"
-resource_group_name     = "rg-portal-sync-tf-prd-uksouth"
-storage_account_name    = "saptlsynctfprd"
-container_name          = "terraform"
+resource_group_name     = "rg-tf-portal-sync-aam5erxejai9jlp-prd-uksouth"
+storage_account_name    = "saaam5erxejai9jlp"
+container_name          = "tfstate"
 key                     = "terraform.tfstate"

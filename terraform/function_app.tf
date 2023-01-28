@@ -37,8 +37,8 @@ resource "azurerm_linux_function_app" "app" {
     "ApplicationInsightsAgent_EXTENSION_VERSION" = "~3"
     "apim_base_url"                              = data.azurerm_api_management.platform.gateway_url
     "portal_repository_apim_subscription_key"    = format("@Microsoft.KeyVault(VaultName=%s;SecretName=%s)", azurerm_key_vault.kv.name, azurerm_key_vault_secret.repository_api_subscription_secret.name)
-    "repository_api_application_audience"        = format("api://portal-repository-%s", var.environment)
-    "repository_api_path_prefix"                 = "repository-v2"
+    "repository_api_application_audience"        = var.repository_api.application_audience
+    "repository_api_path_prefix"                 = var.repository_api.apim_path_prefix
     "map_redirect_base_url"                      = "https://redirect.xtremeidiots.net"
     "map_redirect_api_key"                       = format("@Microsoft.KeyVault(VaultName=%s;SecretName=map-redirect-api-key)", azurerm_key_vault.kv.name)
     "xtremeidiots_forums_base_url"               = "https://www.xtremeidiots.com"
