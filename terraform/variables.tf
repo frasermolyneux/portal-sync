@@ -26,8 +26,11 @@ variable "log_analytics_workspace_name" {}
 
 variable "repository_api" {
   type = object({
-    name     = string
-    revision = string
+    application_name     = string
+    application_audience = string
+    apim_api_name        = string
+    apim_api_revision    = string
+    apim_path_prefix     = string
   })
   default = {
     application_name     = "portal-repository-dev-01"
