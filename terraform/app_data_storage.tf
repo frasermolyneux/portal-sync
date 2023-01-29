@@ -14,15 +14,8 @@ resource "azurerm_storage_account" "app_data_storage" {
   tags = var.tags
 }
 
-resource "azurerm_storage_container" "map_images_container" {
-  name = "map-images"
-
-  storage_account_name  = azurerm_storage_account.app_data_storage.name
-  container_access_type = "blob"
-}
-
-resource "azurerm_storage_container" "demos_container" {
-  name = "demos"
+resource "azurerm_storage_container" "ban_files_container" {
+  name = "ban-files"
 
   storage_account_name  = azurerm_storage_account.app_data_storage.name
   container_access_type = "blob"
