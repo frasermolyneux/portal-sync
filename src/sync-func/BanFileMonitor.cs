@@ -153,9 +153,9 @@ namespace XtremeIdiots.Portal.SyncFunc
         }
 
         [Function(nameof(GenerateLatestBansFile))]
-        public async Task GenerateLatestBansFile([TimerTrigger("0 */10 * * * *")] TimerInfo myTimer, ILogger log)
+        public async Task GenerateLatestBansFile([TimerTrigger("0 */10 * * * *")] TimerInfo myTimer)
         {
-            log.LogDebug($"Start GenerateLatestBansFile @ {DateTime.UtcNow}");
+            logger.LogDebug($"Start GenerateLatestBansFile @ {DateTime.UtcNow}");
 
             var stopWatch = new Stopwatch();
             stopWatch.Start();
@@ -172,7 +172,7 @@ namespace XtremeIdiots.Portal.SyncFunc
 
 
             stopWatch.Stop();
-            log.LogDebug($"Stop GenerateLatestBansFile @ {DateTime.UtcNow} after {stopWatch.ElapsedMilliseconds} milliseconds");
+            logger.LogDebug($"Stop GenerateLatestBansFile @ {DateTime.UtcNow} after {stopWatch.ElapsedMilliseconds} milliseconds");
         }
     }
 }
