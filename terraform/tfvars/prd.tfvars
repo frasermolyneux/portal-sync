@@ -26,7 +26,7 @@ repository_api = {
 
 tags = {
   Environment = "prd",
-  Workload    = "portal-sync",
+  Workload    = "portal",
   DeployedBy  = "GitHub-Terraform",
   Git         = "https://github.com/frasermolyneux/portal-sync"
 }
