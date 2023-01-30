@@ -23,7 +23,7 @@ namespace XtremeIdiots.Portal.SyncFunc
         }
 
         [Function(nameof(RunMapImageSync))]
-        public async Task RunMapImageSync([TimerTrigger("0 0 0 * * 3")] TimerInfo myTimer, ILogger log)
+        public async Task RunMapImageSync([TimerTrigger("0 0 0 * * 3")] TimerInfo myTimer)
         {
             var gamesToSync = new Dictionary<GameType, string>
             {
@@ -41,7 +41,7 @@ namespace XtremeIdiots.Portal.SyncFunc
 
                 do
                 {
-                    log.LogInformation($"Processing '{mapsResponseDto.Result.Entries.Count}' maps for '{game.Key}'");
+                    logger.LogInformation($"Processing '{mapsResponseDto.Result.Entries.Count}' maps for '{game.Key}'");
 
                     foreach (var mapDto in mapsResponseDto.Result.Entries)
                     {
@@ -63,7 +63,7 @@ namespace XtremeIdiots.Portal.SyncFunc
                         }
                         catch (Exception ex)
                         {
-                            log.LogWarning(ex, $"Failed to retrieve map image from {gameTrackerImageUrl}");
+                            logger.LogWarning(ex, $"Failed to retrieve map image from {gameTrackerImageUrl}");
                         }
                     }
 

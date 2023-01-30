@@ -1,5 +1,8 @@
-﻿using Microsoft.ApplicationInsights.Extensibility;
+﻿using System.Reflection;
+
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -12,6 +15,10 @@ using XtremeIdiots.Portal.SyncFunc.Helpers;
 using XtremeIdiots.Portal.SyncFunc.Redirect;
 
 var host = new HostBuilder()
+    .ConfigureAppConfiguration(builder =>
+    {
+        builder.AddUserSecrets(Assembly.GetExecutingAssembly(), true);
+    })
     .ConfigureFunctionsWorkerDefaults(builder =>
     {
         builder
