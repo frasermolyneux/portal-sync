@@ -20,7 +20,7 @@
 	<PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.ApplicationInsights" Version="1.0.0-preview4" />
 	<PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="7.0.0" />
 	<PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="7.0.0" />
-	<PackageReference Include="XtremeIdiots.Portal.RepositoryApiClient" Version="1.0.20231.30441" />
+	<PackageReference Include="XtremeIdiots.Portal.RepositoryApiClient" Version="1.0.20232.2511" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\forums-integration\forums-integration.csproj" />
