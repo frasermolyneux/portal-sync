@@ -22,10 +22,14 @@ namespace XtremeIdiots.Portal.SyncFunc
             "mp_seelow", "mp_upheaval"
         };
 
+        private readonly ILogger<MapRedirectSync> logger;
+
         public MapRedirectSync(
+            ILogger<MapRedirectSync> logger,
             IRepositoryApiClient repositoryApiClient,
             IMapRedirectRepository mapRedirectRepository)
         {
+            this.logger = logger;
             RepositoryApiClient = repositoryApiClient;
             MapRedirectRepository = mapRedirectRepository;
         }
@@ -35,9 +39,9 @@ namespace XtremeIdiots.Portal.SyncFunc
 
         [Function(nameof(RunMapRedirectSync))]
         // ReSharper disable once UnusedMember.Global
-        public async Task RunMapRedirectSync([TimerTrigger("0 0 0 * * *")] TimerInfo myTimer, ILogger log)
+        public async Task RunMapRedirectSync([TimerTrigger("0 0 0 * * *")] TimerInfo myTimer)
         {
-            log.LogDebug($"Start RunMapRedirectSync @ {DateTime.UtcNow}");
+            logger.LogDebug($"Start RunMapRedirectSync @ {DateTime.UtcNow}");
 
             var stopWatch = new Stopwatch();
             stopWatch.Start();
@@ -68,7 +72,7 @@ namespace XtremeIdiots.Portal.SyncFunc
                     skipEntries += takeEntries;
                 }
 
-                log.LogInformation($"Total maps retrieved from redirect for '{game}' is '{mapRedirectEntries.Count}' and repository is '{repositoryMaps.Count}'");
+                logger.LogInformation($"Total maps retrieved from redirect for '{game}' is '{mapRedirectEntries.Count}' and repository is '{repositoryMaps.Count}'");
 
                 // Compare the map entries in the redirect to those in the repository and generate a list of additions and changes.
                 var mapDtosToCreate = new List<CreateMapDto>();
@@ -103,7 +107,7 @@ namespace XtremeIdiots.Portal.SyncFunc
                     }
                 }
 
-                log.LogInformation($"Creating {mapDtosToCreate.Count} new maps and updating {mapDtosToUpdate.Count} existing maps");
+                logger.LogInformation($"Creating {mapDtosToCreate.Count} new maps and updating {mapDtosToUpdate.Count} existing maps");
 
                 if (mapDtosToCreate.Count > 0)
                     await RepositoryApiClient.Maps.CreateMaps(mapDtosToCreate);
@@ -113,7 +117,7 @@ namespace XtremeIdiots.Portal.SyncFunc
             }
 
             stopWatch.Stop();
-            log.LogDebug($"Stop RunMapRedirectSync @ {DateTime.UtcNow} after {stopWatch.ElapsedMilliseconds} milliseconds");
+            logger.LogDebug($"Stop RunMapRedirectSync @ {DateTime.UtcNow} after {stopWatch.ElapsedMilliseconds} milliseconds");
         }
     }
 }
