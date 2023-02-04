@@ -29,12 +29,13 @@ var host = new HostBuilder()
     {
         var config = context.Configuration;
 
-        services.AddRepositoryApiClient(options => new RepositoryApiClientOptions(
-            config["apim_base_url"] ?? config["repository_base_url"] ?? throw new ArgumentNullException("apim_base_url"),
-            config["portal_repository_apim_subscription_key"] ?? throw new ArgumentNullException("portal_repository_apim_subscription_key"),
-            config["repository_api_application_audience"] ?? throw new ArgumentNullException("repository_api_application_audience"),
-            config["repository_api_path_prefix"] ?? "repository")
-        );
+        services.AddRepositoryApiClient(options =>
+        {
+            options.BaseUrl = config["apim_base_url"] ?? config["repository_base_url"] ?? throw new ArgumentNullException("apim_base_url");
+            options.ApiKey = config["portal_repository_apim_subscription_key"] ?? throw new ArgumentNullException("portal_repository_apim_subscription_key");
+            options.ApiAudience = config["repository_api_application_audience"] ?? throw new ArgumentNullException("repository_api_application_audience");
+            options.ApiPathPrefix = config["repository_api_path_prefix"] ?? "repository";
+        });
 
         services.AddMapRedirectRepository(options =>
         {
