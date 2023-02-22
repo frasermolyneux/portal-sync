@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
@@ -38,8 +39,14 @@ namespace XtremeIdiots.Portal.SyncFunc
             this.telemetryClient = telemetryClient ?? throw new ArgumentNullException(nameof(telemetryClient));
         }
 
+        [Function(nameof(ImportLatestBanFilesManual))]
+        public async Task ImportLatestBanFilesManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
+        {
+            await ImportLatestBanFiles(null);
+        }
+
         [Function(nameof(ImportLatestBanFiles))]
-        public async Task ImportLatestBanFiles([TimerTrigger("0 */5 * * * *")] TimerInfo myTimer)
+        public async Task ImportLatestBanFiles([TimerTrigger("0 */5 * * * *")] TimerInfo? myTimer)
         {
             var banFileMonitorsApiResponse = await repositoryApiClient.BanFileMonitors.GetBanFileMonitors(null, null, null, 0, 50, null);
 
@@ -152,8 +159,14 @@ namespace XtremeIdiots.Portal.SyncFunc
             }
         }
 
+        [Function(nameof(GenerateLatestBansFileManual))]
+        public async Task GenerateLatestBansFileManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
+        {
+            await GenerateLatestBansFile(null);
+        }
+
         [Function(nameof(GenerateLatestBansFile))]
-        public async Task GenerateLatestBansFile([TimerTrigger("0 */10 * * * *")] TimerInfo myTimer)
+        public async Task GenerateLatestBansFile([TimerTrigger("0 */10 * * * *")] TimerInfo? myTimer)
         {
             logger.LogDebug($"Start GenerateLatestBansFile @ {DateTime.UtcNow}");
 

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 
+using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
@@ -37,9 +38,15 @@ namespace XtremeIdiots.Portal.SyncFunc
         public IRepositoryApiClient RepositoryApiClient { get; }
         public IMapRedirectRepository MapRedirectRepository { get; }
 
+        [Function(nameof(RunMapRedirectSyncManual))]
+        public async Task RunMapRedirectSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
+        {
+            await RunMapRedirectSync(null);
+        }
+
         [Function(nameof(RunMapRedirectSync))]
         // ReSharper disable once UnusedMember.Global
-        public async Task RunMapRedirectSync([TimerTrigger("0 0 0 * * *")] TimerInfo myTimer)
+        public async Task RunMapRedirectSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
         {
             logger.LogDebug($"Start RunMapRedirectSync @ {DateTime.UtcNow}");
 

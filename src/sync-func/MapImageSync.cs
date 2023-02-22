@@ -1,5 +1,6 @@
 using System.Net;
 
+using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
@@ -20,6 +21,12 @@ namespace XtremeIdiots.Portal.SyncFunc
         {
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
             this.repositoryApiClient = repositoryApiClient ?? throw new ArgumentNullException(nameof(repositoryApiClient));
+        }
+
+        [Function(nameof(RunMapImageSyncManual))]
+        public async Task RunMapImageSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
+        {
+            await RunMapImageSync(null);
         }
 
         [Function(nameof(RunMapImageSync))]

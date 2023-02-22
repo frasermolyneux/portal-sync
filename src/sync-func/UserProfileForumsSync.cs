@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
@@ -26,8 +27,14 @@ namespace XtremeIdiots.Portal.SyncFunc
             this.invisionApiClient = invisionApiClient;
         }
 
+        [Function(nameof(RunUserProfileForumsSyncManual))]
+        public async Task RunUserProfileForumsSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
+        {
+            await RunUserProfileForumsSync(null);
+        }
+
         [Function(nameof(RunUserProfileForumsSync))]
-        public async Task RunUserProfileForumsSync([TimerTrigger("0 0 0 * * *")] TimerInfo myTimer)
+        public async Task RunUserProfileForumsSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
         {
             var skip = 0;
             var userProfileResponseDto = await repositoryApiClient.UserProfiles.GetUserProfiles(null, skip, TakeEntries, null);
