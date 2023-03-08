@@ -10,7 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" Version="12.15.0" />
-    <PackageReference Include="FluentFTP" Version="45.2.0" />
+    <PackageReference Include="FluentFTP" Version="46.0.0" />
     <PackageReference Include="FluentFTP.Logging" Version="1.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" />
 	<PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.10.1" />
