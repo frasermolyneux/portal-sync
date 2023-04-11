@@ -9,7 +9,7 @@
     <UserSecretsId>2ef03b04-3cd8-414c-9f40-f40dfdcf902a</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.15.1" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.16.0" />
     <PackageReference Include="FluentFTP" Version="46.0.2" />
     <PackageReference Include="FluentFTP.Logging" Version="1.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" />
@@ -22,7 +22,7 @@
 	<PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.ApplicationInsights" Version="1.0.0-preview4" />
 	<PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="7.0.0" />
 	<PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="7.0.0" />
-	<PackageReference Include="XtremeIdiots.Portal.RepositoryApiClient" Version="1.0.20234.3741" />
+	<PackageReference Include="XtremeIdiots.Portal.RepositoryApiClient" Version="1.0.20234.11751" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\forums-integration\forums-integration.csproj" />
