@@ -16,6 +16,11 @@ namespace XtremeIdiots.Portal.ForumsIntegration
         {
             var downloadFile = await _invisionClient.Downloads.GetDownloadFile(2753);
 
+            if (downloadFile == null)
+            {
+                throw new ApplicationException("Error getting demo manager client metadata from invision website");
+            }
+
             return new DemoManagerClientDto
             {
                 Version = downloadFile.Version,

@@ -48,7 +48,13 @@ namespace XtremeIdiots.Portal.ForumsIntegration
                         break;
                 }
                 var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString());
-                return postTopicResult.TopicId;
+
+                if (postTopicResult != null) { return postTopicResult.TopicId; }
+                else
+                {
+                    _logger.LogError("Error creating admin action topic - call to post topic returned null");
+                    return 0;
+                }
             }
             catch (Exception ex)
             {

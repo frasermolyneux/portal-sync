@@ -30,7 +30,7 @@ namespace XtremeIdiots.Portal.SyncFunc
         }
 
         [Function(nameof(RunMapImageSync))]
-        public async Task RunMapImageSync([TimerTrigger("0 0 0 * * 3")] TimerInfo myTimer)
+        public async Task RunMapImageSync([TimerTrigger("0 0 0 * * 3")] TimerInfo? myTimer)
         {
             var gamesToSync = new Dictionary<GameType, string>
             {
@@ -46,6 +46,11 @@ namespace XtremeIdiots.Portal.SyncFunc
                 var skip = 0;
                 var mapsResponseDto = await repositoryApiClient.Maps.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
 
+                if (mapsResponseDto == null || mapsResponseDto.Result == null)
+                {
+                    throw new ApplicationException("Failed to retrieve maps from the repository");
+                }
+
                 do
                 {
                     logger.LogInformation($"Processing '{mapsResponseDto.Result.Entries.Count}' maps for '{game.Key}'");
@@ -58,12 +63,18 @@ namespace XtremeIdiots.Portal.SyncFunc
                         {
                             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
-                            using (var client = new WebClient())
+                            using (var httpClient = new HttpClient())
                             {
-                                client.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36");
+                                httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36");
 
                                 var filePath = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
-                                client.DownloadFile(new Uri(gameTrackerImageUrl), filePath);
+                                using (var response = await httpClient.GetAsync(gameTrackerImageUrl))
+                                {
+                                    using (var fileStream = new FileStream(filePath, FileMode.Create))
+                                    {
+                                        await response.Content.CopyToAsync(fileStream);
+                                    }
+                                }
 
                                 await repositoryApiClient.Maps.UpdateMapImage(mapDto.MapId, filePath);
                             }
@@ -76,7 +87,7 @@ namespace XtremeIdiots.Portal.SyncFunc
 
                     skip += TakeEntries;
                     mapsResponseDto = await repositoryApiClient.Maps.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
-                } while (mapsResponseDto.Result.Entries.Any());
+                } while (mapsResponseDto != null && mapsResponseDto.Result != null && mapsResponseDto.Result.Entries.Any());
             }
         }
     }

@@ -62,7 +62,7 @@ namespace XtremeIdiots.Portal.SyncFunc
             foreach (var game in gamesToSync)
             {
                 // Retrieve all of the maps from the redirect server
-                var mapRedirectEntries = MapRedirectRepository.GetMapEntriesForGame(game.Value);
+                var mapRedirectEntries = await MapRedirectRepository.GetMapEntriesForGame(game.Value);
 
                 // Retrieve all of the maps from the repository in batches
                 var skipEntries = 0;

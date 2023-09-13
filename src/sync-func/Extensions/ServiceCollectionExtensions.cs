@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+
 using XtremeIdiots.Portal.SyncFunc.Configuration;
 using XtremeIdiots.Portal.SyncFunc.Ingest;
 using XtremeIdiots.Portal.SyncFunc.Interfaces;

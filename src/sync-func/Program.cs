@@ -19,15 +19,18 @@ var host = new HostBuilder()
     {
         builder.AddUserSecrets(Assembly.GetExecutingAssembly(), true);
     })
-    .ConfigureFunctionsWorkerDefaults(builder =>
+    .ConfigureFunctionsWorkerDefaults(builder => { }, options =>
     {
-        builder
-            .AddApplicationInsights()
-            .AddApplicationInsightsLogger();
+        options.EnableUserCodeException = true;
     })
     .ConfigureServices((context, services) =>
     {
         var config = context.Configuration;
+
+        services.AddLogging();
+        services.AddSingleton<ITelemetryInitializer, TelemetryInitializer>();
+        services.AddApplicationInsightsTelemetryWorkerService();
+        services.ConfigureFunctionsApplicationInsights();
 
         services.AddRepositoryApiClient(options =>
         {
@@ -39,14 +42,14 @@ var host = new HostBuilder()
 
         services.AddMapRedirectRepository(options =>
         {
-            options.MapRedirectBaseUrl = config["map_redirect_base_url"];
-            options.ApiKey = config["map_redirect_api_key"];
+            options.MapRedirectBaseUrl = config["map_redirect_base_url"] ?? throw new ArgumentNullException("map_redirect_base_url");
+            options.ApiKey = config["map_redirect_api_key"] ?? throw new ArgumentNullException("map_redirect_api_key");
         });
 
         services.AddInvisionApiClient(options =>
         {
-            options.BaseUrl = config["xtremeidiots_forums_base_url"];
-            options.ApiKey = config["xtremeidiots_forums_api_key"];
+            options.BaseUrl = config["xtremeidiots_forums_base_url"] ?? throw new ArgumentNullException("xtremeidiots_forums_base_url");
+            options.ApiKey = config["xtremeidiots_forums_api_key"] ?? throw new ArgumentNullException("xtremeidiots_forums_api_key");
         });
 
         services.AddAdminActionTopics();
@@ -58,8 +61,6 @@ var host = new HostBuilder()
 
         services.AddSingleton<IFtpHelper, FtpHelper>();
 
-        services.AddSingleton<ITelemetryInitializer, TelemetryInitializer>();
-        services.AddLogging();
         services.AddMemoryCache();
     })
     .Build();

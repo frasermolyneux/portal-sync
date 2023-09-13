@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+
 using XtremeIdiots.Portal.SyncFunc.Interfaces;
 
 namespace XtremeIdiots.Portal.SyncFunc.Validators

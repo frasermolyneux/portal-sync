@@ -58,7 +58,7 @@ namespace XtremeIdiots.Portal.SyncFunc.Ingest
 
                     playerDtoApiResponse = await repositoryApiClient.Players.GetPlayerByGameType(gameTypeEnum, guid, PlayerEntityOptions.None);
 
-                    if (playerDtoApiResponse == null)
+                    if (playerDtoApiResponse == null || playerDtoApiResponse.Result == null)
                         throw new Exception("Newly created player could not be retrieved from database");
 
                     var createAdminActionDto = new CreateAdminActionDto(playerDtoApiResponse.Result.PlayerId, AdminActionType.Ban, "Imported from server");
@@ -66,9 +66,12 @@ namespace XtremeIdiots.Portal.SyncFunc.Ingest
 
                     await repositoryApiClient.AdminActions.CreateAdminAction(createAdminActionDto);
                 }
-                else
+                else if (playerDtoApiResponse.Result != null)
                 {
                     var adminActionsApiResponse = await repositoryApiClient.AdminActions.GetAdminActions(null, playerDtoApiResponse.Result.PlayerId, null, AdminActionFilter.ActiveBans, 0, 500, null);
+
+                    if (adminActionsApiResponse == null || adminActionsApiResponse.Result == null)
+                        throw new Exception("Failed to retieve admin actions for player from database");
 
                     if (adminActionsApiResponse.Result.Entries?.Count(aa => aa.Type == AdminActionType.Ban) == 0)
                     {

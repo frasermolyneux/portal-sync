@@ -4,6 +4,6 @@ namespace XtremeIdiots.Portal.SyncFunc.Redirect
 {
     public interface IMapRedirectRepository
     {
-        List<MapRedirectEntry> GetMapEntriesForGame(string game);
+        Task<List<MapRedirectEntry>> GetMapEntriesForGame(string game);
     }
 }
