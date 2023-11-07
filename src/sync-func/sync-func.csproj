@@ -19,7 +19,7 @@
 	<PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.15.1" OutputItemType="Analyzer" />
 	<PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Timer" Version="4.2.0" />
 	<PackageReference Include="Microsoft.ApplicationInsights" Version="2.21.0" />
-	<PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="1.0.0" />
+	<PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="1.1.0" />
 	<PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="7.0.0" />
 	<PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="7.0.0" />
 	<PackageReference Include="XtremeIdiots.Portal.RepositoryApiClient" Version="1.1.95.1" />
