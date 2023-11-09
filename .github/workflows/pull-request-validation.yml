@@ -7,10 +7,7 @@ on:
       - main
 
 permissions:
-  id-token: write # This is required for requesting the JWT
   contents: read # This is required for actions/checkout
-  actions: read # Required by CodeQL
-  security-events: write # Required by CodeQL
 
 concurrency: # This is required to prevent multiple runs of the same workflow from running at the same time.
   group: ${{ github.workflow }}
@@ -20,96 +17,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: "Checkout Repository"
-        uses: actions/checkout@v3
+    - name: "Checkout Repository"
+      uses: actions/checkout@v3
 
-      - name: "Dependency Review"
-        uses: actions/dependency-review-action@v2
+    - name: "Dependency Review"
+      uses: actions/dependency-review-action@v2
 
   dotnet-func-ci:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v1
-        with:
-          java-version: 1.11
-
-      - name: Cache SonarCloud packages
-        uses: actions/cache@v1
-        with:
-          path: ~\sonar\cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
-
-      - name: Install SonarCloud scanners
-        shell: bash
-        run: |
-          cd src
-          dotnet tool install --global dotnet-sonarscanner
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v2
-        with:
-          languages: "csharp"
-
-      - name: Begin SonarScanner
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          cd src
-          dotnet-sonarscanner begin /k:"frasermolyneux_portal-sync" /o:"frasermolyneux" /d:sonar.login="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="https://sonarcloud.io"
-
-      - uses: frasermolyneux/actions/dotnet-func-ci@main
-        with:
-          dotnet-project: "sync-func"
-          dotnet-version: 7.0.x
-          src-folder: "src"
-
-      - name: End SonarScanner
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          cd src
-          dotnet-sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
-        with:
-          category: "/language:'csharp'"
+    - uses: frasermolyneux/actions/dotnet-func-ci@main
+      with:
+        dotnet-project: "sync-func"
+        dotnet-version: 7.0.x
+        src-folder: "src"
 
   terraform-plan-and-apply-dev:
     environment: Development
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-      - uses: frasermolyneux/actions/terraform-plan-and-apply@main
-        with:
-          terraform-folder: "terraform"
-          terraform-var-file: "tfvars/dev.tfvars"
-          terraform-backend-file: "backends/dev.backend.hcl"
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    - uses: frasermolyneux/actions/terraform-plan-and-apply@main
+      with:
+        terraform-folder: "terraform"
+        terraform-var-file: "tfvars/dev.tfvars"
+        terraform-backend-file: "backends/dev.backend.hcl"
+        AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - id: terraform-output
-        shell: bash
-        run: |
-          cd terraform
-          echo "function_app_name=$(terraform output -raw function_app_name)" >> $GITHUB_OUTPUT
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_USE_OIDC: true
+    - id: terraform-output
+      shell: bash
+      run: |
+        cd terraform
+        echo "function_app_name=$(terraform output -raw function_app_name)" >> $GITHUB_OUTPUT
+      env:
+        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        ARM_USE_OIDC: true
 
     outputs:
       function_app_name: ${{ steps.terraform-output.outputs.function_app_name }}
@@ -120,15 +71,15 @@ jobs:
     needs: [dotnet-func-ci, terraform-plan-and-apply-dev]
 
     steps:
-      - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-      - uses: frasermolyneux/actions/deploy-function-app@main
-        with:
-          function-app-artifact-name: "sync-func"
-          function-app-name: ${{ needs.terraform-plan-and-apply-dev.outputs.function_app_name }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    - uses: frasermolyneux/actions/deploy-function-app@main
+      with:
+        function-app-artifact-name: "sync-func"
+        function-app-name: ${{ needs.terraform-plan-and-apply-dev.outputs.function_app_name }}
+        AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
   terraform-plan-prd:
     if: github.actor != 'dependabot[bot]' # dependabot context has no permissions to prod so skip this check
@@ -137,13 +88,13 @@ jobs:
     needs: [function-app-deploy-dev]
 
     steps:
-      - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-      - uses: frasermolyneux/actions/terraform-plan@main
-        with:
-          terraform-folder: "terraform"
-          terraform-var-file: "tfvars/prd.tfvars"
-          terraform-backend-file: "backends/prd.backend.hcl"
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    - uses: frasermolyneux/actions/terraform-plan@main
+      with:
+        terraform-folder: "terraform"
+        terraform-var-file: "tfvars/prd.tfvars"
+        terraform-backend-file: "backends/prd.backend.hcl"
+        AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
