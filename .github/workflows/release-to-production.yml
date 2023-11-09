@@ -14,6 +14,9 @@ permissions:
   actions: read # Required by CodeQL
   security-events: write # Required by CodeQL
 
+concurrency: # This is required to prevent multiple runs of the same workflow from running at the same time.
+  group: ${{ github.workflow }}
+
 jobs:
   dotnet-func-ci:
     runs-on: ubuntu-latest
