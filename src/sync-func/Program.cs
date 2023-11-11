@@ -19,10 +19,7 @@ var host = new HostBuilder()
     {
         builder.AddUserSecrets(Assembly.GetExecutingAssembly(), true);
     })
-    .ConfigureFunctionsWorkerDefaults(builder => { }, options =>
-    {
-        options.EnableUserCodeException = true;
-    })
+    .ConfigureFunctionsWebApplication(options => { })
     .ConfigureServices((context, services) =>
     {
         var config = context.Configuration;
