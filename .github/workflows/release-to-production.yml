@@ -12,7 +12,7 @@ permissions:
   id-token: write # This is required for Az CLI Login
   contents: read # This is required for actions/checkout
 
-concurrency: # This is required to prevent multiple runs of the same workflow from running at the same time.
+concurrency:
   group: ${{ github.workflow }}
 
 jobs:
@@ -31,6 +31,9 @@ jobs:
   terraform-plan-and-apply-dev:
     environment: Development
     runs-on: ubuntu-latest
+
+    concurrency:
+      group: ${{ github.repository }}-dev
 
     steps:
     - uses: actions/checkout@v3
@@ -63,6 +66,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [dotnet-func-ci, terraform-plan-and-apply-dev]
 
+    concurrency:
+      group: ${{ github.repository }}-dev
+
     steps:
     - uses: actions/checkout@v3
 
@@ -78,6 +84,9 @@ jobs:
     environment: Production
     runs-on: ubuntu-latest
     needs: [function-app-deploy-dev]
+
+    concurrency:
+      group: ${{ github.repository }}-prd
 
     steps:
     - uses: actions/checkout@v3
@@ -109,6 +118,9 @@ jobs:
     environment: ProductionWebApps
     runs-on: ubuntu-latest
     needs: [dotnet-func-ci, terraform-plan-and-apply-prd]
+
+    concurrency:
+      group: ${{ github.repository }}-prd
 
     steps:
     - uses: actions/checkout@v3

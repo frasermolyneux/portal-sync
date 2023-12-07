@@ -12,6 +12,9 @@ jobs:
     environment: Development
     runs-on: ubuntu-latest
 
+    concurrency:
+      group: ${{ github.repository }}-dev
+
     steps:
       - uses: actions/checkout@v3
 
