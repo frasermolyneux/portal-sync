@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - uses: frasermolyneux/actions/dotnet-func-ci@main
       with:
@@ -36,7 +36,7 @@ jobs:
       group: ${{ github.repository }}-dev
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - uses: frasermolyneux/actions/terraform-plan-and-apply@main
       with:
@@ -70,7 +70,7 @@ jobs:
       group: ${{ github.repository }}-dev
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - uses: frasermolyneux/actions/deploy-function-app@main
       with:
@@ -89,7 +89,7 @@ jobs:
       group: ${{ github.repository }}-prd
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - uses: frasermolyneux/actions/terraform-plan-and-apply@main
       with:
@@ -123,7 +123,7 @@ jobs:
       group: ${{ github.repository }}-prd
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - uses: frasermolyneux/actions/deploy-function-app@main
       with:
