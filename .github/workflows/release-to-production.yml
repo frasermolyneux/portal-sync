@@ -115,7 +115,7 @@ jobs:
       function_app_name: ${{ steps.terraform-output.outputs.function_app_name }}
 
   function-app-deploy-prd:
-    environment: ProductionWebApps
+    environment: Production
     runs-on: ubuntu-latest
     needs: [dotnet-func-ci, terraform-plan-and-apply-prd]
 
