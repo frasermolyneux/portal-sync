@@ -42,16 +42,6 @@ provider "azurerm" {
   features {}
 }
 
-provider "azurerm" {
-  alias           = "log_analytics"
-  subscription_id = var.log_analytics_subscription_id
-
-  # This is a workload repository so won't have permissions to register providers
-  skip_provider_registration = true
-
-  features {}
-}
-
 data "azurerm_client_config" "current" {}
 
 data "azuread_client_config" "current" {}

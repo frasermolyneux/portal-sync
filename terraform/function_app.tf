@@ -24,8 +24,8 @@ resource "azurerm_linux_function_app" "app" {
       dotnet_version              = "8.0"
     }
 
-    application_insights_connection_string = azurerm_application_insights.ai.connection_string
-    application_insights_key               = azurerm_application_insights.ai.instrumentation_key
+    application_insights_connection_string = data.azurerm_application_insights.core.connection_string
+    application_insights_key               = data.azurerm_application_insights.core.instrumentation_key
 
     ftps_state          = "Disabled"
     always_on           = true

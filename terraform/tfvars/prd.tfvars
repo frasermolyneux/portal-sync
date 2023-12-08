@@ -12,10 +12,6 @@ web_apps_subscription_id       = "903b6685-c12a-4703-ac54-7ec1ff15ca43"
 web_apps_resource_group_name   = "rg-platform-plans-prd-uksouth-01"
 web_apps_app_service_plan_name = "plan-platform-prd-uksouth-01"
 
-log_analytics_subscription_id     = "d68448b0-9947-46d7-8771-baa331a3063a"
-log_analytics_resource_group_name = "rg-platform-logging-prd-uksouth-01"
-log_analytics_workspace_name      = "log-platform-prd-uksouth-01"
-
 repository_api = {
   application_name     = "portal-repository-prd-01"
   application_audience = "api://portal-repository-prd-01"
