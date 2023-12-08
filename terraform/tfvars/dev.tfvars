@@ -8,9 +8,6 @@ api_management_subscription_id     = "d68448b0-9947-46d7-8771-baa331a3063a"
 api_management_resource_group_name = "rg-platform-apim-dev-uksouth-01"
 api_management_name                = "apim-platform-dev-uksouth-amjx44uuirhb6"
 
-web_apps_resource_group_name   = "rg-platform-plans-dev-uksouth-01"
-web_apps_app_service_plan_name = "plan-platform-dev-uksouth-01"
-
 repository_api = {
   application_name     = "portal-repository-dev-01"
   application_audience = "api://portal-repository-dev-01"
