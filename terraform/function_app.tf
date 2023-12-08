@@ -1,7 +1,6 @@
 resource "azurerm_linux_function_app" "app" {
-  provider = azurerm.web_apps
-  name     = local.function_app_name
-  tags     = var.tags
+  name = local.function_app_name
+  tags = var.tags
 
   resource_group_name = data.azurerm_service_plan.plan.resource_group_name
   location            = data.azurerm_service_plan.plan.location
