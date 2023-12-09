@@ -43,3 +43,10 @@ resource "random_id" "environment_id" {
 resource "time_rotating" "thirty_days" {
   rotation_days = 30
 }
+
+resource "random_id" "lock" {
+  keepers = {
+    id = "${timestamp()}"
+  }
+  byte_length = 8
+}

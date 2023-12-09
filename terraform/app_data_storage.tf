@@ -8,8 +8,15 @@ resource "azurerm_storage_account" "app_data_storage" {
   account_kind             = "StorageV2"
   access_tier              = "Hot"
 
-  enable_https_traffic_only = true
   min_tls_version           = "TLS1_2"
+  enable_https_traffic_only = true
+
+  public_network_access_enabled = false
+
+  network_rules {
+    default_action = "Deny"
+    bypass         = ["AzureServices"]
+  }
 
   tags = var.tags
 }
