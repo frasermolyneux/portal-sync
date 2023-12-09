@@ -11,7 +11,8 @@ resource "azurerm_storage_account" "app_data_storage" {
   min_tls_version           = "TLS1_2"
   enable_https_traffic_only = true
 
-  public_network_access_enabled = false
+  // Required for GitHub Actions access to storage account
+  public_network_access_enabled = true
 
   network_rules {
     default_action = "Deny"
