@@ -25,5 +25,5 @@ resource "azurerm_storage_container" "ban_files_container" {
   name = "ban-files"
 
   storage_account_name  = azurerm_storage_account.app_data_storage.name
-  container_access_type = "blob"
+  container_access_type = "private"
 }
