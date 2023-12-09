@@ -11,13 +11,8 @@ resource "azurerm_storage_account" "app_data_storage" {
   min_tls_version           = "TLS1_2"
   enable_https_traffic_only = true
 
-  // Public network access with network rule of 'Allow' is required for deployment using public GitHub Actions runners
+  // Public network access is required for deployment using public GitHub Actions runners
   public_network_access_enabled = true
-
-  network_rules {
-    default_action = "Allow"
-    bypass         = ["AzureServices"]
-  }
 
   tags = var.tags
 }
