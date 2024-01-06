@@ -28,4 +28,4 @@ jobs:
         AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
         AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        resources: "[\"azurerm_management_lock.kv_lock\",\"azurerm_linux_function_app.app\"]"
+        resources: "[\"azurerm_management_lock.rg_lock\",\"azurerm_management_lock.kv_lock\",\"azurerm_linux_function_app.app\"]"
