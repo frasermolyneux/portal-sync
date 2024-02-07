@@ -12,8 +12,9 @@ permissions:
   id-token: write # This is required for Az CLI Login
   contents: read # This is required for actions/checkout
 
-concurrency:
+concurrency: # This is required to prevent multiple runs of the same workflow from running at the same time.
   group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 jobs:
   dotnet-func-ci:
@@ -32,7 +33,7 @@ jobs:
     environment: Development
     runs-on: ubuntu-latest
 
-    concurrency:
+    concurrency: # This is required to prevent multiple GitHub Actions invocations against stateful resources. e.g. Terraform state file / Database / Deployed Apps
       group: ${{ github.repository }}-dev
 
     steps:
@@ -66,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [dotnet-func-ci, terraform-plan-and-apply-dev]
 
-    concurrency:
+    concurrency: # This is required to prevent multiple GitHub Actions invocations against stateful resources. e.g. Terraform state file / Database / Deployed Apps
       group: ${{ github.repository }}-dev
 
     steps:
@@ -85,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [function-app-deploy-dev]
 
-    concurrency:
+    concurrency: # This is required to prevent multiple GitHub Actions invocations against stateful resources. e.g. Terraform state file / Database / Deployed Apps
       group: ${{ github.repository }}-prd
 
     steps:
@@ -119,7 +120,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [dotnet-func-ci, terraform-plan-and-apply-prd]
 
-    concurrency:
+    concurrency: # This is required to prevent multiple GitHub Actions invocations against stateful resources. e.g. Terraform state file / Database / Deployed Apps
       group: ${{ github.repository }}-prd
 
     steps:
