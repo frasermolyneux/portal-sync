@@ -19,6 +19,8 @@ resource "azurerm_key_vault" "kv" {
 }
 
 resource "azurerm_management_lock" "kv_lock" {
+  count = var.environment == "prd" ? 1 : 0
+
   name       = "Terraform (CanNotDelete) - ${random_id.lock.hex}"
   scope      = azurerm_key_vault.kv.id
   lock_level = "CanNotDelete"
