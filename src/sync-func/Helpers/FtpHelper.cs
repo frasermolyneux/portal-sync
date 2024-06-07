@@ -19,12 +19,15 @@ namespace XtremeIdiots.Portal.SyncFunc.Helpers
             this.configuration = configuration;
         }
 
-        public async Task<long?> GetFileSize(string hostname, int port, string filePath, string username, string password)
+        public async Task<long?> GetFileSize(string hostname, int port, string filePath, string username, string password, Dictionary<string, string> telemetryProperties)
         {
             var operation = telemetryClient.StartOperation<DependencyTelemetry>("GetFileSize");
             operation.Telemetry.Type = "FTP";
             operation.Telemetry.Target = $"{hostname}:{port}";
             operation.Telemetry.Data = filePath;
+
+            foreach (var telemetryProperty in telemetryProperties)
+                operation.Telemetry.Properties.Add(telemetryProperty.Key, telemetryProperty.Value);
 
             AsyncFtpClient? ftpClient = null;
 
@@ -60,12 +63,15 @@ namespace XtremeIdiots.Portal.SyncFunc.Helpers
             }
         }
 
-        public async Task<DateTime?> GetLastModified(string hostname, int port, string filePath, string username, string password)
+        public async Task<DateTime?> GetLastModified(string hostname, int port, string filePath, string username, string password, Dictionary<string, string> telemetryProperties)
         {
             var operation = telemetryClient.StartOperation<DependencyTelemetry>("GetLastModified");
             operation.Telemetry.Type = "FTP";
             operation.Telemetry.Target = $"{hostname}:{port}";
             operation.Telemetry.Data = filePath;
+
+            foreach (var telemetryProperty in telemetryProperties)
+                operation.Telemetry.Properties.Add(telemetryProperty.Key, telemetryProperty.Value);
 
             AsyncFtpClient? ftpClient = null;
 
@@ -101,12 +107,15 @@ namespace XtremeIdiots.Portal.SyncFunc.Helpers
             }
         }
 
-        public async Task<string> GetRemoteFileData(string hostname, int port, string filePath, string username, string password)
+        public async Task<string> GetRemoteFileData(string hostname, int port, string filePath, string username, string password, Dictionary<string, string> telemetryProperties)
         {
             var operation = telemetryClient.StartOperation<DependencyTelemetry>("GetRemoteFileData");
             operation.Telemetry.Type = "FTP";
             operation.Telemetry.Target = $"{hostname}:{port}";
             operation.Telemetry.Data = filePath;
+
+            foreach (var telemetryProperty in telemetryProperties)
+                operation.Telemetry.Properties.Add(telemetryProperty.Key, telemetryProperty.Value);
 
             AsyncFtpClient? ftpClient = null;
 
@@ -148,12 +157,15 @@ namespace XtremeIdiots.Portal.SyncFunc.Helpers
             }
         }
 
-        public async Task UpdateRemoteFileFromStream(string hostname, int port, string filePath, string username, string password, Stream data)
+        public async Task UpdateRemoteFileFromStream(string hostname, int port, string filePath, string username, string password, Stream data, Dictionary<string, string> telemetryProperties)
         {
             var operation = telemetryClient.StartOperation<DependencyTelemetry>("UpdateRemoteFileFromStream");
             operation.Telemetry.Type = "FTP";
             operation.Telemetry.Target = $"{hostname}:{port}";
             operation.Telemetry.Data = filePath;
+
+            foreach (var telemetryProperty in telemetryProperties)
+                operation.Telemetry.Properties.Add(telemetryProperty.Key, telemetryProperty.Value);
 
             AsyncFtpClient? ftpClient = null;
 
