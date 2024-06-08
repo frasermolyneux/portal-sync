@@ -60,6 +60,8 @@ var host = new HostBuilder()
         services.AddSingleton<IFtpHelper, FtpHelper>();
 
         services.AddMemoryCache();
+
+        services.AddHealthChecks();
     })
     .Build();
 
