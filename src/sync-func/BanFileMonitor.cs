@@ -66,13 +66,6 @@ namespace XtremeIdiots.Portal.SyncFunc
                     || banFileMonitorDto.GameServer.FtpPort == null)
                     continue;
 
-                var telemetryProperties = new Dictionary<string, string>()
-                {
-                    {"GameType", banFileMonitorDto.GameServer.GameType.ToString() },
-                    {"GameServerId",  banFileMonitorDto.GameServer.GameServerId.ToString()},
-                    {"GameServerName", banFileMonitorDto.GameServer.Title }
-                };
-
                 try
                 {
                     var remoteFileSize = await ftpHelper.GetFileSize(
@@ -81,12 +74,12 @@ namespace XtremeIdiots.Portal.SyncFunc
                     banFileMonitorDto.FilePath,
                     banFileMonitorDto.GameServer.FtpUsername,
                     banFileMonitorDto.GameServer.FtpPassword,
-                    telemetryProperties);
+                    banFileMonitorDto.TelemetryProperties);
                     var banFileSize = await banFilesRepository.GetBanFileSizeForGame(banFileMonitorDto.GameServer.GameType);
 
                     if (remoteFileSize == null)
                     {
-                        telemetryClient.TrackEvent("BanFileInit", telemetryProperties);
+                        telemetryClient.TrackEvent("BanFileInit", banFileMonitorDto.TelemetryProperties);
 
                         var banFileStream = await banFilesRepository.GetBanFileForGame(banFileMonitorDto.GameServer.GameType);
 
@@ -97,7 +90,7 @@ namespace XtremeIdiots.Portal.SyncFunc
                             banFileMonitorDto.GameServer.FtpUsername,
                             banFileMonitorDto.GameServer.FtpPassword,
                             banFileStream,
-                            telemetryProperties);
+                            banFileMonitorDto.TelemetryProperties);
 
                         var editBanFileMonitorDto = new EditBanFileMonitorDto(banFileMonitorDto.BanFileMonitorId, banFileSize, DateTime.UtcNow);
                         await repositoryApiClient.BanFileMonitors.UpdateBanFileMonitor(editBanFileMonitorDto);
@@ -106,7 +99,7 @@ namespace XtremeIdiots.Portal.SyncFunc
 
                     if (remoteFileSize != banFileMonitorDto.RemoteFileSize)
                     {
-                        telemetryClient.TrackEvent("BanFileChangedOnRemote", telemetryProperties);
+                        telemetryClient.TrackEvent("BanFileChangedOnRemote", banFileMonitorDto.TelemetryProperties);
 
                         var remoteBanFileData = await ftpHelper.GetRemoteFileData(
                             banFileMonitorDto.GameServer.FtpHostname,
@@ -114,7 +107,7 @@ namespace XtremeIdiots.Portal.SyncFunc
                             banFileMonitorDto.FilePath,
                             banFileMonitorDto.GameServer.FtpUsername,
                             banFileMonitorDto.GameServer.FtpPassword,
-                            telemetryProperties);
+                            banFileMonitorDto.TelemetryProperties);
 
                         await banFileIngest.IngestBanFileDataForGame(banFileMonitorDto.GameServer.GameType.ToString(), remoteBanFileData);
 
@@ -124,7 +117,7 @@ namespace XtremeIdiots.Portal.SyncFunc
 
                     if (remoteFileSize != banFileSize && remoteFileSize == banFileMonitorDto.RemoteFileSize)
                     {
-                        telemetryClient.TrackEvent("BanFileChangedOnSource", telemetryProperties);
+                        telemetryClient.TrackEvent("BanFileChangedOnSource", banFileMonitorDto.TelemetryProperties);
 
                         var banFileStream = await banFilesRepository.GetBanFileForGame(banFileMonitorDto.GameServer.GameType);
 
@@ -135,7 +128,7 @@ namespace XtremeIdiots.Portal.SyncFunc
                             banFileMonitorDto.GameServer.FtpUsername,
                             banFileMonitorDto.GameServer.FtpPassword,
                             banFileStream,
-                            telemetryProperties);
+                            banFileMonitorDto.TelemetryProperties);
 
                         var editBanFileMonitorDto = new EditBanFileMonitorDto(banFileMonitorDto.BanFileMonitorId, banFileSize, DateTime.UtcNow);
                         await repositoryApiClient.BanFileMonitors.UpdateBanFileMonitor(editBanFileMonitorDto);
@@ -152,7 +145,7 @@ namespace XtremeIdiots.Portal.SyncFunc
                 }
                 catch (Exception ex)
                 {
-                    telemetryClient.TrackException(ex, telemetryProperties);
+                    telemetryClient.TrackException(ex, banFileMonitorDto.TelemetryProperties);
                 }
             }
         }

@@ -43,48 +43,51 @@ namespace XtremeIdiots.Portal.SyncFunc
             {
                 foreach (var userProfileDto in userProfileResponseDto.Result.Entries)
                 {
-                    logger.LogInformation($"UserProfileSync for '{userProfileDto.DisplayName}' with XtremeIdiots ID '{userProfileDto.XtremeIdiotsForumId}'");
-
-                    if (!string.IsNullOrWhiteSpace(userProfileDto.XtremeIdiotsForumId))
+                    using (logger.BeginScope(userProfileDto.TelemetryProperties))
                     {
-                        try
-                        {
-                            var member = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId);
+                        logger.LogInformation($"UserProfileSync for '{userProfileDto.DisplayName}' with XtremeIdiots ID '{userProfileDto.XtremeIdiotsForumId}'");
 
-                            if (member != null)
+                        if (!string.IsNullOrWhiteSpace(userProfileDto.XtremeIdiotsForumId))
+                        {
+                            try
                             {
-                                var editUserProfileDto = new EditUserProfileDto(userProfileDto.UserProfileId)
+                                var member = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId);
+
+                                if (member != null)
                                 {
-                                    DisplayName = userProfileDto.DisplayName,
-                                    FormattedName = userProfileDto.FormattedName,
-                                    PrimaryGroup = userProfileDto.PrimaryGroup,
-                                    Email = userProfileDto.Email,
-                                    PhotoUrl = userProfileDto.PhotoUrl,
-                                    ProfileUrl = userProfileDto.ProfileUrl,
-                                    TimeZone = userProfileDto.TimeZone
-                                };
+                                    var editUserProfileDto = new EditUserProfileDto(userProfileDto.UserProfileId)
+                                    {
+                                        DisplayName = userProfileDto.DisplayName,
+                                        FormattedName = userProfileDto.FormattedName,
+                                        PrimaryGroup = userProfileDto.PrimaryGroup,
+                                        Email = userProfileDto.Email,
+                                        PhotoUrl = userProfileDto.PhotoUrl,
+                                        ProfileUrl = userProfileDto.ProfileUrl,
+                                        TimeZone = userProfileDto.TimeZone
+                                    };
 
-                                await repositoryApiClient.UserProfiles.UpdateUserProfile(editUserProfileDto);
+                                    await repositoryApiClient.UserProfiles.UpdateUserProfile(editUserProfileDto);
 
-                                var nonSystemGeneratedClaims = userProfileDto.UserProfileClaims
-                                    .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))
-                                    .ToList();
+                                    var nonSystemGeneratedClaims = userProfileDto.UserProfileClaims
+                                        .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))
+                                        .ToList();
 
-                                var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
-                                var claimsToSave = activeClaims.Concat(nonSystemGeneratedClaims).ToList();
+                                    var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
+                                    var claimsToSave = activeClaims.Concat(nonSystemGeneratedClaims).ToList();
 
-                                await repositoryApiClient.UserProfiles.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave);
+                                    await repositoryApiClient.UserProfiles.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave);
+                                }
+                                else
+                                {
+                                    await repositoryApiClient.UserProfiles.SetUserProfileClaims(userProfileDto.UserProfileId, new List<CreateUserProfileClaimDto>());
+                                }
                             }
-                            else
+                            catch (Exception ex)
                             {
-                                await repositoryApiClient.UserProfiles.SetUserProfileClaims(userProfileDto.UserProfileId, new List<CreateUserProfileClaimDto>());
+                                logger.LogError(ex, $"Failed to sync forum profile for {userProfileDto.XtremeIdiotsForumId}");
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogError(ex, $"Failed to sync forum profile for {userProfileDto.XtremeIdiotsForumId}");
-                        }
 
+                        }
                     }
                 }
 

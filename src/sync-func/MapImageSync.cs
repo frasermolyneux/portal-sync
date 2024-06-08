@@ -81,7 +81,7 @@ namespace XtremeIdiots.Portal.SyncFunc
                         }
                         catch (Exception ex)
                         {
-                            logger.LogWarning(ex, $"Failed to retrieve map image from {gameTrackerImageUrl}");
+                            logger.LogWarning(ex, $"Failed to retrieve map image from {gameTrackerImageUrl}", mapDto.TelemetryProperties);
                         }
                     }
 
