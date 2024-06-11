@@ -55,3 +55,22 @@ resource "azurerm_linux_function_app" "app" {
     "DiagnosticServices_EXTENSION_VERSION" = "~3"
   }
 }
+
+resource "azurerm_application_insights_standard_web_test" "app" {
+  name = "${azurerm_linux_function_app.app.name}-availability-test"
+
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+
+  application_insights_id = data.azurerm_application_insights.core.id
+
+  geo_locations = [
+    "emea-ru-msa-edge", // UK South
+    "emea-nl-ams-azr",  // West Europe
+    "us-va-ash-azr"     // East US
+  ]
+
+  request {
+    url = "${azurerm_linux_function_app.app.default_hostname}/api/health"
+  }
+}
