@@ -74,6 +74,6 @@ resource "azurerm_application_insights_standard_web_test" "app" {
   ]
 
   request {
-    url = "${azurerm_linux_function_app.app.default_hostname}/api/health"
+    url = "https://${azurerm_linux_function_app.app.default_hostname}/api/health"
   }
 }
