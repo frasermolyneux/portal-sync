@@ -65,6 +65,8 @@ resource "azurerm_application_insights_standard_web_test" "app" {
 
   application_insights_id = data.azurerm_application_insights.core.id
 
+  enabled = true
+
   geo_locations = [
     "emea-ru-msa-edge", // UK South
     "emea-nl-ams-azr",  // West Europe
