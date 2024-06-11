@@ -58,9 +58,10 @@ resource "azurerm_linux_function_app" "app" {
 
 resource "azurerm_application_insights_standard_web_test" "app" {
   name = "${azurerm_linux_function_app.app.name}-availability-test"
+  tags = var.tags
 
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = data.azurerm_application_insights.core.resource_group_name
+  location            = data.azurerm_application_insights.core.location
 
   application_insights_id = data.azurerm_application_insights.core.id
 
