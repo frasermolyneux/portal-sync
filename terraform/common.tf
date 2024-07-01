@@ -1,15 +1,18 @@
-resource "azurerm_resource_group" "rg" {
-  name     = local.resource_group_name
-  location = var.location
+data "azurerm_client_config" "current" {}
 
-  tags = var.tags
+data "azuread_client_config" "current" {}
+
+resource "random_id" "environment_id" {
+  byte_length = 6
 }
 
-//resource "azurerm_management_lock" "rg_lock" {
-//  count = var.environment == "prd" ? 1 : 0
-//
-//  name       = "Terraform (CanNotDelete) - ${random_id.lock.hex}"
-//  scope      = azurerm_resource_group.rg.id
-//  lock_level = "CanNotDelete"
-//  notes      = "CanNotDelete Lock managed by Terraform to prevent manual or accidental deletion of resource group and resources"
-//}
+resource "time_rotating" "thirty_days" {
+  rotation_days = 30
+}
+
+resource "random_id" "lock" {
+  keepers = {
+    id = "${timestamp()}"
+  }
+  byte_length = 8
+}
