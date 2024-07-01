@@ -18,14 +18,14 @@ resource "azurerm_key_vault" "kv" {
   }
 }
 
-resource "azurerm_management_lock" "kv_lock" {
-  count = var.environment == "prd" ? 1 : 0
-
-  name       = "Terraform (CanNotDelete) - ${random_id.lock.hex}"
-  scope      = azurerm_key_vault.kv.id
-  lock_level = "CanNotDelete"
-  notes      = "CanNotDelete Lock managed by Terraform to prevent manual or accidental deletion of resource group and resources"
-}
+//resource "azurerm_management_lock" "kv_lock" {
+//  count = var.environment == "prd" ? 1 : 0
+//
+//  name       = "Terraform (CanNotDelete) - ${random_id.lock.hex}"
+//  scope      = azurerm_key_vault.kv.id
+//  lock_level = "CanNotDelete"
+//  notes      = "CanNotDelete Lock managed by Terraform to prevent manual or accidental deletion of resource group and resources"
+//}
 
 resource "azurerm_role_assignment" "web_app_kv_role_assignment" {
   scope                = azurerm_key_vault.kv.id

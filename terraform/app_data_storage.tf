@@ -17,14 +17,14 @@ resource "azurerm_storage_account" "app_data_storage" {
   tags = var.tags
 }
 
-resource "azurerm_management_lock" "app_data_storage_lock" {
-  count = var.environment == "prd" ? 1 : 0
-
-  name       = "Terraform (CanNotDelete) - ${random_id.lock.hex}"
-  scope      = azurerm_storage_account.app_data_storage.id
-  lock_level = "CanNotDelete"
-  notes      = "CanNotDelete Lock managed by Terraform to prevent manual or accidental deletion of resource group and resources"
-}
+//resource "azurerm_management_lock" "app_data_storage_lock" {
+//  count = var.environment == "prd" ? 1 : 0
+//
+//  name       = "Terraform (CanNotDelete) - ${random_id.lock.hex}"
+//  scope      = azurerm_storage_account.app_data_storage.id
+//  lock_level = "CanNotDelete"
+//  notes      = "CanNotDelete Lock managed by Terraform to prevent manual or accidental deletion of resource group and resources"
+//}
 
 resource "azurerm_storage_container" "ban_files_container" {
   name = "ban-files"
