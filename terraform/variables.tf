@@ -14,10 +14,6 @@ variable "subscription_id" {}
 
 variable "api_management_name" {}
 
-variable "legacy_api_management_subscription_id" {}
-variable "legacy_api_management_resource_group_name" {}
-variable "legacy_api_management_name" {}
-
 variable "repository_api" {
   type = object({
     application_name     = string

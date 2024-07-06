@@ -21,13 +21,3 @@ provider "azurerm" {
     }
   }
 }
-
-provider "azurerm" {
-  alias           = "api_management"
-  subscription_id = var.legacy_api_management_subscription_id
-
-  # This is a workload repository so won't have permissions to register providers
-  skip_provider_registration = true
-
-  features {}
-}
