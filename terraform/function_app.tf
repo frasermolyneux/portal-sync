@@ -38,7 +38,7 @@ resource "azurerm_linux_function_app" "app" {
     "READ_ONLY_MODE"                                    = var.environment == "prd" ? "true" : "false"
     "WEBSITE_RUN_FROM_PACKAGE"                          = "1"
     "ApplicationInsightsAgent_EXTENSION_VERSION"        = "~3"
-    "apim_base_url"                                     = data.azurerm_api_management.platform.gateway_url
+    "apim_base_url"                                     = data.azurerm_api_management.core.gateway_url
     "portal_repository_apim_subscription_key_primary"   = format("@Microsoft.KeyVault(VaultName=%s;SecretName=%s)", azurerm_key_vault.kv.name, azurerm_key_vault_secret.repository_api_subscription_secret_primary.name)
     "portal_repository_apim_subscription_key_secondary" = format("@Microsoft.KeyVault(VaultName=%s;SecretName=%s)", azurerm_key_vault.kv.name, azurerm_key_vault_secret.repository_api_subscription_secret_secondary.name)
     "repository_api_application_audience"               = var.repository_api.application_audience
