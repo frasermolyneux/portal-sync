@@ -8,8 +8,8 @@ resource "azurerm_storage_account" "app_data_storage" {
   account_kind             = "StorageV2"
   access_tier              = "Hot"
 
-  min_tls_version           = "TLS1_2"
-  enable_https_traffic_only = true
+  min_tls_version            = "TLS1_2"
+  https_traffic_only_enabled = true
 
   // Public network access is required for deployment using public GitHub Actions runners
   public_network_access_enabled = true
