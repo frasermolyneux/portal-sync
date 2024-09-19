@@ -14,6 +14,14 @@ repository_api = {
   apim_path_prefix     = "repository"
 }
 
+servers_integration_api = {
+  application_name     = "portal-servers-integration-dev-01"
+  application_audience = "api://portal-servers-integration-dev-01"
+  apim_api_name        = "servers-integration-api"
+  apim_api_revision    = "1"
+  apim_path_prefix     = "servers-integration"
+}
+
 tags = {
   Environment = "dev",
   Workload    = "portal",
