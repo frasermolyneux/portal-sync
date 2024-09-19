@@ -31,6 +31,23 @@ variable "repository_api" {
   }
 }
 
+variable "servers_integration_api" {
+  type = object({
+    application_name     = string
+    application_audience = string
+    apim_api_name        = string
+    apim_api_revision    = string
+    apim_path_prefix     = string
+  })
+  default = {
+    application_name     = "portal-servers-integration-dev-01"
+    application_audience = "api://portal-servers-integration-dev-01"
+    apim_api_name        = "servers-integration-api"
+    apim_api_revision    = "1"
+    apim_path_prefix     = "servers-integration"
+  }
+}
+
 variable "tags" {
   default = {}
 }
