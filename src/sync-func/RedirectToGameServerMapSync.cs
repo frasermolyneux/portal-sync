@@ -55,7 +55,7 @@ namespace XtremeIdiots.Portal.SyncFunc
                         foreach (var map in maps.Result.Entries)
                         {
                             logger.LogInformation($"Pushing map '{map.Name}' to game server '{gameServerDto.Title}'");
-                            await serversApiClient.Maps.PushServerMap(gameServerDto.GameServerId, map.Name);
+                            //await serversApiClient.Maps.PushServerMap(gameServerDto.GameServerId, map.Name);
                         }
                     }
                     catch (Exception ex)
