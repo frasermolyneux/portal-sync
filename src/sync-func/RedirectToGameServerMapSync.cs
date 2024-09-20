@@ -44,18 +44,32 @@ namespace XtremeIdiots.Portal.SyncFunc
                 {
                     try
                     {
-                        var maps = await serversApiClient.Maps.GetServerMaps(gameServerDto.GameServerId);
+                        var rconMaps = await serversApiClient.Rcon.GetServerMaps(gameServerDto.GameServerId);
+                        var serverMaps = await serversApiClient.Maps.GetLoadedServerMapsFromHost(gameServerDto.GameServerId);
 
-                        if (!maps.IsSuccess || maps.Result == null)
+                        if (!rconMaps.IsSuccess || rconMaps.Result == null)
                         {
-                            logger.LogError("Failed to retrieve maps for game server");
+                            logger.LogError("Failed to retrieve rcon maps for game server");
                             continue;
                         }
 
-                        foreach (var map in maps.Result.Entries)
+                        if (!serverMaps.IsSuccess || serverMaps.Result == null)
                         {
-                            logger.LogInformation($"Pushing map '{map.Name}' to game server '{gameServerDto.Title}'");
-                            //await serversApiClient.Maps.PushServerMap(gameServerDto.GameServerId, map.Name);
+                            logger.LogError("Failed to retrieve maps for game server host");
+                            continue;
+                        }
+
+                        foreach (var map in rconMaps.Result.Entries)
+                        {
+                            if (!serverMaps.Result.Entries.Any(x => x.Name == map.MapName))
+                            {
+                                logger.LogInformation($"Pushing map '{map.MapName}' to game server '{gameServerDto.Title}'");
+                                //await serversApiClient.Maps.PushServerMap(gameServerDto.GameServerId, map.Name);
+                            }
+                            else
+                            {
+                                logger.LogInformation($"Map '{map.MapName}' already exists on game server '{gameServerDto.Title}'");
+                            }
                         }
                     }
                     catch (Exception ex)
