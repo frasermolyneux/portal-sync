@@ -65,9 +65,3 @@ resource "azurerm_linux_function_app" "app" {
     "DiagnosticServices_EXTENSION_VERSION" = "~3"
   }
 }
-
-resource "azurerm_role_assignment" "app-to-storage" {
-  scope                = azurerm_storage_account.function_app_storage.id
-  role_definition_name = "Storage Blob Data Owner"
-  principal_id         = azurerm_linux_function_app.app.identity[0].principal_id
-}
