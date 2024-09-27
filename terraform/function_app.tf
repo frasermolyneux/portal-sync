@@ -7,8 +7,8 @@ resource "azurerm_linux_function_app" "app" {
 
   service_plan_id = data.azurerm_service_plan.core.id
 
-  storage_account_name       = azurerm_storage_account.function_app_storage.name
-  storage_account_access_key = azurerm_storage_account.function_app_storage.primary_access_key
+  storage_account_name          = azurerm_storage_account.function_app_storage.name
+  storage_uses_managed_identity = true
 
   https_only = true
 
