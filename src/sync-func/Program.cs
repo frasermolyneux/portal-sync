@@ -64,7 +64,7 @@ var host = new HostBuilder()
 
         services.AddBanFilesRepository(options =>
         {
-            options.ConnectionString = config["appdata_storage_connectionstring"];
+            options.StorageBlobEndpoint = config["appdata_storage_blob_endpoint"];
         });
 
         services.AddSingleton<IFtpHelper, FtpHelper>();

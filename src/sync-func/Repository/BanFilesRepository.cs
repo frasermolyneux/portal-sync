@@ -1,4 +1,5 @@
-﻿using Azure.Storage.Blobs;
+﻿using Azure.Identity;
+using Azure.Storage.Blobs;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -23,8 +24,8 @@ namespace XtremeIdiots.Portal.SyncFunc.Repository
             IRepositoryApiClient repositoryApiClient
         )
         {
-            if (string.IsNullOrWhiteSpace(options.Value.ConnectionString))
-                throw new ArgumentNullException(nameof(options.Value.ConnectionString));
+            if (string.IsNullOrWhiteSpace(options.Value.StorageBlobEndpoint))
+                throw new ArgumentNullException(nameof(options.Value.StorageBlobEndpoint));
 
             if (string.IsNullOrWhiteSpace(options.Value.ContainerName))
                 throw new ArgumentNullException(nameof(options.Value.ContainerName));
@@ -41,7 +42,7 @@ namespace XtremeIdiots.Portal.SyncFunc.Repository
 
             _logger.LogInformation($"Regenerating ban file for {gameType} using blob key {blobKey}");
 
-            var blobServiceClient = new BlobServiceClient(_options.Value.ConnectionString);
+            var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint), new DefaultAzureCredential());
             var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
 
             var blobClient = containerClient.GetBlobClient(blobKey);
@@ -68,7 +69,7 @@ namespace XtremeIdiots.Portal.SyncFunc.Repository
 
             _logger.LogInformation($"Retrieving ban file size for {gameType} using blob key {blobKey}");
 
-            var blobServiceClient = new BlobServiceClient(_options.Value.ConnectionString);
+            var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint), new DefaultAzureCredential());
             var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
 
             var blobClient = containerClient.GetBlobClient(blobKey);
@@ -98,7 +99,7 @@ namespace XtremeIdiots.Portal.SyncFunc.Repository
 
         private async Task<Stream> GetFileStream(string blobKey)
         {
-            var blobServiceClient = new BlobServiceClient(_options.Value.ConnectionString);
+            var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint), new DefaultAzureCredential());
             var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
 
             var blobClient = containerClient.GetBlobClient(blobKey);

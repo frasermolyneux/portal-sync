@@ -2,7 +2,7 @@
 {
     public class BanFilesRepositoryOptions
     {
-        public string? ConnectionString { get; set; }
+        public string? StorageBlobEndpoint { get; set; }
         public string? ContainerName { get; set; } = "ban-files";
     }
 }

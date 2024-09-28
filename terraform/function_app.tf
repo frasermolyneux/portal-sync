@@ -57,7 +57,7 @@ resource "azurerm_linux_function_app" "app" {
     "xtremeidiots_forums_base_url" = "https://www.xtremeidiots.com"
     "xtremeidiots_forums_api_key"  = format("@Microsoft.KeyVault(VaultName=%s;SecretName=xtremeidiots-forums-api-key)", azurerm_key_vault.kv.name)
 
-    "appdata_storage_connectionstring"        = format("@Microsoft.KeyVault(VaultName=%s;SecretName=%s)", azurerm_key_vault.kv.name, azurerm_key_vault_secret.app_data_storage_connection_string_secret.name)
+    "appdata_storage_blob_endpoint"           = azurerm_storage_account.app_data_storage.primary_blob_endpoint
     "xtremeidiots_ftp_certificate_thumbprint" = "65173167144EA988088DA20915ABB83DB27645FA"
 
     // https://learn.microsoft.com/en-us/azure/azure-monitor/profiler/profiler-azure-functions#app-settings-for-enabling-profiler

@@ -11,7 +11,9 @@ resource "azurerm_storage_account" "app_data_storage" {
   min_tls_version            = "TLS1_2"
   https_traffic_only_enabled = true
 
-  // Public network access is required for deployment using public GitHub Actions runners
+  local_user_enabled        = false
+  shared_access_key_enabled = false
+
   public_network_access_enabled = true
 
   tags = var.tags
