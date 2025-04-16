@@ -23,7 +23,7 @@
 	  <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.4" />
 	  <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.4" />
 	  <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.4" />
-	  <PackageReference Include="XtremeIdiots.Portal.RepositoryApiClient" Version="1.1.309.1" />
+	  <PackageReference Include="XtremeIdiots.Portal.RepositoryApiClient" Version="1.1.310.1" />
     <PackageReference Include="XtremeIdiots.Portal.ServersApiClient" Version="1.1.255.1" />
   </ItemGroup>
   <ItemGroup>
