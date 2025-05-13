@@ -64,13 +64,13 @@ namespace XtremeIdiots.Portal.SyncFunc
                                 {
                                     var editUserProfileDto = new EditUserProfileDto(userProfileDto.UserProfileId)
                                     {
-                                        DisplayName = userProfileDto.DisplayName,
-                                        FormattedName = userProfileDto.FormattedName,
-                                        PrimaryGroup = userProfileDto.PrimaryGroup,
-                                        Email = userProfileDto.Email,
-                                        PhotoUrl = userProfileDto.PhotoUrl,
-                                        ProfileUrl = userProfileDto.ProfileUrl,
-                                        TimeZone = userProfileDto.TimeZone
+                                        DisplayName = member.Name ?? userProfileDto.DisplayName,
+                                        FormattedName = member.FormattedName ?? userProfileDto.FormattedName,
+                                        PrimaryGroup = member.PrimaryGroup?.Name ?? userProfileDto.PrimaryGroup,
+                                        Email = member.Email ?? userProfileDto.Email,
+                                        PhotoUrl = member.PhotoUrl ?? userProfileDto.PhotoUrl,
+                                        ProfileUrl = member.ProfileUrl?.ToString() ?? userProfileDto.ProfileUrl,
+                                        TimeZone = member.TimeZone ?? userProfileDto.TimeZone
                                     };
 
                                     await repositoryApiClient.UserProfiles.UpdateUserProfile(editUserProfileDto);
