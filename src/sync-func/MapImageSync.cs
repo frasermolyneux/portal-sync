@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http;
+using System.Security.Authentication;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -61,22 +63,29 @@ namespace XtremeIdiots.Portal.SyncFunc
 
                         try
                         {
-                            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-
                             using (var httpClient = new HttpClient())
                             {
-                                httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36");
-
-                                var filePath = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
-                                using (var response = await httpClient.GetAsync(gameTrackerImageUrl))
+                                // Setting TLS 1.2 via HttpClientHandler instead of ServicePointManager
+                                var handler = new HttpClientHandler
                                 {
-                                    using (var fileStream = new FileStream(filePath, FileMode.Create))
-                                    {
-                                        await response.Content.CopyToAsync(fileStream);
-                                    }
-                                }
+                                    SslProtocols = System.Security.Authentication.SslProtocols.Tls12
+                                };
 
-                                await repositoryApiClient.Maps.UpdateMapImage(mapDto.MapId, filePath);
+                                using (var secureHttpClient = new HttpClient(handler))
+                                {
+                                    secureHttpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36");
+
+                                    var filePath = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
+                                    using (var response = await secureHttpClient.GetAsync(gameTrackerImageUrl))
+                                    {
+                                        using (var fileStream = new FileStream(filePath, FileMode.Create))
+                                        {
+                                            await response.Content.CopyToAsync(fileStream);
+                                        }
+                                    }
+
+                                    await repositoryApiClient.Maps.UpdateMapImage(mapDto.MapId, filePath);
+                                }
                             }
                         }
                         catch (Exception ex)

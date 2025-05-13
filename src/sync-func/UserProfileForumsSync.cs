@@ -39,6 +39,13 @@ namespace XtremeIdiots.Portal.SyncFunc
             var skip = 0;
             var userProfileResponseDto = await repositoryApiClient.UserProfiles.GetUserProfiles(null, skip, TakeEntries, null);
 
+            // Ensure the response and result are not null
+            if (userProfileResponseDto?.Result == null)
+            {
+                logger.LogWarning("User profiles response or result is null");
+                return;
+            }
+
             do
             {
                 foreach (var userProfileDto in userProfileResponseDto.Result.Entries)
@@ -93,22 +100,36 @@ namespace XtremeIdiots.Portal.SyncFunc
 
                 skip += TakeEntries;
                 userProfileResponseDto = await repositoryApiClient.UserProfiles.GetUserProfiles(null, skip, TakeEntries, null);
-            } while (userProfileResponseDto.Result.Entries.Count > 0);
+            } while (userProfileResponseDto?.Result?.Entries != null && userProfileResponseDto.Result.Entries.Count > 0);
         }
 
         private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, Member member)
         {
+            if (member == null)
+            {
+                return new List<CreateUserProfileClaimDto>();
+            }
+
             var claims = new List<CreateUserProfileClaimDto>
             {
                 new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.UserProfileId, userProfileId.ToString(), true),
                 new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.XtremeIdiotsId, member.Id.ToString(), true),
-                new CreateUserProfileClaimDto(userProfileId, "Email", member.Email, true),
-                new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.PhotoUrl, member.PhotoUrl, true),
-                new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.TimeZone, member.TimeZone, true),
+                new CreateUserProfileClaimDto(userProfileId, "Email", member.Email ?? string.Empty, true),
+                new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.PhotoUrl, member.PhotoUrl ?? string.Empty, true),
+                new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.TimeZone, member.TimeZone ?? string.Empty, true),
             };
 
-            claims = claims.Concat(GetClaimsForGroup(userProfileId, member.PrimaryGroup)).ToList();
-            claims = member.SecondaryGroups.Aggregate(claims, (current, group) => current.Concat(GetClaimsForGroup(userProfileId, group)).ToList());
+            // Check if PrimaryGroup is not null before trying to use it
+            if (member.PrimaryGroup != null)
+            {
+                claims = claims.Concat(GetClaimsForGroup(userProfileId, member.PrimaryGroup)).ToList();
+            }
+
+            // Check if SecondaryGroups is not null before trying to use it
+            if (member.SecondaryGroups != null)
+            {
+                claims = member.SecondaryGroups.Aggregate(claims, (current, group) => current.Concat(GetClaimsForGroup(userProfileId, group ?? new Group())).ToList());
+            }
 
             return claims;
         }
@@ -116,6 +137,12 @@ namespace XtremeIdiots.Portal.SyncFunc
         private static List<CreateUserProfileClaimDto> GetClaimsForGroup(Guid userProfileId, Group group)
         {
             var claims = new List<CreateUserProfileClaimDto>();
+
+            // Check if group or group.Name is null
+            if (group?.Name == null)
+            {
+                return claims;
+            }
 
             var groupName = group.Name.Replace("+", "").Trim();
             switch (groupName)

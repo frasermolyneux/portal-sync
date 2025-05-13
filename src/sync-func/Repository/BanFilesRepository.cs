@@ -35,12 +35,15 @@ namespace XtremeIdiots.Portal.SyncFunc.Repository
 
             this.repositoryApiClient = repositoryApiClient;
         }
-
         public async Task RegenerateBanFileForGame(GameType gameType)
         {
             var blobKey = $"{gameType}-bans.txt";
 
             _logger.LogInformation($"Regenerating ban file for {gameType} using blob key {blobKey}");
+
+            // Add null check to prevent possible null reference
+            if (string.IsNullOrEmpty(_options.Value.StorageBlobEndpoint))
+                throw new InvalidOperationException("StorageBlobEndpoint is null or empty");
 
             var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint), new DefaultAzureCredential());
             var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
@@ -62,12 +65,15 @@ namespace XtremeIdiots.Portal.SyncFunc.Repository
                 await blobClient.UploadAsync(externalBansStream, true);
             }
         }
-
         public async Task<long> GetBanFileSizeForGame(GameType gameType)
         {
             var blobKey = $"{gameType}-bans.txt";
 
             _logger.LogInformation($"Retrieving ban file size for {gameType} using blob key {blobKey}");
+
+            // Add null check to prevent possible null reference
+            if (string.IsNullOrEmpty(_options.Value.StorageBlobEndpoint))
+                throw new InvalidOperationException("StorageBlobEndpoint is null or empty");
 
             var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint), new DefaultAzureCredential());
             var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
@@ -96,9 +102,12 @@ namespace XtremeIdiots.Portal.SyncFunc.Repository
 
             return await GetFileStream(blobKey);
         }
-
         private async Task<Stream> GetFileStream(string blobKey)
         {
+            // Add null check to prevent possible null reference
+            if (string.IsNullOrEmpty(_options.Value.StorageBlobEndpoint))
+                throw new InvalidOperationException("StorageBlobEndpoint is null or empty");
+
             var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint), new DefaultAzureCredential());
             var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
 
@@ -121,15 +130,22 @@ namespace XtremeIdiots.Portal.SyncFunc.Repository
             var adminActions = new List<AdminActionDto>();
 
             var skip = 0;
-            var adminActionsApiResponse = await repositoryApiClient.AdminActions.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc);
-
-            do
+            var adminActionsApiResponse = await repositoryApiClient.AdminActions.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc); do
             {
-                adminActions = adminActions.Concat(adminActionsApiResponse.Result.Entries).ToList();
+                // Null check to ensure Result and Entries exist before accessing them
+                if (adminActionsApiResponse?.Result?.Entries != null)
+                {
+                    adminActions = adminActions.Concat(adminActionsApiResponse.Result.Entries).ToList();
 
-                skip += TakeEntries;
-                adminActionsApiResponse = await repositoryApiClient.AdminActions.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc);
-            } while (adminActionsApiResponse.Result.Entries.Count > 0);
+                    skip += TakeEntries;
+                    adminActionsApiResponse = await repositoryApiClient.AdminActions.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc);
+                }
+                else
+                {
+                    // Exit loop if null results are encountered
+                    break;
+                }
+            } while (adminActionsApiResponse?.Result?.Entries != null && adminActionsApiResponse.Result.Entries.Count > 0);
 
             return adminActions;
         }
