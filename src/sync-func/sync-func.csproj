@@ -15,16 +15,16 @@
     <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
 	  <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.0.0" />
 	  <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.3.0" />
-	  <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.0.1" />
-	  <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.2" OutputItemType="Analyzer" />
+	  <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.0.2" />
+	  <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.4" OutputItemType="Analyzer" />
 	  <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Timer" Version="4.3.1" />
 	  <PackageReference Include="Microsoft.ApplicationInsights" Version="2.23.0" />
 	  <PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.0.0" />
-	  <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.4" />
-	  <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.4" />
-	  <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.4" />
-	  <PackageReference Include="XtremeIdiots.Portal.RepositoryApiClient" Version="1.1.332.1" />
-    <PackageReference Include="XtremeIdiots.Portal.ServersApiClient" Version="1.1.268.1" />
+	  <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.5" />
+	  <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.5" />
+	  <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.5" />
+	  <PackageReference Include="XtremeIdiots.Portal.RepositoryApiClient" Version="1.1.337.1" />
+    <PackageReference Include="XtremeIdiots.Portal.ServersApiClient" Version="1.1.275.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\forums-integration\forums-integration.csproj" />
