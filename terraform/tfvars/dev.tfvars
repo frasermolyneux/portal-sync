@@ -9,8 +9,7 @@ api_management_name = "apim-portal-core-dev-uksouth-01-3138575b4c87"
 repository_api = {
   application_name     = "portal-repository-dev-01"
   application_audience = "api://portal-repository-dev-01"
-  apim_api_name        = "repository-api"
-  apim_api_revision    = "1"
+  apim_product_id      = "repository-api"
   apim_path_prefix     = "repository"
 }
 
