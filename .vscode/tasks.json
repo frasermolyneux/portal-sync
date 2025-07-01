@@ -12,7 +12,7 @@
       "type": "process",
       "problemMatcher": "$msCompile",
       "options": {
-        "cwd": "${workspaceFolder}/src/sync-func"
+        "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App"
       }
     },
     {
@@ -31,7 +31,7 @@
       },
       "problemMatcher": "$msCompile",
       "options": {
-        "cwd": "${workspaceFolder}/src/sync-func"
+        "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App"
       }
     },
     {
@@ -65,7 +65,7 @@
       "type": "process",
       "problemMatcher": "$msCompile",
       "options": {
-        "cwd": "${workspaceFolder}/src/sync-func"
+        "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App"
       }
     },
     {
@@ -82,14 +82,14 @@
       "dependsOn": "clean release (functions)",
       "problemMatcher": "$msCompile",
       "options": {
-        "cwd": "${workspaceFolder}/src/sync-func"
+        "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App"
       }
     },
     {
       "type": "func",
       "dependsOn": "build (functions)",
       "options": {
-        "cwd": "${workspaceFolder}/src/sync-func/bin/Debug/net9.0"
+        "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App/bin/Debug/net9.0"
       },
       "command": "host start",
       "isBackground": true,
