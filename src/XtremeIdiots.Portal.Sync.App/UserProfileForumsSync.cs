@@ -4,9 +4,9 @@ using Microsoft.Extensions.Logging;
 
 using XtremeIdiots.InvisionCommunity;
 using XtremeIdiots.InvisionCommunity.Models;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Constants;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Models.UserProfiles;
-using XtremeIdiots.Portal.RepositoryApiClient;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.UserProfiles;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 
 namespace XtremeIdiots.Portal.Sync.App
 {
@@ -37,7 +37,7 @@ namespace XtremeIdiots.Portal.Sync.App
         public async Task RunUserProfileForumsSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
         {
             var skip = 0;
-            var userProfileResponseDto = await repositoryApiClient.UserProfiles.GetUserProfiles(null, skip, TakeEntries, null);
+            var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, skip, TakeEntries, null);
 
             // Ensure the response and result are not null
             if (userProfileResponseDto?.Result == null)
@@ -73,7 +73,7 @@ namespace XtremeIdiots.Portal.Sync.App
                                         TimeZone = member.TimeZone ?? userProfileDto.TimeZone
                                     };
 
-                                    await repositoryApiClient.UserProfiles.UpdateUserProfile(editUserProfileDto);
+                                    await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto);
 
                                     var nonSystemGeneratedClaims = userProfileDto.UserProfileClaims
                                         .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))
@@ -82,11 +82,11 @@ namespace XtremeIdiots.Portal.Sync.App
                                     var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
                                     var claimsToSave = activeClaims.Concat(nonSystemGeneratedClaims).ToList();
 
-                                    await repositoryApiClient.UserProfiles.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave);
+                                    await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave);
                                 }
                                 else
                                 {
-                                    await repositoryApiClient.UserProfiles.SetUserProfileClaims(userProfileDto.UserProfileId, new List<CreateUserProfileClaimDto>());
+                                    await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, new List<CreateUserProfileClaimDto>());
                                 }
                             }
                             catch (Exception ex)
@@ -99,7 +99,7 @@ namespace XtremeIdiots.Portal.Sync.App
                 }
 
                 skip += TakeEntries;
-                userProfileResponseDto = await repositoryApiClient.UserProfiles.GetUserProfiles(null, skip, TakeEntries, null);
+                userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, skip, TakeEntries, null);
             } while (userProfileResponseDto?.Result?.Entries != null && userProfileResponseDto.Result.Entries.Count > 0);
         }
 

@@ -1,11 +1,11 @@
 ﻿using Microsoft.Extensions.Logging;
 
 using XtremeIdiots.Portal.Forums.Integration;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Constants;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Extensions;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Models.AdminActions;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Models.Players;
-using XtremeIdiots.Portal.RepositoryApiClient;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Extensions.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.AdminActions;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Players;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
 
 namespace XtremeIdiots.Portal.Sync.App.Ingest
@@ -48,15 +48,15 @@ namespace XtremeIdiots.Portal.Sync.App.Ingest
                     _logger.LogWarning($"Could not validate guid {guid} for {gameType}");
                     continue;
                 }
-                var playerDtoApiResponse = await repositoryApiClient.Players.GetPlayerByGameType(gameTypeEnum, guid, PlayerEntityOptions.None);
+                var playerDtoApiResponse = await repositoryApiClient.Players.V1.GetPlayerByGameType(gameTypeEnum, guid, PlayerEntityOptions.None);
 
                 if (playerDtoApiResponse.IsNotFound)
                 {
                     _logger.LogInformation($"BanFileIngest - creating new player {name} with guid {guid} with import ban");
 
-                    await repositoryApiClient.Players.CreatePlayer(new CreatePlayerDto(name, guid, gameType.ToGameType()));
+                    await repositoryApiClient.Players.V1.CreatePlayer(new CreatePlayerDto(name, guid, gameType.ToGameType()));
 
-                    playerDtoApiResponse = await repositoryApiClient.Players.GetPlayerByGameType(gameTypeEnum, guid, PlayerEntityOptions.None);
+                    playerDtoApiResponse = await repositoryApiClient.Players.V1.GetPlayerByGameType(gameTypeEnum, guid, PlayerEntityOptions.None);
 
                     if (playerDtoApiResponse == null || playerDtoApiResponse.Result == null)
                         throw new Exception("Newly created player could not be retrieved from database");
@@ -64,11 +64,11 @@ namespace XtremeIdiots.Portal.Sync.App.Ingest
                     var createAdminActionDto = new CreateAdminActionDto(playerDtoApiResponse.Result.PlayerId, AdminActionType.Ban, "Imported from server");
                     createAdminActionDto.ForumTopicId = await adminActionTopics.CreateTopicForAdminAction(createAdminActionDto.Type, playerDtoApiResponse.Result.GameType, playerDtoApiResponse.Result.PlayerId, playerDtoApiResponse.Result.Username, DateTime.UtcNow, createAdminActionDto.Text, createAdminActionDto.AdminId);
 
-                    await repositoryApiClient.AdminActions.CreateAdminAction(createAdminActionDto);
+                    await repositoryApiClient.AdminActions.V1.CreateAdminAction(createAdminActionDto);
                 }
                 else if (playerDtoApiResponse.Result != null)
                 {
-                    var adminActionsApiResponse = await repositoryApiClient.AdminActions.GetAdminActions(null, playerDtoApiResponse.Result.PlayerId, null, AdminActionFilter.ActiveBans, 0, 500, null);
+                    var adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(null, playerDtoApiResponse.Result.PlayerId, null, AdminActionFilter.ActiveBans, 0, 500, null);
 
                     if (adminActionsApiResponse == null || adminActionsApiResponse.Result == null)
                         throw new Exception("Failed to retieve admin actions for player from database");
@@ -80,7 +80,7 @@ namespace XtremeIdiots.Portal.Sync.App.Ingest
                         var createAdminActionDto = new CreateAdminActionDto(playerDtoApiResponse.Result.PlayerId, AdminActionType.Ban, "Imported from server");
                         createAdminActionDto.ForumTopicId = await adminActionTopics.CreateTopicForAdminAction(createAdminActionDto.Type, playerDtoApiResponse.Result.GameType, playerDtoApiResponse.Result.PlayerId, playerDtoApiResponse.Result.Username, DateTime.UtcNow, createAdminActionDto.Text, createAdminActionDto.AdminId);
 
-                        await repositoryApiClient.AdminActions.CreateAdminAction(createAdminActionDto);
+                        await repositoryApiClient.AdminActions.V1.CreateAdminAction(createAdminActionDto);
                     }
                 }
 

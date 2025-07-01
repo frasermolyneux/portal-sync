@@ -8,7 +8,7 @@ using Microsoft.Extensions.Hosting;
 
 using XtremeIdiots.InvisionCommunity;
 using XtremeIdiots.Portal.Forums.Integration.Extensions;
-using XtremeIdiots.Portal.RepositoryApiClient;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.ServersApiClient;
 using XtremeIdiots.Portal.Sync.App;
 using XtremeIdiots.Portal.Sync.App.Extensions;

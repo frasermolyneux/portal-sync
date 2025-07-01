@@ -4,9 +4,9 @@ using Azure.Storage.Blobs;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Constants;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Models.AdminActions;
-using XtremeIdiots.Portal.RepositoryApiClient;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.AdminActions;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App.Configuration;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
 
@@ -130,7 +130,7 @@ namespace XtremeIdiots.Portal.Sync.App.Repository
             var adminActions = new List<AdminActionDto>();
 
             var skip = 0;
-            var adminActionsApiResponse = await repositoryApiClient.AdminActions.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc); do
+            var adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc); do
             {
                 // Null check to ensure Result and Entries exist before accessing them
                 if (adminActionsApiResponse?.Result?.Entries != null)
@@ -138,7 +138,7 @@ namespace XtremeIdiots.Portal.Sync.App.Repository
                     adminActions = adminActions.Concat(adminActionsApiResponse.Result.Entries).ToList();
 
                     skip += TakeEntries;
-                    adminActionsApiResponse = await repositoryApiClient.AdminActions.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc);
+                    adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc);
                 }
                 else
                 {

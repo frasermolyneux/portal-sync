@@ -6,9 +6,9 @@ using Microsoft.Extensions.Logging;
 
 using MxIO.ApiClient.Abstractions;
 
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Constants;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Models.Maps;
-using XtremeIdiots.Portal.RepositoryApiClient;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App.Redirect;
 
 namespace XtremeIdiots.Portal.Sync.App
@@ -31,11 +31,11 @@ namespace XtremeIdiots.Portal.Sync.App
             IMapRedirectRepository mapRedirectRepository)
         {
             this.logger = logger;
-            RepositoryApiClient = repositoryApiClient;
+            this.repositoryApiClient = repositoryApiClient;
             MapRedirectRepository = mapRedirectRepository;
         }
 
-        public IRepositoryApiClient RepositoryApiClient { get; }
+        public IRepositoryApiClient repositoryApiClient { get; }
         public IMapRedirectRepository MapRedirectRepository { get; }
 
         [Function(nameof(RunMapRedirectSyncManual))]
@@ -73,7 +73,7 @@ namespace XtremeIdiots.Portal.Sync.App
                 ApiResponseDto<MapsCollectionDto>? mapsCollectionBatch = null;
                 while (mapsCollectionBatch == null || mapsCollectionBatch.Result?.Entries.Count > 0)
                 {
-                    mapsCollectionBatch = await RepositoryApiClient.Maps.GetMaps(game.Key, null, null, null, skipEntries, takeEntries, null);
+                    mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, null, null, skipEntries, takeEntries, null);
                     repositoryMaps.AddRange(repositoryMaps);
 
                     skipEntries += takeEntries;
@@ -117,10 +117,10 @@ namespace XtremeIdiots.Portal.Sync.App
                 logger.LogInformation($"Creating {mapDtosToCreate.Count} new maps and updating {mapDtosToUpdate.Count} existing maps");
 
                 if (mapDtosToCreate.Count > 0)
-                    await RepositoryApiClient.Maps.CreateMaps(mapDtosToCreate);
+                    await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate);
 
                 if (mapDtosToUpdate.Count > 0)
-                    await RepositoryApiClient.Maps.UpdateMaps(mapDtosToUpdate);
+                    await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate);
             }
 
             stopWatch.Stop();

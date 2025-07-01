@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Constants;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Models.BanFileMonitors;
-using XtremeIdiots.Portal.RepositoryApiClient;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.BanFileMonitors;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App.Helpers;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
 
@@ -47,7 +47,7 @@ namespace XtremeIdiots.Portal.Sync.App
         [Function(nameof(ImportLatestBanFiles))]
         public async Task ImportLatestBanFiles([TimerTrigger("0 */5 * * * *")] TimerInfo? myTimer)
         {
-            var banFileMonitorsApiResponse = await repositoryApiClient.BanFileMonitors.GetBanFileMonitors(null, null, null, 0, 50, null);
+            var banFileMonitorsApiResponse = await repositoryApiClient.BanFileMonitors.V1.GetBanFileMonitors(null, null, null, 0, 50, null);
 
             if (!banFileMonitorsApiResponse.IsSuccess || banFileMonitorsApiResponse.Result == null)
             {
@@ -93,7 +93,7 @@ namespace XtremeIdiots.Portal.Sync.App
                             banFileMonitorDto.TelemetryProperties);
 
                         var editBanFileMonitorDto = new EditBanFileMonitorDto(banFileMonitorDto.BanFileMonitorId, banFileSize, DateTime.UtcNow);
-                        await repositoryApiClient.BanFileMonitors.UpdateBanFileMonitor(editBanFileMonitorDto);
+                        await repositoryApiClient.BanFileMonitors.V1.UpdateBanFileMonitor(editBanFileMonitorDto);
                         continue;
                     }
 
@@ -112,7 +112,7 @@ namespace XtremeIdiots.Portal.Sync.App
                         await banFileIngest.IngestBanFileDataForGame(banFileMonitorDto.GameServer.GameType.ToString(), remoteBanFileData);
 
                         var editBanFileMonitorDto = new EditBanFileMonitorDto(banFileMonitorDto.BanFileMonitorId, (long)remoteFileSize, DateTime.UtcNow);
-                        await repositoryApiClient.BanFileMonitors.UpdateBanFileMonitor(editBanFileMonitorDto);
+                        await repositoryApiClient.BanFileMonitors.V1.UpdateBanFileMonitor(editBanFileMonitorDto);
                     }
 
                     if (remoteFileSize != banFileSize && remoteFileSize == banFileMonitorDto.RemoteFileSize)
@@ -131,7 +131,7 @@ namespace XtremeIdiots.Portal.Sync.App
                             banFileMonitorDto.TelemetryProperties);
 
                         var editBanFileMonitorDto = new EditBanFileMonitorDto(banFileMonitorDto.BanFileMonitorId, banFileSize, DateTime.UtcNow);
-                        await repositoryApiClient.BanFileMonitors.UpdateBanFileMonitor(editBanFileMonitorDto);
+                        await repositoryApiClient.BanFileMonitors.V1.UpdateBanFileMonitor(editBanFileMonitorDto);
                     }
 
                     if (remoteFileSize == banFileMonitorDto.RemoteFileSize)
@@ -140,7 +140,7 @@ namespace XtremeIdiots.Portal.Sync.App
                         {
                             LastSync = DateTime.UtcNow
                         };
-                        await repositoryApiClient.BanFileMonitors.UpdateBanFileMonitor(editBanFileMonitorDto);
+                        await repositoryApiClient.BanFileMonitors.V1.UpdateBanFileMonitor(editBanFileMonitorDto);
                     }
                 }
                 catch (Exception ex)

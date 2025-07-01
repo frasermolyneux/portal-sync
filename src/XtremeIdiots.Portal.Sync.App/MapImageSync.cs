@@ -6,8 +6,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Constants;
-using XtremeIdiots.Portal.RepositoryApiClient;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 
 namespace XtremeIdiots.Portal.Sync.App
 {
@@ -46,7 +46,7 @@ namespace XtremeIdiots.Portal.Sync.App
             foreach (var game in gamesToSync)
             {
                 var skip = 0;
-                var mapsResponseDto = await repositoryApiClient.Maps.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
+                var mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
 
                 if (mapsResponseDto == null || mapsResponseDto.Result == null)
                 {
@@ -84,7 +84,7 @@ namespace XtremeIdiots.Portal.Sync.App
                                         }
                                     }
 
-                                    await repositoryApiClient.Maps.UpdateMapImage(mapDto.MapId, filePath);
+                                    await repositoryApiClient.Maps.V1.UpdateMapImage(mapDto.MapId, filePath);
                                 }
                             }
                         }
@@ -95,7 +95,7 @@ namespace XtremeIdiots.Portal.Sync.App
                     }
 
                     skip += TakeEntries;
-                    mapsResponseDto = await repositoryApiClient.Maps.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
+                    mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
                 } while (mapsResponseDto != null && mapsResponseDto.Result != null && mapsResponseDto.Result.Entries.Any());
             }
         }

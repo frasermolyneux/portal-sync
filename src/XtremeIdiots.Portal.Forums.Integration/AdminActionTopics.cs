@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 using XtremeIdiots.InvisionCommunity;
 using XtremeIdiots.Portal.Forums.Integration.Extensions;
-using XtremeIdiots.Portal.RepositoryApi.Abstractions.Constants;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 
 namespace XtremeIdiots.Portal.Forums.Integration
 {
