@@ -16,8 +16,7 @@ repository_api = {
 servers_integration_api = {
   application_name     = "portal-servers-integration-dev-01"
   application_audience = "api://portal-servers-integration-dev-01"
-  apim_api_name        = "servers-integration-api"
-  apim_api_revision    = "1"
+  apim_product_id      = "servers-integration-api"
   apim_path_prefix     = "servers-integration"
 }
 

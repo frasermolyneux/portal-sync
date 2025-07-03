@@ -33,15 +33,13 @@ variable "servers_integration_api" {
   type = object({
     application_name     = string
     application_audience = string
-    apim_api_name        = string
-    apim_api_revision    = string
+    apim_product_id      = string
     apim_path_prefix     = string
   })
   default = {
     application_name     = "portal-servers-integration-dev-01"
     application_audience = "api://portal-servers-integration-dev-01"
-    apim_api_name        = "servers-integration-api"
-    apim_api_revision    = "1"
+    apim_product_id      = ""
     apim_path_prefix     = "servers-integration"
   }
 }
