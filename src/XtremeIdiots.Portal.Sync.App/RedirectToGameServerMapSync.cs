@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
-using XtremeIdiots.Portal.ServersApiClient;
 
 namespace XtremeIdiots.Portal.Sync.App
 {
@@ -44,8 +44,8 @@ namespace XtremeIdiots.Portal.Sync.App
                 {
                     try
                     {
-                        var rconMaps = await serversApiClient.Rcon.GetServerMaps(gameServerDto.GameServerId);
-                        var serverMaps = await serversApiClient.Maps.GetLoadedServerMapsFromHost(gameServerDto.GameServerId);
+                        var rconMaps = await serversApiClient.Rcon.V1.GetServerMaps(gameServerDto.GameServerId);
+                        var serverMaps = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(gameServerDto.GameServerId);
 
                         if (!rconMaps.IsSuccess || rconMaps.Result == null)
                         {
