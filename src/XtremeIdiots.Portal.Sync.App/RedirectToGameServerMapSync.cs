@@ -44,24 +44,24 @@ namespace XtremeIdiots.Portal.Sync.App
                 {
                     try
                     {
-                        var rconMaps = await serversApiClient.Rcon.V1.GetServerMaps(gameServerDto.GameServerId);
-                        var serverMaps = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(gameServerDto.GameServerId);
+                        var getServerMapsResult = await serversApiClient.Rcon.V1.GetServerMaps(gameServerDto.GameServerId);
+                        var getLoadedServerMapsFronHostResult = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(gameServerDto.GameServerId);
 
-                        if (!rconMaps.IsSuccess || rconMaps.Result == null)
+                        if (!getServerMapsResult.IsSuccess || getServerMapsResult.Result == null)
                         {
                             logger.LogError("Failed to retrieve rcon maps for game server");
                             continue;
                         }
 
-                        if (!serverMaps.IsSuccess || serverMaps.Result == null)
+                        if (!getLoadedServerMapsFronHostResult.IsSuccess || getLoadedServerMapsFronHostResult.Result == null)
                         {
                             logger.LogError("Failed to retrieve maps for game server host");
                             continue;
                         }
 
-                        foreach (var map in rconMaps.Result.Entries)
+                        foreach (var map in getServerMapsResult.Result.Data.Items)
                         {
-                            if (!serverMaps.Result.Entries.Any(x => x.Name == map.MapName))
+                            if (!getLoadedServerMapsFronHostResult.Result.Data.Items.Any(x => x.Name == map.MapName))
                             {
                                 logger.LogInformation($"Pushing map '{map.MapName}' to game server '{gameServerDto.Title}'");
                                 //await serversApiClient.Maps.PushServerMap(gameServerDto.GameServerId, map.Name);

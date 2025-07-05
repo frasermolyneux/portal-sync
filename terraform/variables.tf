@@ -34,13 +34,11 @@ variable "servers_integration_api" {
     application_name     = string
     application_audience = string
     apim_product_id      = string
-    apim_path_prefix     = string
   })
   default = {
     application_name     = "portal-servers-integration-dev-01"
     application_audience = "api://portal-servers-integration-dev-01"
     apim_product_id      = ""
-    apim_path_prefix     = "servers-integration"
   }
 }
 

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
+using MX.Api.Client.Extensions;
 using XtremeIdiots.InvisionCommunity;
 using XtremeIdiots.Portal.Forums.Integration.Extensions;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
@@ -39,14 +40,10 @@ var host = new HostBuilder()
             options.ApiPathPrefix = config["repository_api_path_prefix"] ?? "repository";
         });
 
-        services.AddServersApiClient(options =>
-        {
-            options.BaseUrl = config["servers_base_url"] ?? config["apim_base_url"] ?? throw new ArgumentNullException("apim_base_url");
-            options.PrimaryApiKey = config["portal_servers_apim_subscription_key_primary"] ?? throw new ArgumentNullException("portal_servers_apim_subscription_key_primary");
-            options.SecondaryApiKey = config["portal_servers_apim_subscription_key_secondary"] ?? throw new ArgumentNullException("portal_servers_apim_subscription_key_secondary");
-            options.ApiAudience = config["servers_api_application_audience"] ?? throw new ArgumentNullException("servers_api_application_audience");
-            options.ApiPathPrefix = config["servers_api_path_prefix"] ?? "servers";
-        });
+        services.AddServersApiClient()
+            .WithBaseUrl(config["ServersIntegrationApi:BaseUrl"] ?? throw new ArgumentNullException("ServersIntegrationApi:BaseUrl"))
+            .WithApiKeyAuthentication(config["ServersIntegrationApi:ApiKey"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApiKey"))
+            .WithAzureCredentials(config["ServersIntegrationApi:ApplicationAudience"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApplicationAudience"));
 
         services.AddMapRedirectRepository(options =>
         {
