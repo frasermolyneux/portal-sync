@@ -40,10 +40,12 @@ var host = new HostBuilder()
             options.ApiPathPrefix = config["repository_api_path_prefix"] ?? "repository";
         });
 
-        services.AddServersApiClient()
-            .WithBaseUrl(config["ServersIntegrationApi:BaseUrl"] ?? throw new ArgumentNullException("ServersIntegrationApi:BaseUrl"))
-            .WithApiKeyAuthentication(config["ServersIntegrationApi:ApiKey"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApiKey"))
-            .WithAzureCredentials(config["ServersIntegrationApi:ApplicationAudience"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApplicationAudience"));
+        services.AddServersApiClient(options =>
+        {
+            options.WithBaseUrl(config["ServersIntegrationApi:BaseUrl"] ?? throw new ArgumentNullException("ServersIntegrationApi:BaseUrl"))
+                .WithApiKeyAuthentication(config["ServersIntegrationApi:ApiKey"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApiKey"))
+                .WithEntraIdAuthentication(config["ServersIntegrationApi:ApplicationAudience"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApplicationAudience"));
+        });
 
         services.AddMapRedirectRepository(options =>
         {
