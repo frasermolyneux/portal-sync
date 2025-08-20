@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Security.Authentication;
+using System.Linq;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -48,16 +49,15 @@ namespace XtremeIdiots.Portal.Sync.App
                 var skip = 0;
                 var mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
 
-                if (mapsResponseDto == null || mapsResponseDto.Result == null)
+                if (mapsResponseDto == null || mapsResponseDto.Result?.Data?.Items == null)
                 {
                     throw new ApplicationException("Failed to retrieve maps from the repository");
                 }
 
-                do
                 {
-                    logger.LogInformation($"Processing '{mapsResponseDto.Result.Entries.Count}' maps for '{game.Key}'");
+                    logger.LogInformation($"Processing '{mapsResponseDto.Result.Data.Items.Count()}' maps for '{game.Key}'");
 
-                    foreach (var mapDto in mapsResponseDto.Result.Entries)
+                    foreach (var mapDto in mapsResponseDto.Result.Data.Items)
                     {
                         var gameTrackerImageUrl = $"https://image.gametracker.com/images/maps/160x120/{game.Value}/{mapDto.MapName}.jpg";
 
@@ -96,7 +96,7 @@ namespace XtremeIdiots.Portal.Sync.App
 
                     skip += TakeEntries;
                     mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
-                } while (mapsResponseDto != null && mapsResponseDto.Result != null && mapsResponseDto.Result.Entries.Any());
+                } while (mapsResponseDto != null && mapsResponseDto.Result != null && mapsResponseDto.Result.Data != null && mapsResponseDto.Result.Data.Items != null && mapsResponseDto.Result.Data.Items.Any()) ;
             }
         }
     }

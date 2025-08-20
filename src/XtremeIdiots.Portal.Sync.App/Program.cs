@@ -24,46 +24,42 @@ var host = new HostBuilder()
     .ConfigureFunctionsWebApplication(options => { })
     .ConfigureServices((context, services) =>
     {
-        var config = context.Configuration;
+        var configuration = context.Configuration;
 
         services.AddLogging();
         services.AddSingleton<ITelemetryInitializer, TelemetryInitializer>();
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
 
-        services.AddRepositoryApiClient(options =>
-        {
-            options.BaseUrl = config["apim_base_url"] ?? config["repository_base_url"] ?? throw new ArgumentNullException("apim_base_url");
-            options.PrimaryApiKey = config["portal_repository_apim_subscription_key_primary"] ?? throw new ArgumentNullException("portal_repository_apim_subscription_key_primary");
-            options.SecondaryApiKey = config["portal_repository_apim_subscription_key_secondary"] ?? throw new ArgumentNullException("portal_repository_apim_subscription_key_secondary");
-            options.ApiAudience = config["repository_api_application_audience"] ?? throw new ArgumentNullException("repository_api_application_audience");
-            options.ApiPathPrefix = config["repository_api_path_prefix"] ?? "repository";
-        });
+        services.AddRepositoryApiClient(options => options
+            .WithBaseUrl(configuration["RepositoryApi:BaseUrl"] ?? throw new InvalidOperationException("RepositoryApi:BaseUrl configuration is required"))
+            .WithApiKeyAuthentication(configuration["RepositoryApi:ApiKey"] ?? throw new InvalidOperationException("RepositoryApi:ApiKey configuration is required"))
+            .WithEntraIdAuthentication(configuration["RepositoryApi:ApplicationAudience"] ?? throw new InvalidOperationException("RepositoryApi:ApplicationAudience configuration is required")));
 
         services.AddServersApiClient(options =>
         {
-            options.WithBaseUrl(config["ServersIntegrationApi:BaseUrl"] ?? throw new ArgumentNullException("ServersIntegrationApi:BaseUrl"))
-                .WithApiKeyAuthentication(config["ServersIntegrationApi:ApiKey"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApiKey"))
-                .WithEntraIdAuthentication(config["ServersIntegrationApi:ApplicationAudience"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApplicationAudience"));
+            options.WithBaseUrl(configuration["ServersIntegrationApi:BaseUrl"] ?? throw new ArgumentNullException("ServersIntegrationApi:BaseUrl"))
+                .WithApiKeyAuthentication(configuration["ServersIntegrationApi:ApiKey"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApiKey"))
+                .WithEntraIdAuthentication(configuration["ServersIntegrationApi:ApplicationAudience"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApplicationAudience"));
         });
 
         services.AddMapRedirectRepository(options =>
         {
-            options.MapRedirectBaseUrl = config["map_redirect_base_url"] ?? throw new ArgumentNullException("map_redirect_base_url");
-            options.ApiKey = config["map_redirect_api_key"] ?? throw new ArgumentNullException("map_redirect_api_key");
+            options.MapRedirectBaseUrl = configuration["map_redirect_base_url"] ?? throw new ArgumentNullException("map_redirect_base_url");
+            options.ApiKey = configuration["map_redirect_api_key"] ?? throw new ArgumentNullException("map_redirect_api_key");
         });
 
         services.AddInvisionApiClient(options =>
         {
-            options.BaseUrl = config["xtremeidiots_forums_base_url"] ?? throw new ArgumentNullException("xtremeidiots_forums_base_url");
-            options.ApiKey = config["xtremeidiots_forums_api_key"] ?? throw new ArgumentNullException("xtremeidiots_forums_api_key");
+            options.BaseUrl = configuration["xtremeidiots_forums_base_url"] ?? throw new ArgumentNullException("xtremeidiots_forums_base_url");
+            options.ApiKey = configuration["xtremeidiots_forums_api_key"] ?? throw new ArgumentNullException("xtremeidiots_forums_api_key");
         });
 
         services.AddAdminActionTopics();
 
         services.AddBanFilesRepository(options =>
         {
-            options.StorageBlobEndpoint = config["appdata_storage_blob_endpoint"];
+            options.StorageBlobEndpoint = configuration["appdata_storage_blob_endpoint"];
         });
 
         services.AddSingleton<IFtpHelper, FtpHelper>();

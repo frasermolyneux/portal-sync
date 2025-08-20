@@ -10,7 +10,6 @@ repository_api = {
   application_name     = "portal-repository-prd-01"
   application_audience = "api://portal-repository-prd-01"
   apim_product_id      = "repository-api"
-  apim_path_prefix     = "repository"
 }
 
 servers_integration_api = {

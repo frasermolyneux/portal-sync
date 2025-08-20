@@ -133,9 +133,9 @@ namespace XtremeIdiots.Portal.Sync.App.Repository
             var adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc); do
             {
                 // Null check to ensure Result and Entries exist before accessing them
-                if (adminActionsApiResponse?.Result?.Entries != null)
+                if (adminActionsApiResponse?.Result?.Data?.Items != null)
                 {
-                    adminActions = adminActions.Concat(adminActionsApiResponse.Result.Entries).ToList();
+                    adminActions = adminActions.Concat(adminActionsApiResponse.Result.Data.Items).ToList();
 
                     skip += TakeEntries;
                     adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc);
@@ -145,7 +145,7 @@ namespace XtremeIdiots.Portal.Sync.App.Repository
                     // Exit loop if null results are encountered
                     break;
                 }
-            } while (adminActionsApiResponse?.Result?.Entries != null && adminActionsApiResponse.Result.Entries.Count > 0);
+            } while (adminActionsApiResponse?.Result?.Data?.Items?.Any() == true);
 
             return adminActions;
         }

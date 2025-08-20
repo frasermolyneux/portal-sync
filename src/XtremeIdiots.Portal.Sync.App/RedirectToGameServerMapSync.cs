@@ -32,13 +32,13 @@ namespace XtremeIdiots.Portal.Sync.App
             GameType[] gameTypes = [GameType.CallOfDuty4];
             var gameServersApiResponse = await repositoryApiClient.GameServers.V1.GetGameServers(gameTypes, null, null, 0, 50, null);
 
-            if (!gameServersApiResponse.IsSuccess || gameServersApiResponse.Result == null)
+            if (!gameServersApiResponse.IsSuccess || gameServersApiResponse.Result?.Data?.Items == null)
             {
                 logger.LogCritical("Failed to retrieve game servers from repository");
                 return;
             }
 
-            foreach (var gameServerDto in gameServersApiResponse.Result.Entries)
+            foreach (var gameServerDto in gameServersApiResponse.Result.Data.Items)
             {
                 using (logger.BeginScope(gameServerDto.TelemetryProperties))
                 {
@@ -47,13 +47,13 @@ namespace XtremeIdiots.Portal.Sync.App
                         var getServerMapsResult = await serversApiClient.Rcon.V1.GetServerMaps(gameServerDto.GameServerId);
                         var getLoadedServerMapsFronHostResult = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(gameServerDto.GameServerId);
 
-                        if (!getServerMapsResult.IsSuccess || getServerMapsResult.Result == null)
+                        if (!getServerMapsResult.IsSuccess || getServerMapsResult.Result?.Data?.Items == null)
                         {
                             logger.LogError("Failed to retrieve rcon maps for game server");
                             continue;
                         }
 
-                        if (!getLoadedServerMapsFronHostResult.IsSuccess || getLoadedServerMapsFronHostResult.Result == null)
+                        if (!getLoadedServerMapsFronHostResult.IsSuccess || getLoadedServerMapsFronHostResult.Result?.Data?.Items == null)
                         {
                             logger.LogError("Failed to retrieve maps for game server host");
                             continue;

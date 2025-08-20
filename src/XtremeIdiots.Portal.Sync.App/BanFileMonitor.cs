@@ -49,13 +49,13 @@ namespace XtremeIdiots.Portal.Sync.App
         {
             var banFileMonitorsApiResponse = await repositoryApiClient.BanFileMonitors.V1.GetBanFileMonitors(null, null, null, 0, 50, null);
 
-            if (!banFileMonitorsApiResponse.IsSuccess || banFileMonitorsApiResponse.Result == null)
+            if (!banFileMonitorsApiResponse.IsSuccess || banFileMonitorsApiResponse.Result?.Data?.Items == null)
             {
                 logger.LogCritical("Failed to retrieve ban file monitors from the repository");
                 return;
             }
 
-            foreach (var banFileMonitorDto in banFileMonitorsApiResponse.Result.Entries)
+            foreach (var banFileMonitorDto in banFileMonitorsApiResponse.Result.Data.Items)
             {
                 if (banFileMonitorDto.GameServer == null)
                     continue;

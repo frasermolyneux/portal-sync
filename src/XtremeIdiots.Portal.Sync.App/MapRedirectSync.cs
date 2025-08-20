@@ -1,10 +1,10 @@
 using System.Diagnostics;
+using System.Linq;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-
-using MxIO.ApiClient.Abstractions;
+using MX.Api.Abstractions;
 
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
@@ -69,12 +69,11 @@ namespace XtremeIdiots.Portal.Sync.App
                 var takeEntries = 500;
 
                 var repositoryMaps = new List<MapDto>();
-
-                ApiResponseDto<MapsCollectionDto>? mapsCollectionBatch = null;
-                while (mapsCollectionBatch == null || mapsCollectionBatch.Result?.Entries.Count > 0)
+                ApiResult<CollectionModel<MapDto>>? mapsCollectionBatch = null;
+                while (mapsCollectionBatch == null || (mapsCollectionBatch.Result?.Data?.Items != null && mapsCollectionBatch.Result.Data.Items.Any()))
                 {
                     mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, null, null, skipEntries, takeEntries, null);
-                    repositoryMaps.AddRange(repositoryMaps);
+                    repositoryMaps.AddRange(mapsCollectionBatch.Result?.Data?.Items ?? Enumerable.Empty<MapDto>());
 
                     skipEntries += takeEntries;
                 }

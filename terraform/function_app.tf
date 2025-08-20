@@ -38,12 +38,10 @@ resource "azurerm_linux_function_app" "app" {
   app_settings = {
     "WEBSITE_RUN_FROM_PACKAGE"                   = "1"
     "ApplicationInsightsAgent_EXTENSION_VERSION" = "~3"
-    "apim_base_url"                              = data.azurerm_api_management.core.gateway_url
 
-    "portal_repository_apim_subscription_key_primary"   = format("@Microsoft.KeyVault(VaultName=%s;SecretName=%s)", azurerm_key_vault.kv.name, azurerm_key_vault_secret.repository_api_subscription_secret_primary.name)
-    "portal_repository_apim_subscription_key_secondary" = format("@Microsoft.KeyVault(VaultName=%s;SecretName=%s)", azurerm_key_vault.kv.name, azurerm_key_vault_secret.repository_api_subscription_secret_secondary.name)
-    "repository_api_application_audience"               = var.repository_api.application_audience
-    "repository_api_path_prefix"                        = var.repository_api.apim_path_prefix
+    "RepositoryApi__BaseUrl"             = format("%s/repository", data.azurerm_api_management.core.gateway_url)
+    "RepositoryApi__ApiKey"              = format("@Microsoft.KeyVault(VaultName=%s;SecretName=%s)", azurerm_key_vault.kv.name, azurerm_key_vault_secret.repository_api_subscription_secret_primary.name)
+    "RepositoryApi__ApplicationAudience" = var.repository_api.application_audience
 
     "ServersIntegrationApi__BaseUrl"             = "${data.azurerm_api_management.core.gateway_url}/servers-integration"
     "ServersIntegrationApi__ApiKey"              = format("@Microsoft.KeyVault(VaultName=%s;SecretName=%s)", azurerm_key_vault.kv.name, azurerm_key_vault_secret.servers_integration_api_subscription_secret.name)

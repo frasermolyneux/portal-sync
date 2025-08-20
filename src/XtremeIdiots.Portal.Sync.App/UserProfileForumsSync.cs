@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 using XtremeIdiots.InvisionCommunity;
 using XtremeIdiots.InvisionCommunity.Models;
@@ -39,16 +40,16 @@ namespace XtremeIdiots.Portal.Sync.App
             var skip = 0;
             var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, skip, TakeEntries, null);
 
-            // Ensure the response and result are not null
-            if (userProfileResponseDto?.Result == null)
-            {
-                logger.LogWarning("User profiles response or result is null");
-                return;
-            }
-
             do
             {
-                foreach (var userProfileDto in userProfileResponseDto.Result.Entries)
+                var items = userProfileResponseDto?.Result?.Data?.Items;
+                if (items == null)
+                {
+                    logger.LogWarning("User profiles response or result is null");
+                    break;
+                }
+
+                foreach (var userProfileDto in items)
                 {
                     using (logger.BeginScope(userProfileDto.TelemetryProperties))
                     {
@@ -97,10 +98,9 @@ namespace XtremeIdiots.Portal.Sync.App
                         }
                     }
                 }
-
                 skip += TakeEntries;
                 userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, skip, TakeEntries, null);
-            } while (userProfileResponseDto?.Result?.Entries != null && userProfileResponseDto.Result.Entries.Count > 0);
+            } while (userProfileResponseDto?.Result?.Data?.Items?.Any() == true);
         }
 
         private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, Member member)
