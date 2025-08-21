@@ -15,6 +15,7 @@ using XtremeIdiots.Portal.Sync.App;
 using XtremeIdiots.Portal.Sync.App.Extensions;
 using XtremeIdiots.Portal.Sync.App.Helpers;
 using XtremeIdiots.Portal.Sync.App.Redirect;
+using XtremeIdiots.Portal.Sync.App.Configuration;
 
 var host = new HostBuilder()
     .ConfigureAppConfiguration(builder =>
@@ -62,11 +63,23 @@ var host = new HostBuilder()
             options.StorageBlobEndpoint = configuration["appdata_storage_blob_endpoint"];
         });
 
+        services.Configure<MapImagesStorageOptions>(options =>
+        {
+            options.StorageBlobEndpoint = configuration["map_images_storage_blob_endpoint"]; // optional
+            options.ContainerName = configuration["map_images_container_name"]; // optional
+        });
+
         services.AddSingleton<IFtpHelper, FtpHelper>();
 
         services.AddMemoryCache();
 
         services.AddHealthChecks();
+
+        // HttpClient for MapImageSync (reuse handler, modern defaults)
+        services.AddHttpClient<MapImageSync>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
     })
     .Build();
 

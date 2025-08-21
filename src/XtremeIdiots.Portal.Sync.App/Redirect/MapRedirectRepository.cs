@@ -9,28 +9,28 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
     public class MapRedirectRepository : IMapRedirectRepository
     {
         private readonly IOptions<MapRedirectRepositoryOptions> _options;
+        private readonly HttpClient _httpClient;
 
-        public MapRedirectRepository(IOptions<MapRedirectRepositoryOptions> options)
+        public MapRedirectRepository(IOptions<MapRedirectRepositoryOptions> options, HttpClient httpClient)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
+            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         }
 
         public async Task<List<MapRedirectEntry>> GetMapEntriesForGame(string game)
         {
-            using (var httpClient = new HttpClient())
+            var response = await _httpClient.GetAsync($"{_options.Value.MapRedirectBaseUrl}/portal-map-sync.php?game={game}&key={_options.Value.ApiKey}");
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+
+            var mapRedirectEntries = JsonConvert.DeserializeObject<List<MapRedirectEntry>>(content);
+
+            if (mapRedirectEntries == null)
             {
-                var response = await httpClient.GetAsync($"{_options.Value.MapRedirectBaseUrl}/portal-map-sync.php?game={game}&key={_options.Value.ApiKey}");
-                var content = await response.Content.ReadAsStringAsync();
-
-                var mapRedirectEntries = JsonConvert.DeserializeObject<List<MapRedirectEntry>>(content);
-
-                if (mapRedirectEntries == null)
-                {
-                    throw new ApplicationException("Failed to retrieve map entries from redirect server");
-                }
-
-                return mapRedirectEntries;
+                throw new ApplicationException("Failed to retrieve map entries from redirect server");
             }
+
+            return mapRedirectEntries;
         }
     }
 }

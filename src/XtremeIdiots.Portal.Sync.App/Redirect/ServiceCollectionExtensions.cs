@@ -11,7 +11,11 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
             serviceCollection.Configure(configureOptions);
 
             serviceCollection.AddSingleton(configureOptions);
-            serviceCollection.AddScoped<IMapRedirectRepository, MapRedirectRepository>();
+            serviceCollection.AddHttpClient<IMapRedirectRepository, MapRedirectRepository>(client =>
+            {
+                // Base address optional; left null because full URLs are constructed dynamically.
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
 
         }
     }
