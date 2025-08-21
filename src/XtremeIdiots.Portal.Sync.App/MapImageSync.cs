@@ -57,6 +57,8 @@ namespace XtremeIdiots.Portal.Sync.App
                 {GameType.Insurgency, "ins"},
             };
 
+            await repositoryApiClient.DataMaintenance.V1.ValidateMapImages();
+
             foreach (var game in gamesToSync)
             {
                 var skip = 0;
@@ -149,86 +151,6 @@ namespace XtremeIdiots.Portal.Sync.App
                     skip += TakeEntries;
                     mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
                 } while (mapsResponseDto != null && mapsResponseDto.Result != null && mapsResponseDto.Result.Data != null && mapsResponseDto.Result.Data.Items != null && mapsResponseDto.Result.Data.Items.Any()) ;
-            }
-
-            // After processing, perform cleanup of any HTML placeholder blobs already in storage.
-            await CleanupHtmlPlaceholderImages();
-        }
-
-        [Function(nameof(RunMapImagesHtmlCleanupManual))]
-        public async Task RunMapImagesHtmlCleanupManual([HttpTrigger(AuthorizationLevel.Function, "post", Route = "map-images/cleanup-html")] HttpRequest req)
-        {
-            await CleanupHtmlPlaceholderImages();
-        }
-
-        private async Task CleanupHtmlPlaceholderImages()
-        {
-            const string targetMd5Base64 = "aJ39V4B09SgLKGEgsVkteA=="; // Known MD5 of HTML placeholder
-            byte[] targetHash;
-            try
-            {
-                targetHash = Convert.FromBase64String(targetMd5Base64);
-            }
-            catch (FormatException)
-            {
-                logger.LogWarning("Configured target MD5 is invalid base64; skipping HTML cleanup");
-                return;
-            }
-
-            var endpoint = mapImagesStorageOptions.Value.StorageBlobEndpoint;
-            var containerName = mapImagesStorageOptions.Value.ContainerName;
-
-            if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(containerName))
-            {
-                logger.LogDebug("Map image storage options not configured; skipping HTML cleanup");
-                return;
-            }
-
-            try
-            {
-                var blobServiceClient = new BlobServiceClient(new Uri(endpoint), new DefaultAzureCredential());
-                var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
-
-                if (!await containerClient.ExistsAsync())
-                {
-                    logger.LogWarning("Map image container {Container} does not exist at {Endpoint}", containerName, endpoint);
-                    return;
-                }
-
-                var toDelete = new List<string>();
-                await foreach (var blob in containerClient.GetBlobsAsync())
-                {
-                    var hash = blob.Properties.ContentHash;
-                    if (hash == null || hash.Length == 0) continue;
-                    if (hash.Length == targetHash.Length && hash.SequenceEqual(targetHash))
-                    {
-                        toDelete.Add(blob.Name);
-                    }
-                }
-
-                if (!toDelete.Any())
-                {
-                    logger.LogInformation("No HTML placeholder map images found for deletion.");
-                    return;
-                }
-
-                logger.LogInformation("Deleting {Count} HTML placeholder map image blobs", toDelete.Count);
-                foreach (var blobName in toDelete)
-                {
-                    try
-                    {
-                        await containerClient.DeleteBlobIfExistsAsync(blobName);
-                        logger.LogDebug("Deleted placeholder blob {BlobName}", blobName);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Failed to delete placeholder blob {BlobName}", blobName);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed during HTML placeholder cleanup for map images");
             }
         }
     }
