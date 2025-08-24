@@ -38,7 +38,7 @@ namespace XtremeIdiots.Portal.Sync.App
         public async Task RunUserProfileForumsSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
         {
             var skip = 0;
-            var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, skip, TakeEntries, null);
+            var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
 
             do
             {
@@ -99,7 +99,7 @@ namespace XtremeIdiots.Portal.Sync.App
                     }
                 }
                 skip += TakeEntries;
-                userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, skip, TakeEntries, null);
+                userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
             } while (userProfileResponseDto?.Result?.Data?.Items?.Any() == true);
         }
 
