@@ -8,7 +8,7 @@ api_management_name = "apim-portal-core-dev-uksouth-01-3138575b4c87"
 
 repository_api = {
   application_name     = "portal-repository-dev-01"
-  application_audience = "api://portal-repository-dev-01"
+  application_audience = "api://e56a6947-bb9a-4a6e-846a-1f118d1c3a14/portal-repository-dev-01"
   apim_product_id      = "repository-api"
 }
 

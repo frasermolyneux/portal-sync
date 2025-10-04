@@ -22,7 +22,7 @@ variable "repository_api" {
   })
   default = {
     application_name     = "portal-repository-dev-01"
-    application_audience = "api://portal-repository-dev-01"
+    application_audience = "api://e56a6947-bb9a-4a6e-846a-1f118d1c3a14/portal-repository-dev-01"
     apim_product_id      = ""
   }
 }
