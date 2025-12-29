@@ -22,7 +22,7 @@
 	  <PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />
 	  <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0" />
 	  <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.0" />
-	  <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.0" />
+	  <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.1" />
 	  <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="2.0.519.1" />
     <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="1.1.352.1" />
   </ItemGroup>
