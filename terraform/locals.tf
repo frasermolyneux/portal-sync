@@ -19,7 +19,7 @@ locals {
 
   # Local Resource Naming
   resource_group_name       = "rg-portal-sync-${var.environment}-${var.location}-${var.instance}"
-  key_vault_name            = "kv-${random_id.environment_id.hex}-${var.location}"
+  key_vault_name            = substr(format("kv-%s-%s", random_id.environment_id.hex, var.location), 0, 24)
   app_insights_name         = "ai-portal-sync-${var.environment}-${var.location}-${var.instance}"
   function_app_name         = "fn-portal-sync-${var.environment}-${var.location}-${var.instance}-${random_id.environment_id.hex}"
   function_app_storage_name = "safn${random_id.environment_id.hex}"
