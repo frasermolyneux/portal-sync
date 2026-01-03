@@ -1,10 +1,10 @@
 environment = "dev"
-location    = "uksouth"
+location    = "swedencentral"
 instance    = "01"
 
 subscription_id = "d68448b0-9947-46d7-8771-baa331a3063a"
 
-api_management_name = "apim-portal-core-dev-uksouth-01-3138575b4c87"
+api_management_name = "apim-portal-core-dev-swedencentral-01-2db7de738f7a"
 
 platform_workloads_state = {
   resource_group_name  = "rg-tf-platform-workloads-prd-uksouth-01"
