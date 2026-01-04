@@ -1,9 +1,9 @@
-resource "azurerm_monitor_metric_alert" "ftp_dependencies" {
+resource "azurerm_monitor_metric_alert" "legacy_ftp_dependencies" {
   count = var.environment == "prd" ? 1 : 0
 
   name = "portal-sync-${var.environment} - FTP Dependencies - failure count"
 
-  resource_group_name = azurerm_resource_group.rg.name
+  resource_group_name = azurerm_resource_group.legacy_rg.name
   scopes              = [data.azurerm_application_insights.core.id]
 
   description = "FTP dependency failure count for portal-sync"
@@ -40,4 +40,9 @@ resource "azurerm_monitor_metric_alert" "ftp_dependencies" {
   }
 
   tags = var.tags
+}
+
+moved {
+  from = azurerm_monitor_metric_alert.ftp_dependencies
+  to   = azurerm_monitor_metric_alert.legacy_ftp_dependencies
 }
