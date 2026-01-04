@@ -6,40 +6,40 @@ provider "azurerm" {
 }
 
 locals {
-  azure_monitor_resource_group = "rg-platform-monitoring-${var.environment}-uksouth"
+  legacy_azure_monitor_resource_group = "rg-platform-monitoring-${var.environment}-uksouth"
 }
 
 data "azurerm_monitor_action_group" "critical" {
   provider = azurerm.azure_monitor
 
   name                = "p0-critical-alerts-${var.environment}"
-  resource_group_name = local.azure_monitor_resource_group
+  resource_group_name = local.legacy_azure_monitor_resource_group
 }
 
 data "azurerm_monitor_action_group" "high" {
   provider = azurerm.azure_monitor
 
   name                = "p1-high-alerts-${var.environment}"
-  resource_group_name = local.azure_monitor_resource_group
+  resource_group_name = local.legacy_azure_monitor_resource_group
 }
 
 data "azurerm_monitor_action_group" "moderate" {
   provider = azurerm.azure_monitor
 
   name                = "p2-moderate-alerts-${var.environment}"
-  resource_group_name = local.azure_monitor_resource_group
+  resource_group_name = local.legacy_azure_monitor_resource_group
 }
 
 data "azurerm_monitor_action_group" "low" {
   provider = azurerm.azure_monitor
 
   name                = "p3-low-alerts-${var.environment}"
-  resource_group_name = local.azure_monitor_resource_group
+  resource_group_name = local.legacy_azure_monitor_resource_group
 }
 
 data "azurerm_monitor_action_group" "informational" {
   provider = azurerm.azure_monitor
 
   name                = "p4-informational-alerts-${var.environment}"
-  resource_group_name = local.azure_monitor_resource_group
+  resource_group_name = local.legacy_azure_monitor_resource_group
 }
