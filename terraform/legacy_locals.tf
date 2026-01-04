@@ -1,21 +1,21 @@
 locals {
   # Remote State References
-  legacy_workload_resource_groups = {
+  workload_resource_groups = {
     for location in [var.location] :
     location => data.terraform_remote_state.platform_workloads.outputs.workload_resource_groups[var.workload_name][var.environment].resource_groups[lower(location)]
   }
 
-  legacy_workload_backend = try(
+  workload_backend = try(
     data.terraform_remote_state.platform_workloads.outputs.workload_terraform_backends[var.workload_name][var.environment],
     null
   )
 
-  legacy_workload_administrative_unit = try(
+  workload_administrative_unit = try(
     data.terraform_remote_state.platform_workloads.outputs.workload_administrative_units[var.workload_name][var.environment],
     null
   )
 
-  legacy_workload_resource_group = local.legacy_workload_resource_groups[var.location]
+  workload_resource_group = local.workload_resource_groups[var.location]
 
   # Local Resource Naming
   legacy_resource_group_name       = "rg-portal-sync-${var.environment}-${var.location}-${var.instance}"
