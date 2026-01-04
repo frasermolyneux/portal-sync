@@ -15,18 +15,3 @@ resource "azurerm_key_vault_secret" "legacy_servers_integration_api_subscription
   value        = azurerm_api_management_subscription.legacy_servers_integration_api_subscription.primary_key
   key_vault_id = azurerm_key_vault.legacy_kv.id
 }
-
-moved {
-  from = azurerm_key_vault_secret.repository_api_subscription_secret_primary
-  to   = azurerm_key_vault_secret.legacy_repository_api_subscription_secret_primary
-}
-
-moved {
-  from = azurerm_key_vault_secret.repository_api_subscription_secret_secondary
-  to   = azurerm_key_vault_secret.legacy_repository_api_subscription_secret_secondary
-}
-
-moved {
-  from = azurerm_key_vault_secret.servers_integration_api_subscription_secret
-  to   = azurerm_key_vault_secret.legacy_servers_integration_api_subscription_secret
-}

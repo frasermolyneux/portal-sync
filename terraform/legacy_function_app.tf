@@ -61,8 +61,3 @@ resource "azurerm_linux_function_app" "legacy_app" {
     "DiagnosticServices_EXTENSION_VERSION" = "~3"
   }
 }
-
-moved {
-  from = azurerm_linux_function_app.app
-  to   = azurerm_linux_function_app.legacy_app
-}

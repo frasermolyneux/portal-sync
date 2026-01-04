@@ -21,8 +21,3 @@ resource "azurerm_monitor_activity_log_alert" "legacy_rg_resource_health" {
 
   tags = var.tags
 }
-
-moved {
-  from = azurerm_monitor_activity_log_alert.rg_resource_health
-  to   = azurerm_monitor_activity_log_alert.legacy_rg_resource_health
-}

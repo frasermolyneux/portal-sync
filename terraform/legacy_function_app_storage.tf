@@ -16,8 +16,3 @@ resource "azurerm_storage_account" "legacy_function_app_storage" {
 
   tags = var.tags
 }
-
-moved {
-  from = azurerm_storage_account.function_app_storage
-  to   = azurerm_storage_account.legacy_function_app_storage
-}

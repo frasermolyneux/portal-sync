@@ -41,8 +41,3 @@ resource "azurerm_monitor_metric_alert" "legacy_ftp_dependencies" {
 
   tags = var.tags
 }
-
-moved {
-  from = azurerm_monitor_metric_alert.ftp_dependencies
-  to   = azurerm_monitor_metric_alert.legacy_ftp_dependencies
-}

@@ -17,17 +17,3 @@ resource "azurerm_key_vault" "legacy_kv" {
     default_action = "Allow"
   }
 }
-
-//resource "azurerm_management_lock" "kv_lock" {
-//  count = var.environment == "prd" ? 1 : 0
-//
-//  name       = "Terraform (CanNotDelete) - ${random_id.legacy_lock.hex}"
-//  scope      = azurerm_key_vault.legacy_kv.id
-//  lock_level = "CanNotDelete"
-//  notes      = "CanNotDelete Lock managed by Terraform to prevent manual or accidental deletion of resource group and resources"
-//}
-
-moved {
-  from = azurerm_key_vault.kv
-  to   = azurerm_key_vault.legacy_kv
-}

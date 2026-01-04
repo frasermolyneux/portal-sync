@@ -27,28 +27,3 @@ resource "azuread_app_role_assignment" "legacy_servers_integration_api" {
   principal_object_id = azurerm_linux_function_app.legacy_app.identity.0.principal_id
   resource_object_id  = data.azuread_service_principal.servers_integration_api.object_id
 }
-
-moved {
-  from = azurerm_role_assignment.app-to-storage
-  to   = azurerm_role_assignment.legacy_app-to-storage
-}
-
-moved {
-  from = azurerm_role_assignment.app-to-app-data-storage
-  to   = azurerm_role_assignment.legacy_app-to-app-data-storage
-}
-
-moved {
-  from = azurerm_role_assignment.web_app_kv_role_assignment
-  to   = azurerm_role_assignment.legacy_web_app_kv_role_assignment
-}
-
-moved {
-  from = azuread_app_role_assignment.repository_api
-  to   = azuread_app_role_assignment.legacy_repository_api
-}
-
-moved {
-  from = azuread_app_role_assignment.servers_integration_api
-  to   = azuread_app_role_assignment.legacy_servers_integration_api
-}
