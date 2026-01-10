@@ -4,5 +4,8 @@
     "azureFunctions.projectRuntime": "~4",
     "debug.internalConsoleOptions": "neverOpen",
     "azureFunctions.projectSubpath": "src/XtremeIdiots.Portal.Sync.App",
-    "azureFunctions.preDeployTask": "publish (functions)"
+    "azureFunctions.preDeployTask": "publish (functions)",
+    "cSpell.words": [
+        "xtremeidiots"
+    ]
 }

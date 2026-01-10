@@ -1,10 +1,8 @@
-environment = "dev"
-location    = "swedencentral"
-instance    = "01"
+workload_name = "portal-sync"
+environment   = "dev"
+location      = "swedencentral"
 
 subscription_id = "d68448b0-9947-46d7-8771-baa331a3063a"
-
-api_management_name = "apim-portal-core-dev-swedencentral-01-2db7de738f7a"
 
 platform_workloads_state = {
   resource_group_name  = "rg-tf-platform-workloads-prd-uksouth-01"
@@ -33,16 +31,13 @@ portal_environments_state = {
   tenant_id            = "e56a6947-bb9a-4a6e-846a-1f118d1c3a14"
 }
 
-repository_api = {
-  application_name     = "portal-repository-dev-01"
-  application_audience = "api://e56a6947-bb9a-4a6e-846a-1f118d1c3a14/portal-repository-dev-01"
-  apim_product_id      = "repository-api"
-}
-
-servers_integration_api = {
-  application_name     = "portal-servers-integration-dev-01"
-  application_audience = "api://portal-servers-integration-dev-01"
-  apim_product_id      = "servers-integration-api"
+portal_core_state = {
+  resource_group_name  = "rg-tf-portal-core-dev-uksouth-01"
+  storage_account_name = "saf39fd6adf871"
+  container_name       = "tfstate"
+  key                  = "terraform.tfstate"
+  subscription_id      = "7760848c-794d-4a19-8cb2-52f71a21ac2b"
+  tenant_id            = "e56a6947-bb9a-4a6e-846a-1f118d1c3a14"
 }
 
 tags = {

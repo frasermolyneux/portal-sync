@@ -1,19 +1,15 @@
-variable "environment" {
-  default = "dev"
-}
-
 variable "workload_name" {
   description = "Name of the workload as defined in platform-workloads state"
   type        = string
   default     = "portal-sync"
 }
 
-variable "location" {
-  default = "uksouth"
+variable "environment" {
+  default = "dev"
 }
 
-variable "instance" {
-  default = "01"
+variable "location" {
+  default = "uksouth"
 }
 
 variable "subscription_id" {}
@@ -54,32 +50,16 @@ variable "portal_environments_state" {
   })
 }
 
-variable "api_management_name" {}
-
-variable "repository_api" {
+variable "portal_core_state" {
+  description = "Backend config for portal-core remote state"
   type = object({
-    application_name     = string
-    application_audience = string
-    apim_product_id      = string
+    resource_group_name  = string
+    storage_account_name = string
+    container_name       = string
+    key                  = string
+    subscription_id      = string
+    tenant_id            = string
   })
-  default = {
-    application_name     = "portal-repository-dev-01"
-    application_audience = "api://e56a6947-bb9a-4a6e-846a-1f118d1c3a14/portal-repository-dev-01"
-    apim_product_id      = ""
-  }
-}
-
-variable "servers_integration_api" {
-  type = object({
-    application_name     = string
-    application_audience = string
-    apim_product_id      = string
-  })
-  default = {
-    application_name     = "portal-servers-integration-dev-01"
-    application_audience = "api://portal-servers-integration-dev-01"
-    apim_product_id      = ""
-  }
 }
 
 variable "tags" {

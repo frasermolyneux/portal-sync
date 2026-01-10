@@ -1,7 +1,8 @@
-resource "azurerm_key_vault" "legacy_kv" {
-  name                = local.legacy_key_vault_name
-  location            = azurerm_resource_group.legacy_rg.location
-  resource_group_name = azurerm_resource_group.legacy_rg.name
+resource "azurerm_key_vault" "kv" {
+  name = local.key_vault_name
+
+  location            = data.azurerm_resource_group.rg.location
+  resource_group_name = data.azurerm_resource_group.rg.name
   tenant_id           = data.azurerm_client_config.current.tenant_id
 
   tags = var.tags
