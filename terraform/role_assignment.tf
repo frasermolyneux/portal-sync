@@ -6,6 +6,6 @@ resource "azurerm_role_assignment" "app-to-storage" {
 
 resource "azurerm_role_assignment" "app-to-app-data-storage" {
   scope                = azurerm_storage_account.app_data_storage.id
-  role_definition_name = "Storage Blob Data Contributor"
+  role_definition_name = "Storage Blob Data Owner"
   principal_id         = local.sync_funcapp_identity.principal_id
 }
