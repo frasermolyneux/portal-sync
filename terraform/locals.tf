@@ -27,8 +27,8 @@ locals {
 
   app_configuration_endpoint = data.terraform_remote_state.portal_environments.outputs.app_configuration.endpoint
 
-  managed_identities    = data.terraform_remote_state.portal_environments.outputs.managed_identities
-  sync_funcapp_identity = local.managed_identities["sync_funcapp_identity"]
+  managed_identities = data.terraform_remote_state.portal_environments.outputs.managed_identities
+  sync_identity      = local.managed_identities["sync"]
 
   api_management          = data.terraform_remote_state.portal_environments.outputs.api_management
   repository_api          = data.terraform_remote_state.portal_environments.outputs.repository_api

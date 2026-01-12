@@ -16,10 +16,10 @@ resource "azurerm_linux_function_app" "function_app" {
 
   identity {
     type         = "UserAssigned"
-    identity_ids = [local.sync_funcapp_identity.id]
+    identity_ids = [local.sync_identity.id]
   }
 
-  key_vault_reference_identity_id = local.sync_funcapp_identity.id
+  key_vault_reference_identity_id = local.sync_identity.id
 
   site_config {
     application_stack {
@@ -40,10 +40,10 @@ resource "azurerm_linux_function_app" "function_app" {
 
   app_settings = {
     "AzureAppConfiguration__Endpoint"                = local.app_configuration_endpoint
-    "AzureAppConfiguration__ManagedIdentityClientId" = local.sync_funcapp_identity.client_id
+    "AzureAppConfiguration__ManagedIdentityClientId" = local.sync_identity.client_id
     "AzureAppConfiguration__Environment"             = var.environment
 
-    "AZURE_CLIENT_ID" = local.sync_funcapp_identity.client_id
+    "AZURE_CLIENT_ID" = local.sync_identity.client_id
 
     "ApplicationInsightsAgent_EXTENSION_VERSION" = "~3"
 
