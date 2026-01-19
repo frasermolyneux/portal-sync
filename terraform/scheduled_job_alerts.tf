@@ -55,14 +55,14 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "import_ban_files_not_
   criteria {
     query = <<-QUERY
       let expectedJobName = "ImportLatestBanFiles";
-      let expectedIntervalMinutes = 10; // Alert if not seen in 2x the expected interval
-      customEvents
-      | where name == strcat(expectedJobName, "_Completed")
-      | where timestamp > ago(15m)
-      | summarize LastRun = max(timestamp)
-      | extend MinutesSinceLastRun = datetime_diff('minute', now(), LastRun)
-      | where MinutesSinceLastRun > expectedIntervalMinutes
-      | project LastRun, MinutesSinceLastRun
+      let expectedIntervalMinutes = 10;
+      let completionEvents = customEvents
+        | where name == strcat(expectedJobName, "_Completed")
+        | where timestamp > ago(15m);
+      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
+      let lastRun = toscalar(completionEvents | summarize max(timestamp));
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, MinutesSinceLastRun = datetime_diff('minute', now(), lastRun)
+      | where not(HasRecentCompletion) or MinutesSinceLastRun > expectedIntervalMinutes
     QUERY
 
     time_aggregation_method = "Count"
@@ -98,14 +98,14 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "generate_ban_files_no
   criteria {
     query = <<-QUERY
       let expectedJobName = "GenerateLatestBansFile";
-      let expectedIntervalMinutes = 20; // Alert if not seen in 2x the expected interval
-      customEvents
-      | where name == strcat(expectedJobName, "_Completed")
-      | where timestamp > ago(30m)
-      | summarize LastRun = max(timestamp)
-      | extend MinutesSinceLastRun = datetime_diff('minute', now(), LastRun)
-      | where MinutesSinceLastRun > expectedIntervalMinutes
-      | project LastRun, MinutesSinceLastRun
+      let expectedIntervalMinutes = 20;
+      let completionEvents = customEvents
+        | where name == strcat(expectedJobName, "_Completed")
+        | where timestamp > ago(30m);
+      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
+      let lastRun = toscalar(completionEvents | summarize max(timestamp));
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, MinutesSinceLastRun = datetime_diff('minute', now(), lastRun)
+      | where not(HasRecentCompletion) or MinutesSinceLastRun > expectedIntervalMinutes
     QUERY
 
     time_aggregation_method = "Count"
@@ -141,14 +141,14 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_redirect_sync_not
   criteria {
     query = <<-QUERY
       let expectedJobName = "RunMapRedirectSync";
-      let expectedIntervalHours = 26; // Alert if not seen in 26 hours (allowing for some delay)
-      customEvents
-      | where name == strcat(expectedJobName, "_Completed")
-      | where timestamp > ago(2d)
-      | summarize LastRun = max(timestamp)
-      | extend HoursSinceLastRun = datetime_diff('hour', now(), LastRun)
-      | where HoursSinceLastRun > expectedIntervalHours
-      | project LastRun, HoursSinceLastRun
+      let expectedIntervalHours = 26;
+      let completionEvents = customEvents
+        | where name == strcat(expectedJobName, "_Completed")
+        | where timestamp > ago(2d);
+      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
+      let lastRun = toscalar(completionEvents | summarize max(timestamp));
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = datetime_diff('hour', now(), lastRun)
+      | where not(HasRecentCompletion) or HoursSinceLastRun > expectedIntervalHours
     QUERY
 
     time_aggregation_method = "Count"
@@ -184,14 +184,14 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "user_profile_sync_not
   criteria {
     query = <<-QUERY
       let expectedJobName = "RunUserProfileForumsSync";
-      let expectedIntervalHours = 26; // Alert if not seen in 26 hours (allowing for some delay)
-      customEvents
-      | where name == strcat(expectedJobName, "_Completed")
-      | where timestamp > ago(2d)
-      | summarize LastRun = max(timestamp)
-      | extend HoursSinceLastRun = datetime_diff('hour', now(), LastRun)
-      | where HoursSinceLastRun > expectedIntervalHours
-      | project LastRun, HoursSinceLastRun
+      let expectedIntervalHours = 26;
+      let completionEvents = customEvents
+        | where name == strcat(expectedJobName, "_Completed")
+        | where timestamp > ago(2d);
+      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
+      let lastRun = toscalar(completionEvents | summarize max(timestamp));
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = datetime_diff('hour', now(), lastRun)
+      | where not(HasRecentCompletion) or HoursSinceLastRun > expectedIntervalHours
     QUERY
 
     time_aggregation_method = "Count"
@@ -227,14 +227,14 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_image_sync_not_ru
   criteria {
     query = <<-QUERY
       let expectedJobName = "RunMapImageSync";
-      let expectedIntervalDays = 8; // Alert if not seen in 8 days (allowing for some delay)
-      customEvents
-      | where name == strcat(expectedJobName, "_Completed")
-      | where timestamp > ago(10d)
-      | summarize LastRun = max(timestamp)
-      | extend DaysSinceLastRun = datetime_diff('day', now(), LastRun)
-      | where DaysSinceLastRun > expectedIntervalDays
-      | project LastRun, DaysSinceLastRun
+      let expectedIntervalDays = 8;
+      let completionEvents = customEvents
+        | where name == strcat(expectedJobName, "_Completed")
+        | where timestamp > ago(10d);
+      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
+      let lastRun = toscalar(completionEvents | summarize max(timestamp));
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, DaysSinceLastRun = datetime_diff('day', now(), lastRun)
+      | where not(HasRecentCompletion) or DaysSinceLastRun > expectedIntervalDays
     QUERY
 
     time_aggregation_method = "Count"
@@ -270,14 +270,14 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "redirect_to_server_sy
   criteria {
     query = <<-QUERY
       let expectedJobName = "RunRedirectToGameServerMapSync";
-      let expectedIntervalHours = 26; // Alert if not seen in 26 hours (allowing for some delay)
-      customEvents
-      | where name == strcat(expectedJobName, "_Completed")
-      | where timestamp > ago(2d)
-      | summarize LastRun = max(timestamp)
-      | extend HoursSinceLastRun = datetime_diff('hour', now(), LastRun)
-      | where HoursSinceLastRun > expectedIntervalHours
-      | project LastRun, HoursSinceLastRun
+      let expectedIntervalHours = 26;
+      let completionEvents = customEvents
+        | where name == strcat(expectedJobName, "_Completed")
+        | where timestamp > ago(2d);
+      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
+      let lastRun = toscalar(completionEvents | summarize max(timestamp));
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = datetime_diff('hour', now(), lastRun)
+      | where not(HasRecentCompletion) or HoursSinceLastRun > expectedIntervalHours
     QUERY
 
     time_aggregation_method = "Count"
