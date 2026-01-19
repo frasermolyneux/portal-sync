@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using Azure.Identity;
 using Azure.Storage.Blobs;
+using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Options;
 using XtremeIdiots.Portal.Sync.App.Configuration;
 
@@ -13,6 +14,7 @@ using Microsoft.Extensions.Logging;
 
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App
 {
@@ -24,6 +26,7 @@ namespace XtremeIdiots.Portal.Sync.App
         private readonly IRepositoryApiClient repositoryApiClient;
         private readonly HttpClient httpClient;
         private readonly IOptions<MapImagesStorageOptions> mapImagesStorageOptions;
+        private readonly TelemetryClient telemetryClient;
 
         // Note: HTML detection maintained to avoid storing block/anti-bot pages as images.
 
@@ -31,12 +34,14 @@ namespace XtremeIdiots.Portal.Sync.App
             ILogger<MapImageSync> logger,
             IRepositoryApiClient repositoryApiClient,
             HttpClient httpClient,
-            IOptions<MapImagesStorageOptions> mapImagesStorageOptions)
+            IOptions<MapImagesStorageOptions> mapImagesStorageOptions,
+            TelemetryClient telemetryClient)
         {
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
             this.repositoryApiClient = repositoryApiClient ?? throw new ArgumentNullException(nameof(repositoryApiClient));
             this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             this.mapImagesStorageOptions = mapImagesStorageOptions ?? throw new ArgumentNullException(nameof(mapImagesStorageOptions));
+            this.telemetryClient = telemetryClient ?? throw new ArgumentNullException(nameof(telemetryClient));
         }
 
         [Function(nameof(RunMapImageSyncManual))]
@@ -47,6 +52,17 @@ namespace XtremeIdiots.Portal.Sync.App
 
         [Function(nameof(RunMapImageSync))]
         public async Task RunMapImageSync([TimerTrigger("0 0 0 * * 3")] TimerInfo? myTimer)
+        {
+            await ScheduledJobTelemetry.ExecuteWithTelemetry(
+                telemetryClient,
+                nameof(RunMapImageSync),
+                async () =>
+                {
+                    await ProcessMapImages();
+                });
+        }
+
+        private async Task ProcessMapImages()
         {
             var gamesToSync = new Dictionary<GameType, string>
             {

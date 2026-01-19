@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Linq;
 
+using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,7 @@ using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App.Redirect;
+using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App
 {
@@ -24,15 +26,18 @@ namespace XtremeIdiots.Portal.Sync.App
         };
 
         private readonly ILogger<MapRedirectSync> logger;
+        private readonly TelemetryClient telemetryClient;
 
         public MapRedirectSync(
             ILogger<MapRedirectSync> logger,
             IRepositoryApiClient repositoryApiClient,
-            IMapRedirectRepository mapRedirectRepository)
+            IMapRedirectRepository mapRedirectRepository,
+            TelemetryClient telemetryClient)
         {
             this.logger = logger;
             this.repositoryApiClient = repositoryApiClient;
             MapRedirectRepository = mapRedirectRepository;
+            this.telemetryClient = telemetryClient;
         }
 
         public IRepositoryApiClient repositoryApiClient { get; }
@@ -48,82 +53,89 @@ namespace XtremeIdiots.Portal.Sync.App
         // ReSharper disable once UnusedMember.Global
         public async Task RunMapRedirectSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
         {
-            logger.LogDebug($"Start RunMapRedirectSync @ {DateTime.UtcNow}");
-
-            var stopWatch = new Stopwatch();
-            stopWatch.Start();
-
-            var gamesToSync = new Dictionary<GameType, string>
-            {
-                {GameType.CallOfDuty4, "cod4"},
-                {GameType.CallOfDuty5, "cod5"}
-            };
-
-            foreach (var game in gamesToSync)
-            {
-                // Retrieve all of the maps from the redirect server
-                var mapRedirectEntries = await MapRedirectRepository.GetMapEntriesForGame(game.Value);
-
-                // Retrieve all of the maps from the repository in batches
-                var skipEntries = 0;
-                var takeEntries = 500;
-
-                var repositoryMaps = new List<MapDto>();
-                ApiResult<CollectionModel<MapDto>>? mapsCollectionBatch = null;
-                while (mapsCollectionBatch == null || (mapsCollectionBatch.Result?.Data?.Items != null && mapsCollectionBatch.Result.Data.Items.Any()))
+            await ScheduledJobTelemetry.ExecuteWithTelemetry(
+                telemetryClient,
+                nameof(RunMapRedirectSync),
+                async () =>
                 {
-                    mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, null, null, skipEntries, takeEntries, null);
-                    repositoryMaps.AddRange(mapsCollectionBatch.Result?.Data?.Items ?? Enumerable.Empty<MapDto>());
+                    logger.LogDebug($"Start RunMapRedirectSync @ {DateTime.UtcNow}");
 
-                    skipEntries += takeEntries;
-                }
-
-                logger.LogInformation($"Total maps retrieved from redirect for '{game}' is '{mapRedirectEntries.Count}' and repository is '{repositoryMaps.Count}'");
-
-                // Compare the map entries in the redirect to those in the repository and generate a list of additions and changes.
-                var mapDtosToCreate = new List<CreateMapDto>();
-                var mapDtosToUpdate = new List<EditMapDto>();
-
-                foreach (var mapRedirectEntry in mapRedirectEntries)
-                {
-                    var repositoryMap = repositoryMaps.SingleOrDefault(m => m.GameType == game.Key && m.MapName == mapRedirectEntry.MapName);
-
-                    if (repositoryMap == null)
+                    var gamesToSync = new Dictionary<GameType, string>
                     {
-                        var mapDtoToCreate = new CreateMapDto(game.Key, mapRedirectEntry.MapName)
-                        {
-                            MapFiles = mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).Select(mf =>
-                                new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{game.Value}/usermaps/{mapRedirectEntry.MapName}/{mf}")).ToList()
-                        };
+                        {GameType.CallOfDuty4, "cod4"},
+                        {GameType.CallOfDuty5, "cod5"}
+                    };
 
-                        mapDtosToCreate.Add(mapDtoToCreate);
-                    }
-                    else
+                    foreach (var game in gamesToSync)
                     {
-                        var mapFiles = mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).ToList();
-
-                        if (mapFiles.Count != repositoryMap.MapFiles.Count)
-                        {
-                            mapDtosToUpdate.Add(new EditMapDto(repositoryMap.MapId)
-                            {
-                                MapFiles = mapFiles.Select(mf =>
-                                    new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{game.Value}/usermaps/{mapRedirectEntry.MapName}/{mf}")).ToList()
-                            });
-                        }
+                        await ProcessGameMapSync(game.Key, game.Value);
                     }
-                }
 
-                logger.LogInformation($"Creating {mapDtosToCreate.Count} new maps and updating {mapDtosToUpdate.Count} existing maps");
+                    logger.LogDebug($"Stop RunMapRedirectSync @ {DateTime.UtcNow}");
+                });
+        }
 
-                if (mapDtosToCreate.Count > 0)
-                    await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate);
+        private async Task ProcessGameMapSync(GameType gameType, string gameKey)
+        {
+            // Retrieve all of the maps from the redirect server
+            var mapRedirectEntries = await MapRedirectRepository.GetMapEntriesForGame(gameKey);
 
-                if (mapDtosToUpdate.Count > 0)
-                    await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate);
+            // Retrieve all of the maps from the repository in batches
+            var skipEntries = 0;
+            var takeEntries = 500;
+
+            var repositoryMaps = new List<MapDto>();
+            ApiResult<CollectionModel<MapDto>>? mapsCollectionBatch = null;
+            while (mapsCollectionBatch == null || (mapsCollectionBatch.Result?.Data?.Items != null && mapsCollectionBatch.Result.Data.Items.Any()))
+            {
+                mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null, skipEntries, takeEntries, null);
+                repositoryMaps.AddRange(mapsCollectionBatch.Result?.Data?.Items ?? Enumerable.Empty<MapDto>());
+
+                skipEntries += takeEntries;
             }
 
-            stopWatch.Stop();
-            logger.LogDebug($"Stop RunMapRedirectSync @ {DateTime.UtcNow} after {stopWatch.ElapsedMilliseconds} milliseconds");
+            logger.LogInformation($"Total maps retrieved from redirect for '{gameType}' is '{mapRedirectEntries.Count}' and repository is '{repositoryMaps.Count}'");
+
+            // Compare the map entries in the redirect to those in the repository and generate a list of additions and changes.
+            var mapDtosToCreate = new List<CreateMapDto>();
+            var mapDtosToUpdate = new List<EditMapDto>();
+
+            foreach (var mapRedirectEntry in mapRedirectEntries)
+            {
+                var repositoryMap = repositoryMaps.SingleOrDefault(m => m.GameType == gameType && m.MapName == mapRedirectEntry.MapName);
+
+                if (repositoryMap == null)
+                {
+                    var mapDtoToCreate = new CreateMapDto(gameType, mapRedirectEntry.MapName)
+                    {
+                        MapFiles = mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).Select(mf =>
+                            new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}")).ToList()
+                    };
+
+                    mapDtosToCreate.Add(mapDtoToCreate);
+                }
+                else
+                {
+                    var mapFiles = mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).ToList();
+
+                    if (mapFiles.Count != repositoryMap.MapFiles.Count)
+                    {
+                        mapDtosToUpdate.Add(new EditMapDto(repositoryMap.MapId)
+                        {
+                            MapFiles = mapFiles.Select(mf =>
+                                new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}")).ToList()
+                        });
+                    }
+                }
+            }
+
+            logger.LogInformation($"Creating {mapDtosToCreate.Count} new maps and updating {mapDtosToUpdate.Count} existing maps");
+
+            if (mapDtosToCreate.Count > 0)
+                await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate);
+
+            if (mapDtosToUpdate.Count > 0)
+                await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate);
         }
     }
 }
