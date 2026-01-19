@@ -61,7 +61,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "import_ban_files_not_
         | where timestamp > ago(15m);
       let hasRecentCompletion = toscalar(completionEvents | count) > 0;
       let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, MinutesSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('minute', now(), lastRun))
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, MinutesSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('minute', lastRun, now()))
       | where not(HasRecentCompletion) or MinutesSinceLastRun > expectedIntervalMinutes
     QUERY
 
@@ -104,7 +104,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "generate_ban_files_no
         | where timestamp > ago(30m);
       let hasRecentCompletion = toscalar(completionEvents | count) > 0;
       let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, MinutesSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('minute', now(), lastRun))
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, MinutesSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('minute', lastRun, now()))
       | where not(HasRecentCompletion) or MinutesSinceLastRun > expectedIntervalMinutes
     QUERY
 
@@ -147,7 +147,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_redirect_sync_not
         | where timestamp > ago(2d);
       let hasRecentCompletion = toscalar(completionEvents | count) > 0;
       let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', now(), lastRun))
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', lastRun, now()))
       | where not(HasRecentCompletion) or HoursSinceLastRun > expectedIntervalHours
     QUERY
 
@@ -190,7 +190,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "user_profile_sync_not
         | where timestamp > ago(2d);
       let hasRecentCompletion = toscalar(completionEvents | count) > 0;
       let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', now(), lastRun))
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', lastRun, now()))
       | where not(HasRecentCompletion) or HoursSinceLastRun > expectedIntervalHours
     QUERY
 
@@ -233,7 +233,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_image_sync_not_ru
         | where timestamp > ago(10d);
       let hasRecentCompletion = toscalar(completionEvents | count) > 0;
       let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, DaysSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('day', now(), lastRun))
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, DaysSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('day', lastRun, now()))
       | where not(HasRecentCompletion) or DaysSinceLastRun > expectedIntervalDays
     QUERY
 
@@ -276,7 +276,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "redirect_to_server_sy
         | where timestamp > ago(2d);
       let hasRecentCompletion = toscalar(completionEvents | count) > 0;
       let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', now(), lastRun))
+      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', lastRun, now()))
       | where not(HasRecentCompletion) or HoursSinceLastRun > expectedIntervalHours
     QUERY
 
