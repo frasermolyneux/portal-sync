@@ -118,32 +118,45 @@ await ScheduledJobTelemetry.ExecuteWithTelemetry(
 
 ## Terraform Integration
 
-Alerts based on these telemetry events should be configured in Terraform using the `platform-monitoring` remote state reference. The alerts should trigger with informational severity as specified in the requirements.
+Alerts based on these telemetry events are configured in Terraform using the `platform-monitoring` remote state reference. The alerts trigger with informational severity and are deployed as part of the infrastructure.
 
-Example alert configuration structure (to be implemented in Terraform):
-```hcl
-resource "azurerm_monitor_scheduled_query_rules_alert_v2" "job_failure_alert" {
-  name                = "sync-job-failure-alert"
-  resource_group_name = data.azurerm_resource_group.rg.name
-  location            = data.azurerm_resource_group.rg.location
-  
-  scopes              = [local.app_insights.id]
-  severity            = 4 # Informational
-  
-  criteria {
-    query = <<-QUERY
-      customEvents
-      | where name endswith "_Failed"
-      | where timestamp > ago(5m)
-    QUERY
-    
-    time_aggregation_method = "Count"
-    threshold               = 0
-    operator                = "GreaterThan"
-  }
-  
-  action {
-    action_groups = [local.action_group_map.informational.id]
-  }
-}
-```
+### Deployed Alerts
+
+The following alerts are configured in `terraform/scheduled_job_alerts.tf`:
+
+1. **scheduled_job_failures**: Monitors for any job failure events (`{JobName}_Failed`)
+   - Evaluation frequency: Every 5 minutes
+   - Window duration: 5 minutes
+   - Action: Informational severity alert
+
+2. **import_ban_files_not_running**: Monitors ImportLatestBanFiles execution
+   - Expected interval: Every 5 minutes
+   - Alert threshold: No completion in 10 minutes
+   - Evaluation frequency: Every 5 minutes
+
+3. **generate_ban_files_not_running**: Monitors GenerateLatestBansFile execution
+   - Expected interval: Every 10 minutes
+   - Alert threshold: No completion in 20 minutes
+   - Evaluation frequency: Every 10 minutes
+
+4. **map_redirect_sync_not_running**: Monitors RunMapRedirectSync execution
+   - Expected interval: Daily
+   - Alert threshold: No completion in 26 hours
+   - Evaluation frequency: Every 1 hour
+
+5. **user_profile_sync_not_running**: Monitors RunUserProfileForumsSync execution
+   - Expected interval: Daily
+   - Alert threshold: No completion in 26 hours
+   - Evaluation frequency: Every 1 hour
+
+6. **map_image_sync_not_running**: Monitors RunMapImageSync execution
+   - Expected interval: Weekly
+   - Alert threshold: No completion in 8 days
+   - Evaluation frequency: Every 6 hours
+
+7. **redirect_to_server_sync_not_running**: Monitors RunRedirectToGameServerMapSync execution
+   - Expected interval: Daily
+   - Alert threshold: No completion in 26 hours
+   - Evaluation frequency: Every 1 hour
+
+All alerts use the informational action group from the `platform-monitoring` remote state reference.
