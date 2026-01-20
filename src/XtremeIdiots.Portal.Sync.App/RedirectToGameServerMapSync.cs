@@ -1,9 +1,11 @@
+using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App
 {
@@ -12,12 +14,14 @@ namespace XtremeIdiots.Portal.Sync.App
         private readonly ILogger<RedirectToGameServerMapSync> logger;
         private readonly IRepositoryApiClient repositoryApiClient;
         private readonly IServersApiClient serversApiClient;
+        private readonly TelemetryClient telemetryClient;
 
-        public RedirectToGameServerMapSync(ILogger<RedirectToGameServerMapSync> logger, IRepositoryApiClient repositoryApiClient, IServersApiClient serversApiClient)
+        public RedirectToGameServerMapSync(ILogger<RedirectToGameServerMapSync> logger, IRepositoryApiClient repositoryApiClient, IServersApiClient serversApiClient, TelemetryClient telemetryClient)
         {
             this.logger = logger;
             this.repositoryApiClient = repositoryApiClient;
             this.serversApiClient = serversApiClient;
+            this.telemetryClient = telemetryClient;
         }
 
         [Function(nameof(RunRedirectToGameServerMapSyncManual))]
@@ -29,13 +33,24 @@ namespace XtremeIdiots.Portal.Sync.App
         [Function(nameof(RunRedirectToGameServerMapSync))]
         public async Task RunRedirectToGameServerMapSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
         {
+            await ScheduledJobTelemetry.ExecuteWithTelemetry(
+                telemetryClient,
+                nameof(RunRedirectToGameServerMapSync),
+                async () =>
+                {
+                    await ProcessGameServerMaps();
+                });
+        }
+
+        private async Task ProcessGameServerMaps()
+        {
             GameType[] gameTypes = [GameType.CallOfDuty4];
             var gameServersApiResponse = await repositoryApiClient.GameServers.V1.GetGameServers(gameTypes, null, null, 0, 50, null);
 
             if (!gameServersApiResponse.IsSuccess || gameServersApiResponse.Result?.Data?.Items == null)
             {
                 logger.LogCritical("Failed to retrieve game servers from repository");
-                return;
+                throw new ApplicationException("Failed to retrieve game servers from repository");
             }
 
             foreach (var gameServerDto in gameServersApiResponse.Result.Data.Items)

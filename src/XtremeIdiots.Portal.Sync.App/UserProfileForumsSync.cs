@@ -1,3 +1,4 @@
+using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
@@ -8,6 +9,7 @@ using XtremeIdiots.InvisionCommunity.Models;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.UserProfiles;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App
 {
@@ -17,15 +19,18 @@ namespace XtremeIdiots.Portal.Sync.App
         private readonly ILogger<UserProfileForumsSync> logger;
         private readonly IRepositoryApiClient repositoryApiClient;
         private readonly IInvisionApiClient invisionApiClient;
+        private readonly TelemetryClient telemetryClient;
 
         public UserProfileForumsSync(
             ILogger<UserProfileForumsSync> logger,
             IRepositoryApiClient repositoryApiClient,
-            IInvisionApiClient invisionApiClient)
+            IInvisionApiClient invisionApiClient,
+            TelemetryClient telemetryClient)
         {
             this.logger = logger;
             this.repositoryApiClient = repositoryApiClient;
             this.invisionApiClient = invisionApiClient;
+            this.telemetryClient = telemetryClient;
         }
 
         [Function(nameof(RunUserProfileForumsSyncManual))]
@@ -36,6 +41,17 @@ namespace XtremeIdiots.Portal.Sync.App
 
         [Function(nameof(RunUserProfileForumsSync))]
         public async Task RunUserProfileForumsSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
+        {
+            await ScheduledJobTelemetry.ExecuteWithTelemetry(
+                telemetryClient,
+                nameof(RunUserProfileForumsSync),
+                async () =>
+                {
+                    await ProcessUserProfiles();
+                });
+        }
+
+        private async Task ProcessUserProfiles()
         {
             var skip = 0;
             var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
