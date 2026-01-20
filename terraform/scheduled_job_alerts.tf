@@ -213,42 +213,47 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "user_profile_sync_not
 }
 
 # Alert when RunMapImageSync hasn't run (expected weekly)
-resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_image_sync_not_running" {
-  name                = "${var.workload_name}-${var.environment}-map-image-sync-not-running"
-  resource_group_name = data.azurerm_resource_group.rg.name
-  location            = data.azurerm_resource_group.rg.location
-
-  scopes              = [data.azurerm_application_insights.app_insights.id]
-  severity            = 4 # Informational
-  description         = "Alert when RunMapImageSync job hasn't completed in the last 2 days (weekly job monitoring)"
-  evaluation_frequency = "PT6H"
-  window_duration      = "P2D"
-
-  criteria {
-    query = <<-QUERY
-      customEvents
-      | where name == "RunMapImageSync_Completed"
-      | where timestamp > ago(2d)
-      | count
-    QUERY
-
-    time_aggregation_method = "Count"
-    threshold               = 0
-    operator                = "Equal"
-
-    failing_periods {
-      minimum_failing_periods_to_trigger_alert = 1
-      number_of_evaluation_periods             = 1
-    }
-  }
-
-  action {
-    action_groups = [local.action_group_map.informational.id]
-  }
-
-  auto_mitigation_enabled = true
-  tags                    = var.tags
-}
+# NOTE: This alert is disabled because Azure Monitor's window_duration is limited to P2D (2 days),
+# which is insufficient for monitoring a weekly job that runs every 7 days. The 2-day window
+# would cause false positives on most days of the week when the job hasn't run recently but
+# is still within its expected schedule. Job failures will still be caught by the
+# scheduled_job_failures alert above.
+# resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_image_sync_not_running" {
+#   name                = "${var.workload_name}-${var.environment}-map-image-sync-not-running"
+#   resource_group_name = data.azurerm_resource_group.rg.name
+#   location            = data.azurerm_resource_group.rg.location
+# 
+#   scopes              = [data.azurerm_application_insights.app_insights.id]
+#   severity            = 4 # Informational
+#   description         = "Alert when RunMapImageSync job hasn't completed in the last 2 days (weekly job monitoring)"
+#   evaluation_frequency = "PT6H"
+#   window_duration      = "P2D"
+# 
+#   criteria {
+#     query = <<-QUERY
+#       customEvents
+#       | where name == "RunMapImageSync_Completed"
+#       | where timestamp > ago(2d)
+#       | count
+#     QUERY
+# 
+#     time_aggregation_method = "Count"
+#     threshold               = 0
+#     operator                = "Equal"
+# 
+#     failing_periods {
+#       minimum_failing_periods_to_trigger_alert = 1
+#       number_of_evaluation_periods             = 1
+#     }
+#   }
+# 
+#   action {
+#     action_groups = [local.action_group_map.informational.id]
+#   }
+# 
+#   auto_mitigation_enabled = true
+#   tags                    = var.tags
+# }
 
 # Alert when RunRedirectToGameServerMapSync hasn't run (expected daily)
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "redirect_to_server_sync_not_running" {
