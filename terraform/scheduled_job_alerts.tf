@@ -220,26 +220,21 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_image_sync_not_ru
 
   scopes              = [data.azurerm_application_insights.app_insights.id]
   severity            = 4 # Informational
-  description         = "Alert when RunMapImageSync job hasn't run in the expected timeframe (8 days)"
+  description         = "Alert when RunMapImageSync job hasn't completed in the last 2 days (weekly job monitoring)"
   evaluation_frequency = "PT6H"
   window_duration      = "P2D"
 
   criteria {
     query = <<-QUERY
-      let expectedJobName = "RunMapImageSync";
-      let expectedIntervalDays = 8;
-      let completionEvents = customEvents
-        | where name == strcat(expectedJobName, "_Completed")
-        | where timestamp > ago(2d);
-      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
-      let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, DaysSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('day', lastRun, now()))
-      | where not(HasRecentCompletion) or DaysSinceLastRun > expectedIntervalDays
+      customEvents
+      | where name == "RunMapImageSync_Completed"
+      | where timestamp > ago(2d)
+      | count
     QUERY
 
     time_aggregation_method = "Count"
     threshold               = 0
-    operator                = "GreaterThan"
+    operator                = "Equal"
 
     failing_periods {
       minimum_failing_periods_to_trigger_alert = 1

@@ -151,8 +151,9 @@ The following alerts are configured in `terraform/scheduled_job_alerts.tf`:
 
 6. **map_image_sync_not_running**: Monitors RunMapImageSync execution
    - Expected interval: Weekly
-   - Alert threshold: No completion in 8 days
+   - Alert threshold: No completion in 2 days (due to Azure Monitor window_duration limits)
    - Evaluation frequency: Every 6 hours
+   - Note: Weekly job alert is limited to 2-day window per Azure Monitor constraints
 
 7. **redirect_to_server_sync_not_running**: Monitors RunRedirectToGameServerMapSync execution
    - Expected interval: Daily
