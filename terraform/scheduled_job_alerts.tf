@@ -169,7 +169,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_redirect_sync_not
   tags                    = var.tags
 }
 
-# Alert when RunUserProfileForumsSync hasn't run (expected daily)
+# Alert when RunUserProfileForumsSync hasn't run (expected every 4 hours)
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "user_profile_sync_not_running" {
   name                = "${var.workload_name}-${var.environment}-user-profile-sync-not-running"
   resource_group_name = data.azurerm_resource_group.rg.name
@@ -177,17 +177,17 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "user_profile_sync_not
 
   scopes              = [data.azurerm_application_insights.app_insights.id]
   severity            = 4 # Informational
-  description         = "Alert when RunUserProfileForumsSync job hasn't run in the expected timeframe (26 hours)"
+  description         = "Alert when RunUserProfileForumsSync job hasn't run in the expected timeframe (5 hours)"
   evaluation_frequency = "PT1H"
-  window_duration      = "P2D"
+  window_duration      = "PT6H"
 
   criteria {
     query = <<-QUERY
       let expectedJobName = "RunUserProfileForumsSync";
-      let expectedIntervalHours = 26;
+      let expectedIntervalHours = 5;
       let completionEvents = customEvents
         | where name == strcat(expectedJobName, "_Completed")
-        | where timestamp > ago(2d);
+        | where timestamp > ago(6h);
       let hasRecentCompletion = toscalar(completionEvents | count) > 0;
       let lastRun = toscalar(completionEvents | summarize max(timestamp));
       print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', lastRun, now()))
