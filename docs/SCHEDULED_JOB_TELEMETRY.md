@@ -47,7 +47,7 @@ The following scheduled jobs are instrumented with telemetry:
 | `ImportLatestBanFiles` | Every 5 minutes (`0 */5 * * * *`) | Imports ban files from game servers |
 | `GenerateLatestBansFile` | Every 10 minutes (`0 */10 * * * *`) | Generates consolidated ban files for CoD2, CoD4, and CoD5 |
 | `RunMapRedirectSync` | Daily at midnight (`0 0 0 * * *`) | Syncs map redirect entries for CoD4 and CoD5 |
-| `RunUserProfileForumsSync` | Daily at midnight (`0 0 0 * * *`) | Syncs user profiles from forums |
+| `RunUserProfileForumsSync` | Every 4 hours (`0 0 */4 * * *`) | Syncs user profiles from forums |
 | `RunMapImageSync` | Weekly on Wednesday at midnight (`0 0 0 * * 3`) | Syncs map images from GameTracker |
 | `RunRedirectToGameServerMapSync` | Daily at midnight (`0 0 0 * * *`) | Syncs maps to game servers |
 
@@ -145,8 +145,8 @@ The following alerts are configured in `terraform/scheduled_job_alerts.tf`:
    - Evaluation frequency: Every 1 hour
 
 5. **user_profile_sync_not_running**: Monitors RunUserProfileForumsSync execution
-   - Expected interval: Daily
-   - Alert threshold: No completion in 26 hours
+   - Expected interval: Every 4 hours
+   - Alert threshold: No completion in 5 hours
    - Evaluation frequency: Every 1 hour
 
 6. **map_image_sync_not_running**: DISABLED

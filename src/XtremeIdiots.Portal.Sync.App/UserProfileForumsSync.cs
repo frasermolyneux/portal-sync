@@ -40,7 +40,7 @@ namespace XtremeIdiots.Portal.Sync.App
         }
 
         [Function(nameof(RunUserProfileForumsSync))]
-        public async Task RunUserProfileForumsSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
+        public async Task RunUserProfileForumsSync([TimerTrigger("0 0 */4 * * *")] TimerInfo? myTimer)
         {
             await ScheduledJobTelemetry.ExecuteWithTelemetry(
                 telemetryClient,
