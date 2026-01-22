@@ -89,6 +89,14 @@ namespace XtremeIdiots.Portal.Sync.App.Telemetry
             telemetryClient.TrackException(exception, failureProperties);
         }
 
+        public async Task TrackJobFailureAsync(Exception exception, Dictionary<string, string>? additionalProperties = null)
+        {
+            TrackJobFailure(exception, additionalProperties);
+            
+            // Flush telemetry to ensure it's sent before the exception propagates and potentially terminates the function
+            await telemetryClient.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+
         public static async Task<T> ExecuteWithTelemetry<T>(
             TelemetryClient telemetryClient,
             string jobName,
@@ -106,7 +114,7 @@ namespace XtremeIdiots.Portal.Sync.App.Telemetry
             }
             catch (Exception ex)
             {
-                telemetry.TrackJobFailure(ex);
+                await telemetry.TrackJobFailureAsync(ex);
                 throw;
             }
         }
@@ -127,7 +135,7 @@ namespace XtremeIdiots.Portal.Sync.App.Telemetry
             }
             catch (Exception ex)
             {
-                telemetry.TrackJobFailure(ex);
+                await telemetry.TrackJobFailureAsync(ex);
                 throw;
             }
         }

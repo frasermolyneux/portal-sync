@@ -58,7 +58,7 @@ namespace XtremeIdiots.Portal.Sync.App
                 nameof(RunMapRedirectSync),
                 async () =>
                 {
-                    logger.LogDebug($"Start RunMapRedirectSync @ {DateTime.UtcNow}");
+                    logger.LogDebug("Start RunMapRedirectSync @ {Timestamp}", DateTime.UtcNow);
 
                     var gamesToSync = new Dictionary<GameType, string>
                     {
@@ -71,30 +71,35 @@ namespace XtremeIdiots.Portal.Sync.App
                         await ProcessGameMapSync(game.Key, game.Value);
                     }
 
-                    logger.LogDebug($"Stop RunMapRedirectSync @ {DateTime.UtcNow}");
+                    logger.LogDebug("Stop RunMapRedirectSync @ {Timestamp}", DateTime.UtcNow);
                 });
         }
 
         private async Task ProcessGameMapSync(GameType gameType, string gameKey)
         {
-            // Retrieve all of the maps from the redirect server
-            var mapRedirectEntries = await MapRedirectRepository.GetMapEntriesForGame(gameKey);
-
-            // Retrieve all of the maps from the repository in batches
-            var skipEntries = 0;
-            var takeEntries = 500;
-
-            var repositoryMaps = new List<MapDto>();
-            ApiResult<CollectionModel<MapDto>>? mapsCollectionBatch = null;
-            while (mapsCollectionBatch == null || (mapsCollectionBatch.Result?.Data?.Items != null && mapsCollectionBatch.Result.Data.Items.Any()))
+            logger.LogInformation("Starting map sync for game '{GameType}' with key '{GameKey}'", gameType, gameKey);
+            
+            try
             {
-                mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null, skipEntries, takeEntries, null);
-                repositoryMaps.AddRange(mapsCollectionBatch.Result?.Data?.Items ?? Enumerable.Empty<MapDto>());
+                // Retrieve all of the maps from the redirect server
+                var mapRedirectEntries = await MapRedirectRepository.GetMapEntriesForGame(gameKey);
 
-                skipEntries += takeEntries;
-            }
+                // Retrieve all of the maps from the repository in batches
+                var skipEntries = 0;
+                var takeEntries = 500;
 
-            logger.LogInformation($"Total maps retrieved from redirect for '{gameType}' is '{mapRedirectEntries.Count}' and repository is '{repositoryMaps.Count}'");
+                var repositoryMaps = new List<MapDto>();
+                ApiResult<CollectionModel<MapDto>>? mapsCollectionBatch = null;
+                while (mapsCollectionBatch == null || (mapsCollectionBatch.Result?.Data?.Items != null && mapsCollectionBatch.Result.Data.Items.Any()))
+                {
+                    mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null, skipEntries, takeEntries, null);
+                    repositoryMaps.AddRange(mapsCollectionBatch.Result?.Data?.Items ?? Enumerable.Empty<MapDto>());
+
+                    skipEntries += takeEntries;
+                }
+
+                logger.LogInformation("Total maps retrieved from redirect for '{GameType}' is '{RedirectCount}' and repository is '{RepositoryCount}'", 
+                    gameType, mapRedirectEntries.Count, repositoryMaps.Count);
 
             // Compare the map entries in the redirect to those in the repository and generate a list of additions and changes.
             var mapDtosToCreate = new List<CreateMapDto>();
@@ -129,13 +134,22 @@ namespace XtremeIdiots.Portal.Sync.App
                 }
             }
 
-            logger.LogInformation($"Creating {mapDtosToCreate.Count} new maps and updating {mapDtosToUpdate.Count} existing maps");
+            logger.LogInformation("Creating {CreateCount} new maps and updating {UpdateCount} existing maps", 
+                mapDtosToCreate.Count, mapDtosToUpdate.Count);
 
             if (mapDtosToCreate.Count > 0)
                 await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate);
 
             if (mapDtosToUpdate.Count > 0)
                 await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate);
+                
+            logger.LogInformation("Completed map sync for game '{GameType}'", gameType);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to sync maps for game '{GameType}' with key '{GameKey}'", gameType, gameKey);
+                throw;
+            }
         }
     }
 }
