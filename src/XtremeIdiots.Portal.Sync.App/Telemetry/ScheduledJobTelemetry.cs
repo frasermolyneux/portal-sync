@@ -89,7 +89,7 @@ namespace XtremeIdiots.Portal.Sync.App.Telemetry
             telemetryClient.TrackException(exception, failureProperties);
             
             // Flush telemetry to ensure it's sent before the exception propagates and potentially terminates the function
-            telemetryClient.FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
+            telemetryClient.FlushAsync(CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         public static async Task<T> ExecuteWithTelemetry<T>(

@@ -58,7 +58,7 @@ namespace XtremeIdiots.Portal.Sync.App
                 nameof(RunMapRedirectSync),
                 async () =>
                 {
-                    logger.LogDebug($"Start RunMapRedirectSync @ {DateTime.UtcNow}");
+                    logger.LogDebug("Start RunMapRedirectSync @ {Timestamp}", DateTime.UtcNow);
 
                     var gamesToSync = new Dictionary<GameType, string>
                     {
@@ -71,7 +71,7 @@ namespace XtremeIdiots.Portal.Sync.App
                         await ProcessGameMapSync(game.Key, game.Value);
                     }
 
-                    logger.LogDebug($"Stop RunMapRedirectSync @ {DateTime.UtcNow}");
+                    logger.LogDebug("Stop RunMapRedirectSync @ {Timestamp}", DateTime.UtcNow);
                 });
         }
 
@@ -98,7 +98,8 @@ namespace XtremeIdiots.Portal.Sync.App
                     skipEntries += takeEntries;
                 }
 
-                logger.LogInformation($"Total maps retrieved from redirect for '{gameType}' is '{mapRedirectEntries.Count}' and repository is '{repositoryMaps.Count}'");
+                logger.LogInformation("Total maps retrieved from redirect for '{GameType}' is '{RedirectCount}' and repository is '{RepositoryCount}'", 
+                    gameType, mapRedirectEntries.Count, repositoryMaps.Count);
 
             // Compare the map entries in the redirect to those in the repository and generate a list of additions and changes.
             var mapDtosToCreate = new List<CreateMapDto>();
@@ -133,7 +134,8 @@ namespace XtremeIdiots.Portal.Sync.App
                 }
             }
 
-            logger.LogInformation($"Creating {mapDtosToCreate.Count} new maps and updating {mapDtosToUpdate.Count} existing maps");
+            logger.LogInformation("Creating {CreateCount} new maps and updating {UpdateCount} existing maps", 
+                mapDtosToCreate.Count, mapDtosToUpdate.Count);
 
             if (mapDtosToCreate.Count > 0)
                 await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate);
