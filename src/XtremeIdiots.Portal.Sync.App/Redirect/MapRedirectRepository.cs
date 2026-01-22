@@ -22,8 +22,10 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
 
         public async Task<List<MapRedirectEntry>> GetMapEntriesForGame(string game)
         {
-            var url = $"{_options.Value.MapRedirectBaseUrl}/portal-map-sync.php?game={game}&key={_options.Value.ApiKey}";
-            _logger.LogInformation("Requesting map entries for game '{Game}' from URL: {Url}", game, url.Replace(_options.Value.ApiKey ?? "", "***"));
+            var apiKey = _options.Value.ApiKey ?? string.Empty;
+            var url = $"{_options.Value.MapRedirectBaseUrl}/portal-map-sync.php?game={game}&key={apiKey}";
+            var maskedUrl = url.Replace(apiKey, "***");
+            _logger.LogInformation("Requesting map entries for game '{Game}' from map redirect API", game);
 
             HttpResponseMessage response;
             try
@@ -42,20 +44,22 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
             var content = await response.Content.ReadAsStringAsync();
             
             // Log a preview of the response content for debugging (truncate if too long)
-            var contentPreview = content.Length > 500 ? content.Substring(0, 500) + "..." : content;
+            var contentPreview = content.Length > 200 ? content.Substring(0, 200) + "..." : content;
             _logger.LogDebug("Response content preview for game '{Game}': {ContentPreview}", game, contentPreview);
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Map redirect API returned error status {StatusCode} for game '{Game}'. Response: {Response}", 
-                    statusCode, game, content);
+                // Truncate error response for logging to avoid exposing sensitive data
+                var errorPreview = content.Length > 200 ? content.Substring(0, 200) + "... (truncated)" : content;
+                _logger.LogError("Map redirect API returned error status {StatusCode} for game '{Game}'. Response preview: {ErrorPreview}", 
+                    statusCode, game, errorPreview);
 
                 if (statusCode == 401 || statusCode == 403)
                 {
-                    throw new ApplicationException($"Authentication failed for map redirect API (HTTP {statusCode}). Check that the API key is valid. Response: {content}");
+                    throw new ApplicationException($"Authentication failed for map redirect API (HTTP {statusCode}). Check that the API key is valid.");
                 }
 
-                throw new ApplicationException($"Map redirect API returned error status {statusCode} for game '{game}'. Response: {content}");
+                throw new ApplicationException($"Map redirect API returned error status {statusCode} for game '{game}'.");
             }
 
             if (string.IsNullOrWhiteSpace(content))
@@ -71,14 +75,16 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
             }
             catch (JsonException ex)
             {
-                _logger.LogError(ex, "Failed to deserialize JSON response from map redirect API for game '{Game}'. Response content: {Response}", 
-                    game, content);
-                throw new ApplicationException($"Failed to parse JSON response from map redirect API for game '{game}'. This may indicate an invalid API key or server error. Response: {content}", ex);
+                // Log truncated content to avoid exposing sensitive data
+                var contentForLogging = content.Length > 200 ? content.Substring(0, 200) + "... (truncated)" : content;
+                _logger.LogError(ex, "Failed to deserialize JSON response from map redirect API for game '{Game}'. Response preview: {ContentPreview}", 
+                    game, contentForLogging);
+                throw new ApplicationException($"Failed to parse JSON response from map redirect API for game '{game}'. This may indicate an invalid API key or server error.", ex);
             }
 
             if (mapRedirectEntries == null)
             {
-                _logger.LogError("Deserialized map entries is null for game '{Game}'. Response: {Response}", game, content);
+                _logger.LogError("Deserialized map entries is null for game '{Game}'", game);
                 throw new ApplicationException($"Failed to retrieve map entries from redirect server for game '{game}'. Response deserialized to null.");
             }
 
