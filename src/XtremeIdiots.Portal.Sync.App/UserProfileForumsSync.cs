@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using System.Linq;
+using System.Net;
 
 using XtremeIdiots.InvisionCommunity;
 using XtremeIdiots.InvisionCommunity.Models;
@@ -106,9 +107,15 @@ namespace XtremeIdiots.Portal.Sync.App
                                     await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, new List<CreateUserProfileClaimDto>());
                                 }
                             }
+                            catch (HttpRequestException httpEx) when (httpEx.StatusCode == HttpStatusCode.Unauthorized)
+                            {
+                                logger.LogError(httpEx, "Unauthorized access to forums API - invalid API key. Failing fast.");
+                                throw;
+                            }
                             catch (Exception ex)
                             {
                                 logger.LogError(ex, $"Failed to sync forum profile for {userProfileDto.XtremeIdiotsForumId}");
+                                throw;
                             }
 
                         }
