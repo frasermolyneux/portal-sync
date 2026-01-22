@@ -22,9 +22,14 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
 
         public async Task<List<MapRedirectEntry>> GetMapEntriesForGame(string game)
         {
-            var apiKey = _options.Value.ApiKey ?? string.Empty;
+            var apiKey = _options.Value.ApiKey;
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                _logger.LogError("API key is not configured for map redirect repository");
+                throw new InvalidOperationException("Map redirect API key is not configured");
+            }
+
             var url = $"{_options.Value.MapRedirectBaseUrl}/portal-map-sync.php?game={game}&key={apiKey}";
-            var maskedUrl = url.Replace(apiKey, "***");
             _logger.LogInformation("Requesting map entries for game '{Game}' from map redirect API", game);
 
             HttpResponseMessage response;
