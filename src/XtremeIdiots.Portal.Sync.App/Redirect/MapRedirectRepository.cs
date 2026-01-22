@@ -9,6 +9,8 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
 {
     public class MapRedirectRepository : IMapRedirectRepository
     {
+        private const int MaxContentPreviewLength = 200;
+        
         private readonly IOptions<MapRedirectRepositoryOptions> _options;
         private readonly HttpClient _httpClient;
         private readonly ILogger<MapRedirectRepository> _logger;
@@ -48,16 +50,13 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
 
             var content = await response.Content.ReadAsStringAsync();
             
-            // Log a preview of the response content for debugging (truncate if too long)
-            var contentPreview = content.Length > 200 ? content.Substring(0, 200) + "..." : content;
-            _logger.LogDebug("Response content preview for game '{Game}': {ContentPreview}", game, contentPreview);
+            // Log a preview of the response content for debugging
+            _logger.LogDebug("Response content preview for game '{Game}': {ContentPreview}", game, TruncateForLogging(content));
 
             if (!response.IsSuccessStatusCode)
             {
-                // Truncate error response for logging to avoid exposing sensitive data
-                var errorPreview = content.Length > 200 ? content.Substring(0, 200) + "... (truncated)" : content;
                 _logger.LogError("Map redirect API returned error status {StatusCode} for game '{Game}'. Response preview: {ErrorPreview}", 
-                    statusCode, game, errorPreview);
+                    statusCode, game, TruncateForLogging(content));
 
                 if (statusCode == 401 || statusCode == 403)
                 {
@@ -80,10 +79,8 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
             }
             catch (JsonException ex)
             {
-                // Log truncated content to avoid exposing sensitive data
-                var contentForLogging = content.Length > 200 ? content.Substring(0, 200) + "... (truncated)" : content;
                 _logger.LogError(ex, "Failed to deserialize JSON response from map redirect API for game '{Game}'. Response preview: {ContentPreview}", 
-                    game, contentForLogging);
+                    game, TruncateForLogging(content));
                 throw new ApplicationException($"Failed to parse JSON response from map redirect API for game '{game}'. This may indicate an invalid API key or server error.", ex);
             }
 
@@ -95,6 +92,16 @@ namespace XtremeIdiots.Portal.Sync.App.Redirect
 
             _logger.LogInformation("Successfully retrieved {Count} map entries for game '{Game}'", mapRedirectEntries.Count, game);
             return mapRedirectEntries;
+        }
+
+        private static string TruncateForLogging(string content)
+        {
+            if (content.Length <= MaxContentPreviewLength)
+            {
+                return content;
+            }
+
+            return content[..MaxContentPreviewLength] + "... (truncated)";
         }
     }
 }
