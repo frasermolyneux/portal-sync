@@ -24,7 +24,7 @@
 	  <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.1" />
 	  <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.1" />
 	  <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="2.1.26" />
-    <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="1.1.352.1" />
+    <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="2.1.12" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XtremeIdiots.Portal.Forums.Integration\XtremeIdiots.Portal.Forums.Integration.csproj" />
