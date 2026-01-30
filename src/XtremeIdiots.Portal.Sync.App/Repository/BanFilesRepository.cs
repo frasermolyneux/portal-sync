@@ -112,7 +112,7 @@ public class BanFilesRepository(
     private async Task<List<AdminActionDto>> GetActiveBans(GameType gameType)
     {
         const int TakeEntries = 500;
-        var adminActions = new List<AdminActionDto>();
+        List<AdminActionDto> adminActions = [];
 
         var skip = 0;
         var adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc); do

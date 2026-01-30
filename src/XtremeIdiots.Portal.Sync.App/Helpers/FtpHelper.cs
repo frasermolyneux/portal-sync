@@ -125,16 +125,12 @@ public class FtpHelper(
 
             await ftpClient.AutoConnect();
 
-            using (var stream = new MemoryStream())
-            {
-                await ftpClient.DownloadStream(stream, filePath);
+            using var stream = new MemoryStream();
+            await ftpClient.DownloadStream(stream, filePath);
 
-                using (var streamReader = new StreamReader(stream))
-                {
-                    stream.Seek(0, SeekOrigin.Begin);
-                    return streamReader.ReadToEnd();
-                }
-            }
+            using var streamReader = new StreamReader(stream);
+            stream.Seek(0, SeekOrigin.Begin);
+            return streamReader.ReadToEnd();
         }
         catch (Exception ex)
         {

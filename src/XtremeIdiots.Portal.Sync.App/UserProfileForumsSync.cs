@@ -153,7 +153,7 @@ public class UserProfileForumsSync(
 
     private static List<CreateUserProfileClaimDto> GetClaimsForGroup(Guid userProfileId, Group group)
     {
-        var claims = new List<CreateUserProfileClaimDto>();
+        List<CreateUserProfileClaimDto> claims = [];
 
         // Check if group or group.Name is null
         if (group?.Name == null)

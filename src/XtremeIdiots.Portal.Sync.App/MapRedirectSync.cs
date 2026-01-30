@@ -79,7 +79,7 @@ public class MapRedirectSync(
             var skipEntries = 0;
             var takeEntries = 500;
 
-            var repositoryMaps = new List<MapDto>();
+            List<MapDto> repositoryMaps = [];
             ApiResult<CollectionModel<MapDto>>? mapsCollectionBatch = null;
             while (mapsCollectionBatch == null || (mapsCollectionBatch.Result?.Data?.Items != null && mapsCollectionBatch.Result.Data.Items.Any()))
             {
@@ -93,8 +93,8 @@ public class MapRedirectSync(
                 gameType, mapRedirectEntries.Count, repositoryMaps.Count);
 
             // Compare the map entries in the redirect to those in the repository and generate a list of additions and changes.
-            var mapDtosToCreate = new List<CreateMapDto>();
-            var mapDtosToUpdate = new List<EditMapDto>();
+            List<CreateMapDto> mapDtosToCreate = [];
+            List<EditMapDto> mapDtosToUpdate = [];
 
             foreach (var mapRedirectEntry in mapRedirectEntries)
             {
