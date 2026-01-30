@@ -62,7 +62,7 @@ internal class BanFileIngest(
                 if (adminActionsApiResponse == null || adminActionsApiResponse.Result == null)
                     throw new Exception("Failed to retieve admin actions for player from database");
 
-                if (!adminActionsApiResponse.Result?.Data?.Items?.Any(aa => aa.Type == AdminActionType.Ban) ?? true)
+                if (adminActionsApiResponse.Result?.Data?.Items?.Count(aa => aa.Type == AdminActionType.Ban) == 0)
                 {
                     _logger.LogInformation($"BanFileImport - adding import ban to existing player {playerDtoApiResponse.Result.Data.Username} - {playerDtoApiResponse.Result.Data.Guid} ({playerDtoApiResponse.Result.Data.GameType})");
 
