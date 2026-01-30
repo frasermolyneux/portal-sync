@@ -8,22 +8,14 @@ public class GuidValidator : IGuidValidator
 {
     public bool IsValid(string gameType, string guid)
     {
-        string regex;
-        switch (gameType)
+        var regex = gameType switch
         {
-            case "CallOfDuty2":
-                regex = @"^([a-z0-9]{4,32})$";
-                break;
-            case "CallOfDuty4":
-                regex = @"^([a-z0-9]{32})$";
-                break;
-            case "CallOfDuty5":
-                regex = @"^([a-z0-9]{4,32})$";
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(gameType), "Game type is unsupported");
-        }
+            "CallOfDuty2" => @"^([a-z0-9]{4,32})$",
+            "CallOfDuty4" => @"^([a-z0-9]{32})$",
+            "CallOfDuty5" => @"^([a-z0-9]{4,32})$",
+            _ => throw new ArgumentOutOfRangeException(nameof(gameType), "Game type is unsupported")
+        };
 
-        return Regex.Match(guid, regex).Success;
+        return Regex.IsMatch(guid, regex);
     }
 }

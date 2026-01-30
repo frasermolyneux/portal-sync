@@ -16,38 +16,27 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
     {
         try
         {
-            var userId = 21145; // Admin
+            var userId = adminId != null ? int.Parse(adminId) : 21145; // Admin
 
-            if (adminId != null)
-                userId = Convert.ToInt32(adminId);
-
-            var forumId = 28;
-            switch (type)
+            var forumId = type switch
             {
-                case AdminActionType.Observation:
-                    forumId = gameType.ForumIdForObservations();
-                    break;
-                case AdminActionType.Warning:
-                    forumId = gameType.ForumIdForWarnings();
-                    break;
-                case AdminActionType.Kick:
-                    forumId = gameType.ForumIdForKicks();
-                    break;
-                case AdminActionType.TempBan:
-                    forumId = gameType.ForumIdForTempBans();
-                    break;
-                case AdminActionType.Ban:
-                    forumId = gameType.ForumIdForBans();
-                    break;
-            }
+                AdminActionType.Observation => gameType.ForumIdForObservations(),
+                AdminActionType.Warning => gameType.ForumIdForWarnings(),
+                AdminActionType.Kick => gameType.ForumIdForKicks(),
+                AdminActionType.TempBan => gameType.ForumIdForTempBans(),
+                AdminActionType.Ban => gameType.ForumIdForBans(),
+                _ => 28
+            };
+
             var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString());
 
-            if (postTopicResult != null) { return postTopicResult.TopicId; }
-            else
+            if (postTopicResult != null)
             {
-                _logger.LogError("Error creating admin action topic - call to post topic returned null");
-                return 0;
+                return postTopicResult.TopicId;
             }
+
+            _logger.LogError("Error creating admin action topic - call to post topic returned null");
+            return 0;
         }
         catch (Exception ex)
         {
@@ -61,10 +50,7 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
         if (topicId == 0)
             return;
 
-        var userId = 21145; // Admin
-
-        if (adminId != null)
-            userId = Convert.ToInt32(adminId);
+        var userId = adminId != null ? int.Parse(adminId) : 21145; // Admin
 
         await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text));
     }
