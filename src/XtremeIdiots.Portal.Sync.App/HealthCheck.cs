@@ -13,6 +13,6 @@ public class HealthCheck(HealthCheckService healthCheck)
         FunctionContext context)
     {
         var healthStatus = await healthCheck.CheckHealthAsync();
-        return new OkObjectResult(Enum.GetName(typeof(HealthStatus), healthStatus.Status));
+        return new OkObjectResult(healthStatus.Status.ToString());
     }
 }

@@ -128,10 +128,10 @@ public class MapRedirectSync(
             logger.LogInformation("Creating {CreateCount} new maps and updating {UpdateCount} existing maps", 
                 mapDtosToCreate.Count, mapDtosToUpdate.Count);
 
-            if (mapDtosToCreate.Count > 0)
+            if (mapDtosToCreate.Count != 0)
                 await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate);
 
-            if (mapDtosToUpdate.Count > 0)
+            if (mapDtosToUpdate.Count != 0)
                 await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate);
                 
             logger.LogInformation("Completed map sync for game '{GameType}'", gameType);

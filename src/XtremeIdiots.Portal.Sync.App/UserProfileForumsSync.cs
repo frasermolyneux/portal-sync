@@ -114,7 +114,7 @@ public class UserProfileForumsSync(
             }
             skip += TakeEntries;
             userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
-        } while (userProfileResponseDto?.Result?.Data?.Items?.Any() == true);
+        } while (userProfileResponseDto?.Result?.Data?.Items?.Any() is true);
     }
 
     private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, Member member)
@@ -142,7 +142,10 @@ public class UserProfileForumsSync(
         // Check if SecondaryGroups is not null before trying to use it
         if (member.SecondaryGroups != null)
         {
-            claims = member.SecondaryGroups.Aggregate(claims, (current, group) => current.Concat(GetClaimsForGroup(userProfileId, group ?? new Group())).ToList());
+            foreach (var group in member.SecondaryGroups)
+            {
+                claims.AddRange(GetClaimsForGroup(userProfileId, group ?? new Group()));
+            }
         }
 
         return claims;

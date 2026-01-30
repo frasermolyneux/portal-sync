@@ -130,7 +130,7 @@ public class BanFilesRepository(
                 // Exit loop if null results are encountered
                 break;
             }
-        } while (adminActionsApiResponse?.Result?.Data?.Items?.Any() == true);
+        } while (adminActionsApiResponse?.Result?.Data?.Items?.Any() is true);
 
         return adminActions;
     }
