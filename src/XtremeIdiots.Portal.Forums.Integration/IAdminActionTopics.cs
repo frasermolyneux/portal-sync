@@ -1,10 +1,9 @@
 ﻿using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 
-namespace XtremeIdiots.Portal.Forums.Integration
+namespace XtremeIdiots.Portal.Forums.Integration;
+
+public interface IAdminActionTopics
 {
-    public interface IAdminActionTopics
-    {
-        Task<int> CreateTopicForAdminAction(AdminActionType type, GameType gameType, Guid playerId, string username, DateTime created, string text, string? adminId);
-        Task UpdateTopicForAdminAction(int topicId, AdminActionType type, GameType gameType, Guid playerId, string username, DateTime created, string text, string? adminId);
-    }
+    Task<int> CreateTopicForAdminAction(AdminActionType type, GameType gameType, Guid playerId, string username, DateTime created, string text, string? adminId);
+    Task UpdateTopicForAdminAction(int topicId, AdminActionType type, GameType gameType, Guid playerId, string username, DateTime created, string text, string? adminId);
 }

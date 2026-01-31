@@ -1,33 +1,26 @@
 ﻿using XtremeIdiots.InvisionCommunity;
 using XtremeIdiots.Portal.Forums.Integration.Models;
 
-namespace XtremeIdiots.Portal.Forums.Integration
+namespace XtremeIdiots.Portal.Forums.Integration;
+
+public class DemoManager(IInvisionApiClient forumsClient) : IDemoManager
 {
-    public class DemoManager : IDemoManager
+    private readonly IInvisionApiClient _invisionClient = forumsClient ?? throw new ArgumentNullException(nameof(forumsClient));
+    public async Task<DemoManagerClientDto> GetDemoManagerClient()
     {
-        private readonly IInvisionApiClient _invisionClient;
+        var downloadFile = await _invisionClient.Downloads.GetDownloadFile(2753);
 
-        public DemoManager(IInvisionApiClient forumsClient)
+        if (downloadFile == null)
         {
-            _invisionClient = forumsClient ?? throw new ArgumentNullException(nameof(forumsClient));
+            throw new ApplicationException("Error getting demo manager client metadata from invision website");
         }
 
-        public async Task<DemoManagerClientDto> GetDemoManagerClient()
+        return new DemoManagerClientDto
         {
-            var downloadFile = await _invisionClient.Downloads.GetDownloadFile(2753);
-
-            if (downloadFile == null)
-            {
-                throw new ApplicationException("Error getting demo manager client metadata from invision website");
-            }
-
-            return new DemoManagerClientDto
-            {
-                Version = downloadFile.Version,
-                Description = downloadFile.Description,
-                Url = downloadFile.Url,
-                Changelog = downloadFile.Changelog
-            };
-        }
+            Version = downloadFile.Version,
+            Description = downloadFile.Description,
+            Url = downloadFile.Url,
+            Changelog = downloadFile.Changelog
+        };
     }
 }

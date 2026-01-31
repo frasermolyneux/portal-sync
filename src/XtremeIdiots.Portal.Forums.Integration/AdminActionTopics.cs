@@ -6,89 +6,67 @@ using XtremeIdiots.InvisionCommunity;
 using XtremeIdiots.Portal.Forums.Integration.Extensions;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 
-namespace XtremeIdiots.Portal.Forums.Integration
+namespace XtremeIdiots.Portal.Forums.Integration;
+
+public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiClient forumsClient) : IAdminActionTopics
 {
-    public class AdminActionTopics : IAdminActionTopics
+    private readonly IInvisionApiClient _invisionClient = forumsClient ?? throw new ArgumentNullException(nameof(forumsClient));
+    private readonly ILogger<AdminActionTopics> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    public async Task<int> CreateTopicForAdminAction(AdminActionType type, GameType gameType, Guid playerId, string username, DateTime created, string text, string? adminId)
     {
-        private readonly IInvisionApiClient _invisionClient;
-        private readonly ILogger<AdminActionTopics> _logger;
-
-        public AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiClient forumsClient)
+        try
         {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _invisionClient = forumsClient ?? throw new ArgumentNullException(nameof(forumsClient));
-        }
+            var userId = string.IsNullOrEmpty(adminId) ? 21145 : int.Parse(adminId); // Admin
 
-        public async Task<int> CreateTopicForAdminAction(AdminActionType type, GameType gameType, Guid playerId, string username, DateTime created, string text, string? adminId)
-        {
-            try
+            var forumId = type switch
             {
-                var userId = 21145; // Admin
+                AdminActionType.Observation => gameType.ForumIdForObservations(),
+                AdminActionType.Warning => gameType.ForumIdForWarnings(),
+                AdminActionType.Kick => gameType.ForumIdForKicks(),
+                AdminActionType.TempBan => gameType.ForumIdForTempBans(),
+                AdminActionType.Ban => gameType.ForumIdForBans(),
+                _ => 28
+            };
 
-                if (adminId != null)
-                    userId = Convert.ToInt32(adminId);
+            var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString());
 
-                var forumId = 28;
-                switch (type)
-                {
-                    case AdminActionType.Observation:
-                        forumId = gameType.ForumIdForObservations();
-                        break;
-                    case AdminActionType.Warning:
-                        forumId = gameType.ForumIdForWarnings();
-                        break;
-                    case AdminActionType.Kick:
-                        forumId = gameType.ForumIdForKicks();
-                        break;
-                    case AdminActionType.TempBan:
-                        forumId = gameType.ForumIdForTempBans();
-                        break;
-                    case AdminActionType.Ban:
-                        forumId = gameType.ForumIdForBans();
-                        break;
-                }
-                var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString());
-
-                if (postTopicResult != null) { return postTopicResult.TopicId; }
-                else
-                {
-                    _logger.LogError("Error creating admin action topic - call to post topic returned null");
-                    return 0;
-                }
-            }
-            catch (Exception ex)
+            if (postTopicResult != null)
             {
-                _logger.LogError(ex, "Error creating admin action topic");
-                return 0;
+                return postTopicResult.TopicId;
             }
-        }
 
-        public async Task UpdateTopicForAdminAction(int topicId, AdminActionType type, GameType gameType, Guid playerId, string username, DateTime created, string text, string? adminId)
+            _logger.LogError("Error creating admin action topic - call to post topic returned null");
+            return 0;
+        }
+        catch (Exception ex)
         {
-            if (topicId == 0)
-                return;
-
-            var userId = 21145; // Admin
-
-            if (adminId != null)
-                userId = Convert.ToInt32(adminId);
-
-            await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text));
+            _logger.LogError(ex, "Error creating admin action topic");
+            return 0;
         }
+    }
 
-        private string PostContent(AdminActionType type, Guid playerId, string username, DateTime created, string text)
-        {
-            return "<p>" +
-                   $"   Username: {username}<br>" +
-                   $"   Player Link: <a href=\"https://portal.xtremeidiots.com/Players/Details/{playerId}\">Portal</a><br>" +
-                   $"   {type} Created: {created.ToString(CultureInfo.InvariantCulture)}" +
-                   "</p>" +
-                   "<p>" +
-                   $"   {text}" +
-                   "</p>" +
-                   "<p>" +
-                   "   <small>Do not edit this post directly as it will be overwritten by the Portal. Add comments on posts below or edit the record in the Portal.</small>" +
-                   "</p>";
-        }
+    public async Task UpdateTopicForAdminAction(int topicId, AdminActionType type, GameType gameType, Guid playerId, string username, DateTime created, string text, string? adminId)
+    {
+        if (topicId == 0)
+            return;
+
+        var userId = string.IsNullOrEmpty(adminId) ? 21145 : int.Parse(adminId); // Admin
+
+        await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text));
+    }
+
+    private string PostContent(AdminActionType type, Guid playerId, string username, DateTime created, string text)
+    {
+        return "<p>" +
+               $"   Username: {username}<br>" +
+               $"   Player Link: <a href=\"https://portal.xtremeidiots.com/Players/Details/{playerId}\">Portal</a><br>" +
+               $"   {type} Created: {created.ToString(CultureInfo.InvariantCulture)}" +
+               "</p>" +
+               "<p>" +
+               $"   {text}" +
+               "</p>" +
+               "<p>" +
+               "   <small>Do not edit this post directly as it will be overwritten by the Portal. Add comments on posts below or edit the record in the Portal.</small>" +
+               "</p>";
     }
 }

@@ -12,266 +12,259 @@ using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.UserProfiles;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App.Telemetry;
 
-namespace XtremeIdiots.Portal.Sync.App
+namespace XtremeIdiots.Portal.Sync.App;
+
+public class UserProfileForumsSync(
+    ILogger<UserProfileForumsSync> logger,
+    IRepositoryApiClient repositoryApiClient,
+    IInvisionApiClient invisionApiClient,
+    TelemetryClient telemetryClient)
 {
-    public class UserProfileForumsSync
+    private const int TakeEntries = 20;
+    private readonly ILogger<UserProfileForumsSync> logger = logger;
+    private readonly IRepositoryApiClient repositoryApiClient = repositoryApiClient;
+    private readonly IInvisionApiClient invisionApiClient = invisionApiClient;
+    private readonly TelemetryClient telemetryClient = telemetryClient;
+    [Function(nameof(RunUserProfileForumsSyncManual))]
+    public async Task RunUserProfileForumsSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
     {
-        private const int TakeEntries = 20;
-        private readonly ILogger<UserProfileForumsSync> logger;
-        private readonly IRepositoryApiClient repositoryApiClient;
-        private readonly IInvisionApiClient invisionApiClient;
-        private readonly TelemetryClient telemetryClient;
+        await RunUserProfileForumsSync(null);
+    }
 
-        public UserProfileForumsSync(
-            ILogger<UserProfileForumsSync> logger,
-            IRepositoryApiClient repositoryApiClient,
-            IInvisionApiClient invisionApiClient,
-            TelemetryClient telemetryClient)
-        {
-            this.logger = logger;
-            this.repositoryApiClient = repositoryApiClient;
-            this.invisionApiClient = invisionApiClient;
-            this.telemetryClient = telemetryClient;
-        }
-
-        [Function(nameof(RunUserProfileForumsSyncManual))]
-        public async Task RunUserProfileForumsSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
-        {
-            await RunUserProfileForumsSync(null);
-        }
-
-        [Function(nameof(RunUserProfileForumsSync))]
-        public async Task RunUserProfileForumsSync([TimerTrigger("0 0 */4 * * *")] TimerInfo? myTimer)
-        {
-            await ScheduledJobTelemetry.ExecuteWithTelemetry(
-                telemetryClient,
-                nameof(RunUserProfileForumsSync),
-                async () =>
-                {
-                    await ProcessUserProfiles();
-                });
-        }
-
-        private async Task ProcessUserProfiles()
-        {
-            var skip = 0;
-            var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
-
-            do
+    [Function(nameof(RunUserProfileForumsSync))]
+    public async Task RunUserProfileForumsSync([TimerTrigger("0 0 */4 * * *")] TimerInfo? myTimer)
+    {
+        await ScheduledJobTelemetry.ExecuteWithTelemetry(
+            telemetryClient,
+            nameof(RunUserProfileForumsSync),
+            async () =>
             {
-                var items = userProfileResponseDto?.Result?.Data?.Items;
-                if (items == null)
-                {
-                    logger.LogWarning("User profiles response or result is null");
-                    break;
-                }
+                await ProcessUserProfiles();
+            });
+    }
 
-                foreach (var userProfileDto in items)
+    private async Task ProcessUserProfiles()
+    {
+        var skip = 0;
+        var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
+
+        do
+        {
+            var items = userProfileResponseDto?.Result?.Data?.Items;
+            if (items == null)
+            {
+                logger.LogWarning("User profiles response or result is null");
+                break;
+            }
+
+            foreach (var userProfileDto in items)
+            {
+                using (logger.BeginScope(userProfileDto.TelemetryProperties))
                 {
-                    using (logger.BeginScope(userProfileDto.TelemetryProperties))
+                    logger.LogInformation($"UserProfileSync for '{userProfileDto.DisplayName}' with XtremeIdiots ID '{userProfileDto.XtremeIdiotsForumId}'");
+
+                    if (!string.IsNullOrWhiteSpace(userProfileDto.XtremeIdiotsForumId))
                     {
-                        logger.LogInformation($"UserProfileSync for '{userProfileDto.DisplayName}' with XtremeIdiots ID '{userProfileDto.XtremeIdiotsForumId}'");
-
-                        if (!string.IsNullOrWhiteSpace(userProfileDto.XtremeIdiotsForumId))
+                        try
                         {
-                            try
-                            {
-                                var member = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId);
+                            var member = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId);
 
-                                if (member != null)
+                            if (member != null)
+                            {
+                                var editUserProfileDto = new EditUserProfileDto(userProfileDto.UserProfileId)
                                 {
-                                    var editUserProfileDto = new EditUserProfileDto(userProfileDto.UserProfileId)
-                                    {
-                                        DisplayName = member.Name ?? userProfileDto.DisplayName,
-                                        FormattedName = member.FormattedName ?? userProfileDto.FormattedName,
-                                        PrimaryGroup = member.PrimaryGroup?.Name ?? userProfileDto.PrimaryGroup,
-                                        Email = member.Email ?? userProfileDto.Email,
-                                        PhotoUrl = member.PhotoUrl ?? userProfileDto.PhotoUrl,
-                                        ProfileUrl = member.ProfileUrl?.ToString() ?? userProfileDto.ProfileUrl,
-                                        TimeZone = member.TimeZone ?? userProfileDto.TimeZone
-                                    };
+                                    DisplayName = member.Name ?? userProfileDto.DisplayName,
+                                    FormattedName = member.FormattedName ?? userProfileDto.FormattedName,
+                                    PrimaryGroup = member.PrimaryGroup?.Name ?? userProfileDto.PrimaryGroup,
+                                    Email = member.Email ?? userProfileDto.Email,
+                                    PhotoUrl = member.PhotoUrl ?? userProfileDto.PhotoUrl,
+                                    ProfileUrl = member.ProfileUrl?.ToString() ?? userProfileDto.ProfileUrl,
+                                    TimeZone = member.TimeZone ?? userProfileDto.TimeZone
+                                };
 
-                                    await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto);
+                                await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto);
 
-                                    var nonSystemGeneratedClaims = userProfileDto.UserProfileClaims
-                                        .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))
-                                        .ToList();
+                                var nonSystemGeneratedClaims = userProfileDto.UserProfileClaims
+                                    .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))
+                                    .ToList();
 
-                                    var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
-                                    var claimsToSave = activeClaims.Concat(nonSystemGeneratedClaims).ToList();
+                                var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
+                                var claimsToSave = activeClaims.Concat(nonSystemGeneratedClaims).ToList();
 
-                                    await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave);
-                                }
-                                else
-                                {
-                                    await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, new List<CreateUserProfileClaimDto>());
-                                }
+                                await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave);
                             }
-                            catch (HttpRequestException httpEx) when (httpEx.StatusCode == HttpStatusCode.Unauthorized)
+                            else
                             {
-                                logger.LogError(httpEx, "Unauthorized access to forums API - invalid API key. Failing fast.");
-                                throw;
+                                await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, []);
                             }
-                            catch (Exception ex)
-                            {
-                                logger.LogError(ex, $"Failed to sync forum profile for {userProfileDto.XtremeIdiotsForumId}");
-                                throw;
-                            }
-
                         }
+                        catch (HttpRequestException httpEx) when (httpEx.StatusCode == HttpStatusCode.Unauthorized)
+                        {
+                            logger.LogError(httpEx, "Unauthorized access to forums API - invalid API key. Failing fast.");
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, $"Failed to sync forum profile for {userProfileDto.XtremeIdiotsForumId}");
+                            throw;
+                        }
+
                     }
                 }
-                skip += TakeEntries;
-                userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
-            } while (userProfileResponseDto?.Result?.Data?.Items?.Any() == true);
+            }
+            skip += TakeEntries;
+            userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
+        } while (userProfileResponseDto?.Result?.Data?.Items?.Any() is true);
+    }
+
+    private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, Member member)
+    {
+        if (member == null)
+        {
+            return [];
         }
 
-        private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, Member member)
+        var claims = new List<CreateUserProfileClaimDto>
         {
-            if (member == null)
+            new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.UserProfileId, userProfileId.ToString(), true),
+            new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.XtremeIdiotsId, member.Id.ToString(), true),
+            new CreateUserProfileClaimDto(userProfileId, "Email", member.Email ?? string.Empty, true),
+            new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.PhotoUrl, member.PhotoUrl ?? string.Empty, true),
+            new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.TimeZone, member.TimeZone ?? string.Empty, true),
+        };
+
+        // Check if PrimaryGroup is not null before trying to use it
+        if (member.PrimaryGroup != null)
+        {
+            claims = claims.Concat(GetClaimsForGroup(userProfileId, member.PrimaryGroup)).ToList();
+        }
+
+        // Check if SecondaryGroups is not null before trying to use it
+        if (member.SecondaryGroups != null)
+        {
+            foreach (var group in member.SecondaryGroups)
             {
-                return new List<CreateUserProfileClaimDto>();
+                claims.AddRange(GetClaimsForGroup(userProfileId, group ?? new Group()));
             }
+        }
 
-            var claims = new List<CreateUserProfileClaimDto>
-            {
-                new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.UserProfileId, userProfileId.ToString(), true),
-                new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.XtremeIdiotsId, member.Id.ToString(), true),
-                new CreateUserProfileClaimDto(userProfileId, "Email", member.Email ?? string.Empty, true),
-                new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.PhotoUrl, member.PhotoUrl ?? string.Empty, true),
-                new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.TimeZone, member.TimeZone ?? string.Empty, true),
-            };
+        return claims;
+    }
 
-            // Check if PrimaryGroup is not null before trying to use it
-            if (member.PrimaryGroup != null)
-            {
-                claims = claims.Concat(GetClaimsForGroup(userProfileId, member.PrimaryGroup)).ToList();
-            }
+    private static List<CreateUserProfileClaimDto> GetClaimsForGroup(Guid userProfileId, Group group)
+    {
+        List<CreateUserProfileClaimDto> claims = [];
 
-            // Check if SecondaryGroups is not null before trying to use it
-            if (member.SecondaryGroups != null)
-            {
-                claims = member.SecondaryGroups.Aggregate(claims, (current, group) => current.Concat(GetClaimsForGroup(userProfileId, group ?? new Group())).ToList());
-            }
-
+        // Check if group or group.Name is null
+        if (group?.Name == null)
+        {
             return claims;
         }
 
-        private static List<CreateUserProfileClaimDto> GetClaimsForGroup(Guid userProfileId, Group group)
+        var groupName = group.Name.Replace("+", "").Trim();
+        switch (groupName)
         {
-            var claims = new List<CreateUserProfileClaimDto>();
+            // Senior Admin
+            case "Senior Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.SeniorAdmin, GameType.Unknown.ToString(), true));
+                break;
 
-            // Check if group or group.Name is null
-            if (group?.Name == null)
-            {
-                return claims;
-            }
+            // COD2
+            case "COD2 Head Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.CallOfDuty2.ToString(), true));
+                break;
+            case "COD2 Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.CallOfDuty2.ToString(), true));
+                break;
+            case "COD2 Moderator":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.CallOfDuty2.ToString(), true));
+                break;
 
-            var groupName = group.Name.Replace("+", "").Trim();
-            switch (groupName)
-            {
-                // Senior Admin
-                case "Senior Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.SeniorAdmin, GameType.Unknown.ToString(), true));
-                    break;
+            //COD4
+            case "COD4 Head Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.CallOfDuty4.ToString(), true));
+                break;
+            case "COD4 Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.CallOfDuty4.ToString(), true));
+                break;
+            case "COD4 Moderator":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.CallOfDuty4.ToString(), true));
+                break;
 
-                // COD2
-                case "COD2 Head Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.CallOfDuty2.ToString(), true));
-                    break;
-                case "COD2 Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.CallOfDuty2.ToString(), true));
-                    break;
-                case "COD2 Moderator":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.CallOfDuty2.ToString(), true));
-                    break;
+            //COD5
+            case "COD5 Head Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.CallOfDuty5.ToString(), true));
+                break;
+            case "COD5 Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.CallOfDuty5.ToString(), true));
+                break;
+            case "COD5 Moderator":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.CallOfDuty5.ToString(), true));
+                break;
 
-                //COD4
-                case "COD4 Head Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.CallOfDuty4.ToString(), true));
-                    break;
-                case "COD4 Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.CallOfDuty4.ToString(), true));
-                    break;
-                case "COD4 Moderator":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.CallOfDuty4.ToString(), true));
-                    break;
+            //Insurgency
+            case "Insurgency Head Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Insurgency.ToString(), true));
+                break;
+            case "Insurgency Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Insurgency.ToString(), true));
+                break;
+            case "Insurgency Moderator":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Insurgency.ToString(), true));
+                break;
 
-                //COD5
-                case "COD5 Head Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.CallOfDuty5.ToString(), true));
-                    break;
-                case "COD5 Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.CallOfDuty5.ToString(), true));
-                    break;
-                case "COD5 Moderator":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.CallOfDuty5.ToString(), true));
-                    break;
+            //Minecraft
+            case "Minecraft Head Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Minecraft.ToString(), true));
+                break;
+            case "Minecraft Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Minecraft.ToString(), true));
+                break;
+            case "Minecraft Moderator":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Minecraft.ToString(), true));
+                break;
 
-                //Insurgency
-                case "Insurgency Head Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Insurgency.ToString(), true));
-                    break;
-                case "Insurgency Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Insurgency.ToString(), true));
-                    break;
-                case "Insurgency Moderator":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Insurgency.ToString(), true));
-                    break;
+            //ARMA
+            case "ARMA Head Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Arma.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Arma2.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Arma3.ToString(), true));
+                break;
+            case "ARMA Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Arma.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Arma2.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Arma3.ToString(), true));
+                break;
+            case "ARMA Moderator":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Arma.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Arma2.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Arma3.ToString(), true));
+                break;
 
-                //Minecraft
-                case "Minecraft Head Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Minecraft.ToString(), true));
-                    break;
-                case "Minecraft Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Minecraft.ToString(), true));
-                    break;
-                case "Minecraft Moderator":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Minecraft.ToString(), true));
-                    break;
-
-                //ARMA
-                case "ARMA Head Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Arma.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Arma2.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Arma3.ToString(), true));
-                    break;
-                case "ARMA Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Arma.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Arma2.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Arma3.ToString(), true));
-                    break;
-                case "ARMA Moderator":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Arma.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Arma2.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Arma3.ToString(), true));
-                    break;
-
-                //Battlefield
-                case "Battlefield Head Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Battlefield1.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Battlefield3.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Battlefield4.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Battlefield5.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.BattlefieldBadCompany2.ToString(), true));
-                    break;
-                case "Battlefield Admin":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Battlefield1.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Battlefield3.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Battlefield4.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Battlefield5.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.BattlefieldBadCompany2.ToString(), true));
-                    break;
-                case "Battlefield Moderator":
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Battlefield1.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Battlefield3.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Battlefield4.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Battlefield5.ToString(), true));
-                    claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.BattlefieldBadCompany2.ToString(), true));
-                    break;
-            }
-
-            return claims;
+            //Battlefield
+            case "Battlefield Head Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Battlefield1.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Battlefield3.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Battlefield4.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.Battlefield5.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.BattlefieldBadCompany2.ToString(), true));
+                break;
+            case "Battlefield Admin":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Battlefield1.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Battlefield3.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Battlefield4.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.Battlefield5.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.BattlefieldBadCompany2.ToString(), true));
+                break;
+            case "Battlefield Moderator":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Battlefield1.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Battlefield3.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Battlefield4.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.Battlefield5.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.BattlefieldBadCompany2.ToString(), true));
+                break;
         }
+
+        return claims;
     }
 }

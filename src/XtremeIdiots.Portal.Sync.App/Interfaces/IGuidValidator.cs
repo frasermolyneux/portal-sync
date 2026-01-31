@@ -1,7 +1,6 @@
-﻿namespace XtremeIdiots.Portal.Sync.App.Interfaces
+﻿namespace XtremeIdiots.Portal.Sync.App.Interfaces;
+
+public interface IGuidValidator
 {
-    public interface IGuidValidator
-    {
-        bool IsValid(string gameType, string guid);
-    }
+    bool IsValid(string gameType, string guid);
 }

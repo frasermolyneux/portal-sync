@@ -1,9 +1,8 @@
 ﻿using XtremeIdiots.Portal.Forums.Integration.Models;
 
-namespace XtremeIdiots.Portal.Forums.Integration
+namespace XtremeIdiots.Portal.Forums.Integration;
+
+public interface IDemoManager
 {
-    public interface IDemoManager
-    {
-        Task<DemoManagerClientDto> GetDemoManagerClient();
-    }
+    Task<DemoManagerClientDto> GetDemoManagerClient();
 }
