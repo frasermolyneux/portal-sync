@@ -21,10 +21,7 @@ public class UserProfileForumsSync(
     TelemetryClient telemetryClient)
 {
     private const int TakeEntries = 20;
-    private readonly ILogger<UserProfileForumsSync> logger = logger;
-    private readonly IRepositoryApiClient repositoryApiClient = repositoryApiClient;
-    private readonly IInvisionApiClient invisionApiClient = invisionApiClient;
-    private readonly TelemetryClient telemetryClient = telemetryClient;
+
     [Function(nameof(RunUserProfileForumsSyncManual))]
     public async Task RunUserProfileForumsSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
     {
@@ -51,7 +48,7 @@ public class UserProfileForumsSync(
         do
         {
             var items = userProfileResponseDto?.IsSuccess == true ? userProfileResponseDto.Result?.Data?.Items : null;
-            if (items == null)
+            if (items is null)
             {
                 logger.LogWarning("User profiles response or result is null");
                 break;
@@ -69,7 +66,7 @@ public class UserProfileForumsSync(
                         {
                             var member = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId).ConfigureAwait(false);
 
-                            if (member != null)
+                            if (member is not null)
                             {
                                 var editUserProfileDto = new EditUserProfileDto(userProfileDto.UserProfileId)
                                 {
@@ -118,7 +115,7 @@ public class UserProfileForumsSync(
 
     private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, Member member)
     {
-        if (member == null)
+        if (member is null)
         {
             return [];
         }
@@ -133,13 +130,13 @@ public class UserProfileForumsSync(
         ];
 
         // Check if PrimaryGroup is not null before trying to use it
-        if (member.PrimaryGroup != null)
+        if (member.PrimaryGroup is not null)
         {
             claims = [.. claims, .. GetClaimsForGroup(userProfileId, member.PrimaryGroup)];
         }
 
         // Check if SecondaryGroups is not null before trying to use it
-        if (member.SecondaryGroups != null)
+        if (member.SecondaryGroups is not null)
         {
             foreach (var group in member.SecondaryGroups)
             {
