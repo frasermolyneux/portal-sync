@@ -28,7 +28,7 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
                 _ => 28
             };
 
-            var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString());
+            var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString()).ConfigureAwait(false);
 
             if (postTopicResult != null)
             {
@@ -52,7 +52,7 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
 
         var userId = string.IsNullOrEmpty(adminId) ? 21145 : int.Parse(adminId); // Admin
 
-        await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text));
+        await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text)).ConfigureAwait(false);
     }
 
     private string PostContent(AdminActionType type, Guid playerId, string username, DateTime created, string text)

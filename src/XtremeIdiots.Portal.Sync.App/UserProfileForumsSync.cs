@@ -28,7 +28,7 @@ public class UserProfileForumsSync(
     [Function(nameof(RunUserProfileForumsSyncManual))]
     public async Task RunUserProfileForumsSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
     {
-        await RunUserProfileForumsSync(null);
+        await RunUserProfileForumsSync(null).ConfigureAwait(false);
     }
 
     [Function(nameof(RunUserProfileForumsSync))]
@@ -39,18 +39,18 @@ public class UserProfileForumsSync(
             nameof(RunUserProfileForumsSync),
             async () =>
             {
-                await ProcessUserProfiles();
-            });
+                await ProcessUserProfiles().ConfigureAwait(false);
+            }).ConfigureAwait(false);
     }
 
     private async Task ProcessUserProfiles()
     {
         var skip = 0;
-        var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
+        var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null).ConfigureAwait(false);
 
         do
         {
-            var items = userProfileResponseDto?.Result?.Data?.Items;
+            var items = userProfileResponseDto?.IsSuccess == true ? userProfileResponseDto.Result?.Data?.Items : null;
             if (items == null)
             {
                 logger.LogWarning("User profiles response or result is null");
@@ -67,7 +67,7 @@ public class UserProfileForumsSync(
                     {
                         try
                         {
-                            var member = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId);
+                            var member = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId).ConfigureAwait(false);
 
                             if (member != null)
                             {
@@ -82,7 +82,7 @@ public class UserProfileForumsSync(
                                     TimeZone = member.TimeZone ?? userProfileDto.TimeZone
                                 };
 
-                                await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto);
+                                await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto).ConfigureAwait(false);
 
                                 var nonSystemGeneratedClaims = userProfileDto.UserProfileClaims
                                     .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))
@@ -91,11 +91,11 @@ public class UserProfileForumsSync(
                                 var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
                                 var claimsToSave = activeClaims.Concat(nonSystemGeneratedClaims).ToList();
 
-                                await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave);
+                                await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave).ConfigureAwait(false);
                             }
                             else
                             {
-                                await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, []);
+                                await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, []).ConfigureAwait(false);
                             }
                         }
                         catch (HttpRequestException httpEx) when (httpEx.StatusCode == HttpStatusCode.Unauthorized)
@@ -113,8 +113,8 @@ public class UserProfileForumsSync(
                 }
             }
             skip += TakeEntries;
-            userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null);
-        } while (userProfileResponseDto?.Result?.Data?.Items?.Any() is true);
+            userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null).ConfigureAwait(false);
+        } while (userProfileResponseDto?.IsSuccess == true && userProfileResponseDto.Result?.Data?.Items?.Any() is true);
     }
 
     private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, Member member)

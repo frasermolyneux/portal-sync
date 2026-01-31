@@ -32,7 +32,7 @@ public class MapRedirectRepository(
         HttpResponseMessage response;
         try
         {
-            response = await _httpClient.GetAsync(url);
+            response = await _httpClient.GetAsync(url).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -43,7 +43,7 @@ public class MapRedirectRepository(
         var statusCode = (int)response.StatusCode;
         _logger.LogInformation("Received HTTP {StatusCode} response from map redirect API for game '{Game}'", statusCode, game);
 
-        var content = await response.Content.ReadAsStringAsync();
+        var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         
         // Log a preview of the response content for debugging
         _logger.LogDebug("Response content preview for game '{Game}': {ContentPreview}", game, TruncateForLogging(content));
