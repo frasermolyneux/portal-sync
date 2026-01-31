@@ -132,7 +132,7 @@ public class UserProfileForumsSync(
         // Check if PrimaryGroup is not null before trying to use it
         if (member.PrimaryGroup is not null)
         {
-            claims = [.. claims, .. GetClaimsForGroup(userProfileId, member.PrimaryGroup)];
+            claims.AddRange(GetClaimsForGroup(userProfileId, member.PrimaryGroup));
         }
 
         // Check if SecondaryGroups is not null before trying to use it
