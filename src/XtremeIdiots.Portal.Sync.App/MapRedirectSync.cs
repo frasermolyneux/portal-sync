@@ -105,8 +105,8 @@ public class MapRedirectSync(
                 {
                     var mapDtoToCreate = new CreateMapDto(gameType, mapRedirectEntry.MapName)
                     {
-                        MapFiles = mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).Select(mf =>
-                            new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}")).ToList()
+                        MapFiles = [..mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).Select(mf =>
+                            new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
                     };
 
                     mapDtosToCreate.Add(mapDtoToCreate);
@@ -119,8 +119,8 @@ public class MapRedirectSync(
                     {
                         mapDtosToUpdate.Add(new EditMapDto(repositoryMap.MapId)
                         {
-                            MapFiles = mapFiles.Select(mf =>
-                                new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}")).ToList()
+                            MapFiles = [..mapFiles.Select(mf =>
+                                new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
                         });
                     }
                 }

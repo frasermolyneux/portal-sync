@@ -84,9 +84,8 @@ public class UserProfileForumsSync(
 
                                 await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto).ConfigureAwait(false);
 
-                                var nonSystemGeneratedClaims = userProfileDto.UserProfileClaims
-                                    .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))
-                                    .ToList();
+                                List<CreateUserProfileClaimDto> nonSystemGeneratedClaims = [..userProfileDto.UserProfileClaims
+                                    .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))];
 
                                 var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
                                 List<CreateUserProfileClaimDto> claimsToSave = [.. activeClaims, .. nonSystemGeneratedClaims];
