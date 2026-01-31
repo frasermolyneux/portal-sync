@@ -16,7 +16,11 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
     {
         try
         {
-            var userId = string.IsNullOrEmpty(adminId) ? 21145 : int.Parse(adminId); // Admin
+            var userId = 21145; // Default Admin user
+            if (!string.IsNullOrEmpty(adminId) && int.TryParse(adminId, out var parsedUserId))
+            {
+                userId = parsedUserId;
+            }
 
             var forumId = type switch
             {
@@ -52,7 +56,11 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
 
         try
         {
-            var userId = string.IsNullOrEmpty(adminId) ? 21145 : int.Parse(adminId); // Admin
+            var userId = 21145; // Default Admin user
+            if (!string.IsNullOrEmpty(adminId) && int.TryParse(adminId, out var parsedUserId))
+            {
+                userId = parsedUserId;
+            }
 
             await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text)).ConfigureAwait(false);
         }
