@@ -123,14 +123,14 @@ public class UserProfileForumsSync(
             return [];
         }
 
-        var claims = new List<CreateUserProfileClaimDto>
-        {
+        List<CreateUserProfileClaimDto> claims =
+        [
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.UserProfileId, userProfileId.ToString(), true),
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.XtremeIdiotsId, member.Id.ToString(), true),
             new CreateUserProfileClaimDto(userProfileId, "Email", member.Email ?? string.Empty, true),
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.PhotoUrl, member.PhotoUrl ?? string.Empty, true),
-            new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.TimeZone, member.TimeZone ?? string.Empty, true),
-        };
+            new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.TimeZone, member.TimeZone ?? string.Empty, true)
+        ];
 
         // Check if PrimaryGroup is not null before trying to use it
         if (member.PrimaryGroup != null)
