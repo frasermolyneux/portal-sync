@@ -37,7 +37,7 @@ public class MapRedirectSync(
     [Function(nameof(RunMapRedirectSyncManual))]
     public async Task RunMapRedirectSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
     {
-        await RunMapRedirectSync(null);
+        await RunMapRedirectSync(null).ConfigureAwait(false);
     }
 
     [Function(nameof(RunMapRedirectSync))]
@@ -59,11 +59,11 @@ public class MapRedirectSync(
 
                 foreach (var game in gamesToSync)
                 {
-                    await ProcessGameMapSync(game.Key, game.Value);
+                    await ProcessGameMapSync(game.Key, game.Value).ConfigureAwait(false);
                 }
 
                 logger.LogDebug("Stop RunMapRedirectSync @ {Timestamp}", DateTime.UtcNow);
-            });
+            }).ConfigureAwait(false);
     }
 
     private async Task ProcessGameMapSync(GameType gameType, string gameKey)
@@ -73,7 +73,7 @@ public class MapRedirectSync(
         try
         {
             // Retrieve all of the maps from the redirect server
-            var mapRedirectEntries = await MapRedirectRepository.GetMapEntriesForGame(gameKey);
+            var mapRedirectEntries = await MapRedirectRepository.GetMapEntriesForGame(gameKey).ConfigureAwait(false);
 
             // Retrieve all of the maps from the repository in batches
             var skipEntries = 0;
@@ -81,10 +81,11 @@ public class MapRedirectSync(
 
             List<MapDto> repositoryMaps = [];
             ApiResult<CollectionModel<MapDto>>? mapsCollectionBatch = null;
-            while (mapsCollectionBatch == null || (mapsCollectionBatch.Result?.Data?.Items != null && mapsCollectionBatch.Result.Data.Items.Any()))
+            while (mapsCollectionBatch == null || (mapsCollectionBatch.IsSuccess && mapsCollectionBatch.Result?.Data?.Items != null && mapsCollectionBatch.Result.Data.Items.Any()))
             {
-                mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null, skipEntries, takeEntries, null);
-                repositoryMaps.AddRange(mapsCollectionBatch.Result?.Data?.Items ?? Enumerable.Empty<MapDto>());
+                mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null, skipEntries, takeEntries, null).ConfigureAwait(false);
+                if (mapsCollectionBatch.IsSuccess && mapsCollectionBatch.Result?.Data?.Items != null)
+                    repositoryMaps.AddRange(mapsCollectionBatch.Result.Data.Items);
 
                 skipEntries += takeEntries;
             }
@@ -129,10 +130,10 @@ public class MapRedirectSync(
                 mapDtosToCreate.Count, mapDtosToUpdate.Count);
 
             if (mapDtosToCreate.Count != 0)
-                await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate);
+                await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate).ConfigureAwait(false);
 
             if (mapDtosToUpdate.Count != 0)
-                await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate);
+                await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate).ConfigureAwait(false);
                 
             logger.LogInformation("Completed map sync for game '{GameType}'", gameType);
         }

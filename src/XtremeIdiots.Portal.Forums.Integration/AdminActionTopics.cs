@@ -16,7 +16,11 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
     {
         try
         {
-            var userId = string.IsNullOrEmpty(adminId) ? 21145 : int.Parse(adminId); // Admin
+            var userId = 21145; // Default Admin user
+            if (!string.IsNullOrEmpty(adminId) && int.TryParse(adminId, out var parsedUserId))
+            {
+                userId = parsedUserId;
+            }
 
             var forumId = type switch
             {
@@ -28,7 +32,7 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
                 _ => 28
             };
 
-            var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString());
+            var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString()).ConfigureAwait(false);
 
             if (postTopicResult != null)
             {
@@ -50,9 +54,21 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
         if (topicId == 0)
             return;
 
-        var userId = string.IsNullOrEmpty(adminId) ? 21145 : int.Parse(adminId); // Admin
+        try
+        {
+            var userId = 21145; // Default Admin user
+            if (!string.IsNullOrEmpty(adminId) && int.TryParse(adminId, out var parsedUserId))
+            {
+                userId = parsedUserId;
+            }
 
-        await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text));
+            await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating admin action topic {TopicId}", topicId);
+            throw;
+        }
     }
 
     private string PostContent(AdminActionType type, Guid playerId, string username, DateTime created, string text)

@@ -35,10 +35,10 @@ public class FtpHelper(
                 }
             };
 
-            await ftpClient.AutoConnect();
+            await ftpClient.AutoConnect().ConfigureAwait(false);
 
-            if (await ftpClient.FileExists(filePath))
-                return await ftpClient.GetFileSize(filePath);
+            if (await ftpClient.FileExists(filePath).ConfigureAwait(false))
+                return await ftpClient.GetFileSize(filePath).ConfigureAwait(false);
             else
                 return null;
         }
@@ -79,10 +79,10 @@ public class FtpHelper(
                 }
             };
 
-            await ftpClient.AutoConnect();
+            await ftpClient.AutoConnect().ConfigureAwait(false);
 
-            if (await ftpClient.FileExists(filePath))
-                return await ftpClient.GetModifiedTime(filePath);
+            if (await ftpClient.FileExists(filePath).ConfigureAwait(false))
+                return await ftpClient.GetModifiedTime(filePath).ConfigureAwait(false);
             else
                 return null;
         }
@@ -123,14 +123,14 @@ public class FtpHelper(
                 }
             };
 
-            await ftpClient.AutoConnect();
+            await ftpClient.AutoConnect().ConfigureAwait(false);
 
             using var stream = new MemoryStream();
-            await ftpClient.DownloadStream(stream, filePath);
+            await ftpClient.DownloadStream(stream, filePath).ConfigureAwait(false);
 
             using var streamReader = new StreamReader(stream);
             stream.Seek(0, SeekOrigin.Begin);
-            return streamReader.ReadToEnd();
+            return await streamReader.ReadToEndAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -169,10 +169,10 @@ public class FtpHelper(
                 }
             };
 
-            await ftpClient.AutoConnect();
+            await ftpClient.AutoConnect().ConfigureAwait(false);
 
             data.Seek(0, SeekOrigin.Begin);
-            await ftpClient.UploadStream(data, filePath);
+            await ftpClient.UploadStream(data, filePath).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

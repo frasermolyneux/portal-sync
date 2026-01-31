@@ -35,9 +35,9 @@ public class BanFilesRepository(
 
         var blobClient = containerClient.GetBlobClient(blobKey);
 
-        var adminActionsApiResponse = await GetActiveBans(gameType);
+        var adminActionsApiResponse = await GetActiveBans(gameType).ConfigureAwait(false);
 
-        var externalBansStream = await GetExternalBanFileForGame(gameType);
+        var externalBansStream = await GetExternalBanFileForGame(gameType).ConfigureAwait(false);
         externalBansStream.Seek(externalBansStream.Length, SeekOrigin.Begin);
 
         await using (var streamWriter = new StreamWriter(externalBansStream))
@@ -45,9 +45,9 @@ public class BanFilesRepository(
             foreach (var adminActionDto in adminActionsApiResponse)
                 streamWriter.WriteLine($"{adminActionDto.Player?.Guid} [BANSYNC]-{adminActionDto.Player?.Username}");
 
-            streamWriter.Flush();
+            await streamWriter.FlushAsync().ConfigureAwait(false);
             externalBansStream.Seek(0, SeekOrigin.Begin);
-            await blobClient.UploadAsync(externalBansStream, true);
+            await blobClient.UploadAsync(externalBansStream, true).ConfigureAwait(false);
         }
     }
     public async Task<long> GetBanFileSizeForGame(GameType gameType)
@@ -65,7 +65,12 @@ public class BanFilesRepository(
 
         var blobClient = containerClient.GetBlobClient(blobKey);
 
-        if (blobClient.Exists()) return (await blobClient.GetPropertiesAsync()).Value.ContentLength;
+        var existsResponse = await blobClient.ExistsAsync().ConfigureAwait(false);
+        if (existsResponse.Value)
+        {
+            var properties = await blobClient.GetPropertiesAsync().ConfigureAwait(false);
+            return properties.Value.ContentLength;
+        }
 
         return 0;
     }
@@ -76,7 +81,7 @@ public class BanFilesRepository(
 
         _logger.LogInformation($"Retrieving ban file for {gameType} using blob key {blobKey}");
 
-        return await GetFileStream(blobKey);
+        return await GetFileStream(blobKey).ConfigureAwait(false);
     }
 
     private async Task<Stream> GetExternalBanFileForGame(GameType gameType)
@@ -85,7 +90,7 @@ public class BanFilesRepository(
 
         _logger.LogInformation($"Retrieving ban file size for {gameType} using blob key {blobKey}");
 
-        return await GetFileStream(blobKey);
+        return await GetFileStream(blobKey).ConfigureAwait(false);
     }
     private async Task<Stream> GetFileStream(string blobKey)
     {
@@ -98,10 +103,11 @@ public class BanFilesRepository(
 
         var blobClient = containerClient.GetBlobClient(blobKey);
 
-        if (blobClient.Exists())
+        var existsResponse = await blobClient.ExistsAsync().ConfigureAwait(false);
+        if (existsResponse.Value)
         {
             var stream = new MemoryStream();
-            await blobClient.DownloadToAsync(stream);
+            await blobClient.DownloadToAsync(stream).ConfigureAwait(false);
             stream.Seek(0, SeekOrigin.Begin);
             return stream;
         }
@@ -115,22 +121,23 @@ public class BanFilesRepository(
         List<AdminActionDto> adminActions = [];
 
         var skip = 0;
-        var adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc); do
+        var adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc).ConfigureAwait(false);
+        do
         {
             // Null check to ensure Result and Entries exist before accessing them
-            if (adminActionsApiResponse?.Result?.Data?.Items != null)
+            if (adminActionsApiResponse?.IsSuccess == true && adminActionsApiResponse.Result?.Data?.Items != null)
             {
                 adminActions = adminActions.Concat(adminActionsApiResponse.Result.Data.Items).ToList();
 
                 skip += TakeEntries;
-                adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc);
+                adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc).ConfigureAwait(false);
             }
             else
             {
                 // Exit loop if null results are encountered
                 break;
             }
-        } while (adminActionsApiResponse?.Result?.Data?.Items?.Any() is true);
+        } while (adminActionsApiResponse?.IsSuccess == true && adminActionsApiResponse.Result?.Data?.Items?.Any() is true);
 
         return adminActions;
     }

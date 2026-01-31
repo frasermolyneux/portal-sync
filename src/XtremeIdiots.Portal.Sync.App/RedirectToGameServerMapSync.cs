@@ -22,7 +22,7 @@ public class RedirectToGameServerMapSync(
     [Function(nameof(RunRedirectToGameServerMapSyncManual))]
     public async Task RunRedirectToGameServerMapSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
     {
-        await RunRedirectToGameServerMapSync(null);
+        await RunRedirectToGameServerMapSync(null).ConfigureAwait(false);
     }
 
     [Function(nameof(RunRedirectToGameServerMapSync))]
@@ -33,14 +33,14 @@ public class RedirectToGameServerMapSync(
             nameof(RunRedirectToGameServerMapSync),
             async () =>
             {
-                await ProcessGameServerMaps();
-            });
+                await ProcessGameServerMaps().ConfigureAwait(false);
+            }).ConfigureAwait(false);
     }
 
     private async Task ProcessGameServerMaps()
     {
         GameType[] gameTypes = [GameType.CallOfDuty4];
-        var gameServersApiResponse = await repositoryApiClient.GameServers.V1.GetGameServers(gameTypes, null, null, 0, 50, null);
+        var gameServersApiResponse = await repositoryApiClient.GameServers.V1.GetGameServers(gameTypes, null, null, 0, 50, null).ConfigureAwait(false);
 
         if (!gameServersApiResponse.IsSuccess || gameServersApiResponse.Result?.Data?.Items == null)
         {
@@ -54,8 +54,8 @@ public class RedirectToGameServerMapSync(
             {
                 try
                 {
-                    var getServerMapsResult = await serversApiClient.Rcon.V1.GetServerMaps(gameServerDto.GameServerId);
-                    var getLoadedServerMapsFronHostResult = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(gameServerDto.GameServerId);
+                    var getServerMapsResult = await serversApiClient.Rcon.V1.GetServerMaps(gameServerDto.GameServerId).ConfigureAwait(false);
+                    var getLoadedServerMapsFronHostResult = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(gameServerDto.GameServerId).ConfigureAwait(false);
 
                     if (!getServerMapsResult.IsSuccess || getServerMapsResult.Result?.Data?.Items == null)
                     {

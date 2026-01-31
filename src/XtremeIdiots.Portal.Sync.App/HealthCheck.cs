@@ -12,7 +12,7 @@ public class HealthCheck(HealthCheckService healthCheck)
     public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "health")] HttpRequestData req,
         FunctionContext context)
     {
-        var healthStatus = await healthCheck.CheckHealthAsync();
+        var healthStatus = await healthCheck.CheckHealthAsync().ConfigureAwait(false);
         return new OkObjectResult(healthStatus.Status.ToString());
     }
 }

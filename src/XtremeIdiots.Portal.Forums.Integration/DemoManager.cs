@@ -8,7 +8,7 @@ public class DemoManager(IInvisionApiClient forumsClient) : IDemoManager
     private readonly IInvisionApiClient _invisionClient = forumsClient ?? throw new ArgumentNullException(nameof(forumsClient));
     public async Task<DemoManagerClientDto> GetDemoManagerClient()
     {
-        var downloadFile = await _invisionClient.Downloads.GetDownloadFile(2753);
+        var downloadFile = await _invisionClient.Downloads.GetDownloadFile(2753).ConfigureAwait(false);
 
         if (downloadFile == null)
         {

@@ -37,7 +37,7 @@ public class MapImageSync(
     [Function(nameof(RunMapImageSyncManual))]
     public async Task RunMapImageSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
     {
-        await RunMapImageSync(null);
+        await RunMapImageSync(null).ConfigureAwait(false);
     }
 
     [Function(nameof(RunMapImageSync))]
@@ -48,8 +48,8 @@ public class MapImageSync(
             nameof(RunMapImageSync),
             async () =>
             {
-                await ProcessMapImages();
-            });
+                await ProcessMapImages().ConfigureAwait(false);
+            }).ConfigureAwait(false);
     }
 
     private async Task ProcessMapImages()
@@ -62,14 +62,14 @@ public class MapImageSync(
             {GameType.UnrealTournament2004, "ut2k4"},
             {GameType.Insurgency, "ins"},
         };
-        await repositoryApiClient.DataMaintenance.V1.ValidateMapImages();
+        await repositoryApiClient.DataMaintenance.V1.ValidateMapImages().ConfigureAwait(false);
 
         foreach (var game in gamesToSync)
         {
             var skip = 0;
-            var mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
+            var mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null).ConfigureAwait(false);
 
-            if (mapsResponseDto == null || mapsResponseDto.Result?.Data?.Items == null)
+            if (mapsResponseDto == null || !mapsResponseDto.IsSuccess || mapsResponseDto.Result?.Data?.Items == null)
             {
                 throw new ApplicationException("Failed to retrieve maps from the repository");
             }
@@ -84,7 +84,7 @@ public class MapImageSync(
                     string? tempFilePath = null;
                     try
                     {
-                        using var response = await httpClient.GetAsync(gameTrackerImageUrl, HttpCompletionOption.ResponseHeadersRead);
+                        using var response = await httpClient.GetAsync(gameTrackerImageUrl, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                         if (!response.IsSuccessStatusCode)
                         {
                             logger.LogDebug("Skipping map image for {MapName} - status code {StatusCode}", mapDto.MapName, response.StatusCode);
@@ -92,7 +92,7 @@ public class MapImageSync(
                         }
 
                         var contentType = response.Content.Headers.ContentType?.MediaType;
-                        var bytes = await response.Content.ReadAsByteArrayAsync();
+                        var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                         if (bytes.Length == 0)
                         {
                             logger.LogDebug("Empty response for {MapName}", mapDto.MapName);
@@ -127,8 +127,8 @@ public class MapImageSync(
                         }
 
                         tempFilePath = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
-                        await File.WriteAllBytesAsync(tempFilePath, bytes);
-                        await repositoryApiClient.Maps.V1.UpdateMapImage(mapDto.MapId, tempFilePath);
+                        await File.WriteAllBytesAsync(tempFilePath, bytes).ConfigureAwait(false);
+                        await repositoryApiClient.Maps.V1.UpdateMapImage(mapDto.MapId, tempFilePath).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -154,8 +154,8 @@ public class MapImageSync(
                 }
 
                 skip += TakeEntries;
-                mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null);
-            } while (mapsResponseDto != null && mapsResponseDto.Result != null && mapsResponseDto.Result.Data != null && mapsResponseDto.Result.Data.Items != null && mapsResponseDto.Result.Data.Items.Any()) ;
+                mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null).ConfigureAwait(false);
+            } while (mapsResponseDto != null && mapsResponseDto.IsSuccess && mapsResponseDto.Result != null && mapsResponseDto.Result.Data != null && mapsResponseDto.Result.Data.Items != null && mapsResponseDto.Result.Data.Items.Any()) ;
         }
     }
 }
