@@ -115,7 +115,7 @@ public class BanFilesRepository(
         List<AdminActionDto> adminActions = [];
 
         var skip = 0;
-        var adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc).ConfigureAwait(false); 
+        var adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc).ConfigureAwait(false);
         do
         {
             // Null check to ensure Result and Entries exist before accessing them
