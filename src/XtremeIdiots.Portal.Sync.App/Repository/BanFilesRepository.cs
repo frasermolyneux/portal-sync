@@ -65,7 +65,12 @@ public class BanFilesRepository(
 
         var blobClient = containerClient.GetBlobClient(blobKey);
 
-        if (blobClient.Exists()) return (await blobClient.GetPropertiesAsync().ConfigureAwait(false)).Value.ContentLength;
+        var existsResponse = await blobClient.ExistsAsync().ConfigureAwait(false);
+        if (existsResponse.Value)
+        {
+            var properties = await blobClient.GetPropertiesAsync().ConfigureAwait(false);
+            return properties.Value.ContentLength;
+        }
 
         return 0;
     }
@@ -98,7 +103,8 @@ public class BanFilesRepository(
 
         var blobClient = containerClient.GetBlobClient(blobKey);
 
-        if (blobClient.Exists())
+        var existsResponse = await blobClient.ExistsAsync().ConfigureAwait(false);
+        if (existsResponse.Value)
         {
             var stream = new MemoryStream();
             await blobClient.DownloadToAsync(stream).ConfigureAwait(false);
