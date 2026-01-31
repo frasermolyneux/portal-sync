@@ -45,7 +45,7 @@ public class BanFilesRepository(
             foreach (var adminActionDto in adminActionsApiResponse)
                 streamWriter.WriteLine($"{adminActionDto.Player?.Guid} [BANSYNC]-{adminActionDto.Player?.Username}");
 
-            streamWriter.Flush();
+            await streamWriter.FlushAsync().ConfigureAwait(false);
             externalBansStream.Seek(0, SeekOrigin.Begin);
             await blobClient.UploadAsync(externalBansStream, true).ConfigureAwait(false);
         }

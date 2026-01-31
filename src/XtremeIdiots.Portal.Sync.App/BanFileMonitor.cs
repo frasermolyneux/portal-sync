@@ -83,16 +83,17 @@ public class BanFileMonitor(
                 {
                     telemetryClient.TrackEvent("BanFileInit", banFileMonitorDto.TelemetryProperties);
 
-                    var banFileStream = await banFilesRepository.GetBanFileForGame(banFileMonitorDto.GameServer.GameType).ConfigureAwait(false);
-
-                    await ftpHelper.UpdateRemoteFileFromStream(
-                        banFileMonitorDto.GameServer.FtpHostname,
-                        banFileMonitorDto.GameServer.FtpPort.Value,
-                        banFileMonitorDto.FilePath,
-                        banFileMonitorDto.GameServer.FtpUsername,
-                        banFileMonitorDto.GameServer.FtpPassword,
-                        banFileStream,
-                        banFileMonitorDto.TelemetryProperties).ConfigureAwait(false);
+                    await using (var banFileStream = await banFilesRepository.GetBanFileForGame(banFileMonitorDto.GameServer.GameType).ConfigureAwait(false))
+                    {
+                        await ftpHelper.UpdateRemoteFileFromStream(
+                            banFileMonitorDto.GameServer.FtpHostname,
+                            banFileMonitorDto.GameServer.FtpPort.Value,
+                            banFileMonitorDto.FilePath,
+                            banFileMonitorDto.GameServer.FtpUsername,
+                            banFileMonitorDto.GameServer.FtpPassword,
+                            banFileStream,
+                            banFileMonitorDto.TelemetryProperties).ConfigureAwait(false);
+                    }
 
                     var editBanFileMonitorDto = new EditBanFileMonitorDto(banFileMonitorDto.BanFileMonitorId, banFileSize, DateTime.UtcNow);
                     await repositoryApiClient.BanFileMonitors.V1.UpdateBanFileMonitor(editBanFileMonitorDto).ConfigureAwait(false);
@@ -121,16 +122,17 @@ public class BanFileMonitor(
                 {
                     telemetryClient.TrackEvent("BanFileChangedOnSource", banFileMonitorDto.TelemetryProperties);
 
-                    var banFileStream = await banFilesRepository.GetBanFileForGame(banFileMonitorDto.GameServer.GameType).ConfigureAwait(false);
-
-                    await ftpHelper.UpdateRemoteFileFromStream(
-                        banFileMonitorDto.GameServer.FtpHostname,
-                        banFileMonitorDto.GameServer.FtpPort.Value,
-                        banFileMonitorDto.FilePath,
-                        banFileMonitorDto.GameServer.FtpUsername,
-                        banFileMonitorDto.GameServer.FtpPassword,
-                        banFileStream,
-                        banFileMonitorDto.TelemetryProperties).ConfigureAwait(false);
+                    await using (var banFileStream = await banFilesRepository.GetBanFileForGame(banFileMonitorDto.GameServer.GameType).ConfigureAwait(false))
+                    {
+                        await ftpHelper.UpdateRemoteFileFromStream(
+                            banFileMonitorDto.GameServer.FtpHostname,
+                            banFileMonitorDto.GameServer.FtpPort.Value,
+                            banFileMonitorDto.FilePath,
+                            banFileMonitorDto.GameServer.FtpUsername,
+                            banFileMonitorDto.GameServer.FtpPassword,
+                            banFileStream,
+                            banFileMonitorDto.TelemetryProperties).ConfigureAwait(false);
+                    }
 
                     var editBanFileMonitorDto = new EditBanFileMonitorDto(banFileMonitorDto.BanFileMonitorId, banFileSize, DateTime.UtcNow);
                     await repositoryApiClient.BanFileMonitors.V1.UpdateBanFileMonitor(editBanFileMonitorDto).ConfigureAwait(false);

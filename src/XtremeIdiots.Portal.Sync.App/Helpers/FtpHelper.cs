@@ -130,7 +130,7 @@ public class FtpHelper(
 
             using var streamReader = new StreamReader(stream);
             stream.Seek(0, SeekOrigin.Begin);
-            return streamReader.ReadToEnd();
+            return await streamReader.ReadToEndAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
