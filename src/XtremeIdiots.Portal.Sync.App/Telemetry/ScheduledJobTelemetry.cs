@@ -100,13 +100,13 @@ public class ScheduledJobTelemetry(TelemetryClient telemetryClient, string jobNa
 
         try
         {
-            var result = await action();
+            var result = await action().ConfigureAwait(false);
             telemetry.TrackJobSuccess();
             return result;
         }
         catch (Exception ex)
         {
-            await telemetry.TrackJobFailureAsync(ex);
+            await telemetry.TrackJobFailureAsync(ex).ConfigureAwait(false);
             throw;
         }
     }
@@ -122,12 +122,12 @@ public class ScheduledJobTelemetry(TelemetryClient telemetryClient, string jobNa
 
         try
         {
-            await action();
+            await action().ConfigureAwait(false);
             telemetry.TrackJobSuccess();
         }
         catch (Exception ex)
         {
-            await telemetry.TrackJobFailureAsync(ex);
+            await telemetry.TrackJobFailureAsync(ex).ConfigureAwait(false);
             throw;
         }
     }
