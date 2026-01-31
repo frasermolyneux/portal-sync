@@ -45,7 +45,7 @@ public class BanFileMonitor(
             {
                 var banFileMonitorsApiResponse = await repositoryApiClient.BanFileMonitors.V1.GetBanFileMonitors(null, null, null, 0, 50, null).ConfigureAwait(false);
 
-                if (!banFileMonitorsApiResponse.IsSuccess || banFileMonitorsApiResponse.Result?.Data?.Items == null)
+                if (!banFileMonitorsApiResponse.IsSuccess || banFileMonitorsApiResponse.Result?.Data?.Items is null)
                 {
                     logger.LogCritical("Failed to retrieve ban file monitors from the repository");
                     throw new ApplicationException("Failed to retrieve ban file monitors from the repository");
@@ -59,13 +59,13 @@ public class BanFileMonitor(
     {
         foreach (var banFileMonitorDto in banFileMonitors)
         {
-            if (banFileMonitorDto.GameServer == null)
+            if (banFileMonitorDto.GameServer is null)
                 continue;
 
             if (string.IsNullOrWhiteSpace(banFileMonitorDto.GameServer.FtpHostname)
                 || string.IsNullOrWhiteSpace(banFileMonitorDto.GameServer.FtpUsername)
                 || string.IsNullOrWhiteSpace(banFileMonitorDto.GameServer.FtpPassword)
-                || banFileMonitorDto.GameServer.FtpPort == null)
+                || banFileMonitorDto.GameServer.FtpPort is null)
                 continue;
 
             try
@@ -79,7 +79,7 @@ public class BanFileMonitor(
                 banFileMonitorDto.TelemetryProperties).ConfigureAwait(false);
                 var banFileSize = await banFilesRepository.GetBanFileSizeForGame(banFileMonitorDto.GameServer.GameType).ConfigureAwait(false);
 
-                if (remoteFileSize == null)
+                if (remoteFileSize is null)
                 {
                     telemetryClient.TrackEvent("BanFileInit", banFileMonitorDto.TelemetryProperties);
 

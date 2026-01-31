@@ -6,6 +6,7 @@
     <RootNamespace>XtremeIdiots.Portal.Sync.App</RootNamespace>
 	<ImplicitUsings>enable</ImplicitUsings>
 	<Nullable>enable</Nullable>
+	<LangVersion>13</LangVersion>
     <UserSecretsId>2ef03b04-3cd8-414c-9f40-f40dfdcf902a</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>

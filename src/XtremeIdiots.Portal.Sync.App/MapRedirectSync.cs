@@ -29,9 +29,6 @@ public class MapRedirectSync(
         "mp_seelow", "mp_upheaval"
     ];
 
-    private readonly ILogger<MapRedirectSync> logger = logger;
-    private readonly TelemetryClient telemetryClient = telemetryClient;
-
     public IRepositoryApiClient repositoryApiClient { get; } = repositoryApiClient;
     public IMapRedirectRepository MapRedirectRepository { get; } = mapRedirectRepository;
     [Function(nameof(RunMapRedirectSyncManual))]
@@ -53,8 +50,8 @@ public class MapRedirectSync(
 
                 Dictionary<GameType, string> gamesToSync = new()
                 {
-                    {GameType.CallOfDuty4, "cod4"},
-                    {GameType.CallOfDuty5, "cod5"}
+                    [GameType.CallOfDuty4] = "cod4",
+                    [GameType.CallOfDuty5] = "cod5"
                 };
 
                 foreach (var game in gamesToSync)
@@ -81,10 +78,10 @@ public class MapRedirectSync(
 
             List<MapDto> repositoryMaps = [];
             ApiResult<CollectionModel<MapDto>>? mapsCollectionBatch = null;
-            while (mapsCollectionBatch == null || (mapsCollectionBatch.IsSuccess && mapsCollectionBatch.Result?.Data?.Items != null && mapsCollectionBatch.Result.Data.Items.Any()))
+            while (mapsCollectionBatch is null || (mapsCollectionBatch.IsSuccess && mapsCollectionBatch.Result?.Data?.Items is not null && mapsCollectionBatch.Result.Data.Items.Any()))
             {
                 mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null, skipEntries, takeEntries, null).ConfigureAwait(false);
-                if (mapsCollectionBatch.IsSuccess && mapsCollectionBatch.Result?.Data?.Items != null)
+                if (mapsCollectionBatch.IsSuccess && mapsCollectionBatch.Result?.Data?.Items is not null)
                     repositoryMaps.AddRange(mapsCollectionBatch.Result.Data.Items);
 
                 skipEntries += takeEntries;
@@ -101,12 +98,12 @@ public class MapRedirectSync(
             {
                 var repositoryMap = repositoryMaps.SingleOrDefault(m => m.GameType == gameType && m.MapName == mapRedirectEntry.MapName);
 
-                if (repositoryMap == null)
+                if (repositoryMap is null)
                 {
                     var mapDtoToCreate = new CreateMapDto(gameType, mapRedirectEntry.MapName)
                     {
-                        MapFiles = mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).Select(mf =>
-                            new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}")).ToList()
+                        MapFiles = [..mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).Select(mf =>
+                            new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
                     };
 
                     mapDtosToCreate.Add(mapDtoToCreate);
@@ -119,8 +116,8 @@ public class MapRedirectSync(
                     {
                         mapDtosToUpdate.Add(new EditMapDto(repositoryMap.MapId)
                         {
-                            MapFiles = mapFiles.Select(mf =>
-                                new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}")).ToList()
+                            MapFiles = [..mapFiles.Select(mf =>
+                                new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
                         });
                     }
                 }

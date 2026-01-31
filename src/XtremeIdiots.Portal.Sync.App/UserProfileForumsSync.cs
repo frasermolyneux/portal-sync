@@ -21,10 +21,7 @@ public class UserProfileForumsSync(
     TelemetryClient telemetryClient)
 {
     private const int TakeEntries = 20;
-    private readonly ILogger<UserProfileForumsSync> logger = logger;
-    private readonly IRepositoryApiClient repositoryApiClient = repositoryApiClient;
-    private readonly IInvisionApiClient invisionApiClient = invisionApiClient;
-    private readonly TelemetryClient telemetryClient = telemetryClient;
+
     [Function(nameof(RunUserProfileForumsSyncManual))]
     public async Task RunUserProfileForumsSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
     {
@@ -51,7 +48,7 @@ public class UserProfileForumsSync(
         do
         {
             var items = userProfileResponseDto?.IsSuccess == true ? userProfileResponseDto.Result?.Data?.Items : null;
-            if (items == null)
+            if (items is null)
             {
                 logger.LogWarning("User profiles response or result is null");
                 break;
@@ -69,7 +66,7 @@ public class UserProfileForumsSync(
                         {
                             var member = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId).ConfigureAwait(false);
 
-                            if (member != null)
+                            if (member is not null)
                             {
                                 var editUserProfileDto = new EditUserProfileDto(userProfileDto.UserProfileId)
                                 {
@@ -84,12 +81,11 @@ public class UserProfileForumsSync(
 
                                 await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto).ConfigureAwait(false);
 
-                                var nonSystemGeneratedClaims = userProfileDto.UserProfileClaims
-                                    .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))
-                                    .ToList();
+                                List<CreateUserProfileClaimDto> nonSystemGeneratedClaims = [..userProfileDto.UserProfileClaims
+                                    .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))];
 
                                 var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
-                                var claimsToSave = activeClaims.Concat(nonSystemGeneratedClaims).ToList();
+                                List<CreateUserProfileClaimDto> claimsToSave = [.. activeClaims, .. nonSystemGeneratedClaims];
 
                                 await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave).ConfigureAwait(false);
                             }
@@ -119,28 +115,28 @@ public class UserProfileForumsSync(
 
     private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, Member member)
     {
-        if (member == null)
+        if (member is null)
         {
             return [];
         }
 
-        var claims = new List<CreateUserProfileClaimDto>
-        {
+        List<CreateUserProfileClaimDto> claims =
+        [
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.UserProfileId, userProfileId.ToString(), true),
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.XtremeIdiotsId, member.Id.ToString(), true),
             new CreateUserProfileClaimDto(userProfileId, "Email", member.Email ?? string.Empty, true),
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.PhotoUrl, member.PhotoUrl ?? string.Empty, true),
-            new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.TimeZone, member.TimeZone ?? string.Empty, true),
-        };
+            new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.TimeZone, member.TimeZone ?? string.Empty, true)
+        ];
 
         // Check if PrimaryGroup is not null before trying to use it
-        if (member.PrimaryGroup != null)
+        if (member.PrimaryGroup is not null)
         {
-            claims = claims.Concat(GetClaimsForGroup(userProfileId, member.PrimaryGroup)).ToList();
+            claims.AddRange(GetClaimsForGroup(userProfileId, member.PrimaryGroup));
         }
 
         // Check if SecondaryGroups is not null before trying to use it
-        if (member.SecondaryGroups != null)
+        if (member.SecondaryGroups is not null)
         {
             foreach (var group in member.SecondaryGroups)
             {

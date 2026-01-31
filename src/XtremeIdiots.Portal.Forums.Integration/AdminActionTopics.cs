@@ -73,16 +73,18 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
 
     private string PostContent(AdminActionType type, Guid playerId, string username, DateTime created, string text)
     {
-        return "<p>" +
-               $"   Username: {username}<br>" +
-               $"   Player Link: <a href=\"https://portal.xtremeidiots.com/Players/Details/{playerId}\">Portal</a><br>" +
-               $"   {type} Created: {created.ToString(CultureInfo.InvariantCulture)}" +
-               "</p>" +
-               "<p>" +
-               $"   {text}" +
-               "</p>" +
-               "<p>" +
-               "   <small>Do not edit this post directly as it will be overwritten by the Portal. Add comments on posts below or edit the record in the Portal.</small>" +
-               "</p>";
+        return $"""
+            <p>
+               Username: {username}<br>
+               Player Link: <a href="https://portal.xtremeidiots.com/Players/Details/{playerId}">Portal</a><br>
+               {type} Created: {created.ToString(CultureInfo.InvariantCulture)}
+            </p>
+            <p>
+               {text}
+            </p>
+            <p>
+               <small>Do not edit this post directly as it will be overwritten by the Portal. Add comments on posts below or edit the record in the Portal.</small>
+            </p>
+            """;
     }
 }

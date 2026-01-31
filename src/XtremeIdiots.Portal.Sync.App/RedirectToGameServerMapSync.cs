@@ -15,10 +15,6 @@ public class RedirectToGameServerMapSync(
     IServersApiClient serversApiClient,
     TelemetryClient telemetryClient)
 {
-    private readonly ILogger<RedirectToGameServerMapSync> logger = logger;
-    private readonly IRepositoryApiClient repositoryApiClient = repositoryApiClient;
-    private readonly IServersApiClient serversApiClient = serversApiClient;
-    private readonly TelemetryClient telemetryClient = telemetryClient;
     [Function(nameof(RunRedirectToGameServerMapSyncManual))]
     public async Task RunRedirectToGameServerMapSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
     {
@@ -42,7 +38,7 @@ public class RedirectToGameServerMapSync(
         GameType[] gameTypes = [GameType.CallOfDuty4];
         var gameServersApiResponse = await repositoryApiClient.GameServers.V1.GetGameServers(gameTypes, null, null, 0, 50, null).ConfigureAwait(false);
 
-        if (!gameServersApiResponse.IsSuccess || gameServersApiResponse.Result?.Data?.Items == null)
+        if (!gameServersApiResponse.IsSuccess || gameServersApiResponse.Result?.Data?.Items is null)
         {
             logger.LogCritical("Failed to retrieve game servers from repository");
             throw new ApplicationException("Failed to retrieve game servers from repository");
@@ -57,13 +53,13 @@ public class RedirectToGameServerMapSync(
                     var getServerMapsResult = await serversApiClient.Rcon.V1.GetServerMaps(gameServerDto.GameServerId).ConfigureAwait(false);
                     var getLoadedServerMapsFronHostResult = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(gameServerDto.GameServerId).ConfigureAwait(false);
 
-                    if (!getServerMapsResult.IsSuccess || getServerMapsResult.Result?.Data?.Items == null)
+                    if (!getServerMapsResult.IsSuccess || getServerMapsResult.Result?.Data?.Items is null)
                     {
                         logger.LogError("Failed to retrieve rcon maps for game server");
                         continue;
                     }
 
-                    if (!getLoadedServerMapsFronHostResult.IsSuccess || getLoadedServerMapsFronHostResult.Result?.Data?.Items == null)
+                    if (!getLoadedServerMapsFronHostResult.IsSuccess || getLoadedServerMapsFronHostResult.Result?.Data?.Items is null)
                     {
                         logger.LogError("Failed to retrieve maps for game server host");
                         continue;
