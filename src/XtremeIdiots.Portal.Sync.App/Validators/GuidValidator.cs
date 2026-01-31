@@ -6,6 +6,8 @@ namespace XtremeIdiots.Portal.Sync.App.Validators;
 
 public class GuidValidator : IGuidValidator
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);
+
     public bool IsValid(string gameType, string guid)
     {
         var regex = gameType switch
@@ -16,6 +18,6 @@ public class GuidValidator : IGuidValidator
             _ => throw new ArgumentOutOfRangeException(nameof(gameType), "Game type is unsupported")
         };
 
-        return Regex.IsMatch(guid, regex);
+        return Regex.IsMatch(guid, regex, RegexOptions.None, RegexTimeout);
     }
 }
