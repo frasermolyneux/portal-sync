@@ -125,7 +125,7 @@ public class BanFilesRepository(
         do
         {
             // Null check to ensure Result and Entries exist before accessing them
-            if (adminActionsApiResponse?.IsSuccess == true && adminActionsApiResponse.Result?.Data?.Items != null)
+            if (adminActionsApiResponse?.IsSuccess == true && adminActionsApiResponse.Result?.Data?.Items is not null)
             {
                 adminActions.AddRange(adminActionsApiResponse.Result.Data.Items);
 
