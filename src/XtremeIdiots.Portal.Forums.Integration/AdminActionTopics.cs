@@ -50,9 +50,17 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
         if (topicId == 0)
             return;
 
-        var userId = string.IsNullOrEmpty(adminId) ? 21145 : int.Parse(adminId); // Admin
+        try
+        {
+            var userId = string.IsNullOrEmpty(adminId) ? 21145 : int.Parse(adminId); // Admin
 
-        await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text)).ConfigureAwait(false);
+            await _invisionClient.Forums.UpdateTopic(topicId, userId, PostContent(type, playerId, username, created, text)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating admin action topic {TopicId}", topicId);
+            throw;
+        }
     }
 
     private string PostContent(AdminActionType type, Guid playerId, string username, DateTime created, string text)
