@@ -89,7 +89,7 @@ public class UserProfileForumsSync(
                                     .ToList();
 
                                 var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
-                                var claimsToSave = activeClaims.Concat(nonSystemGeneratedClaims).ToList();
+                                List<CreateUserProfileClaimDto> claimsToSave = [.. activeClaims, .. nonSystemGeneratedClaims];
 
                                 await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave).ConfigureAwait(false);
                             }
@@ -136,7 +136,7 @@ public class UserProfileForumsSync(
         // Check if PrimaryGroup is not null before trying to use it
         if (member.PrimaryGroup != null)
         {
-            claims = claims.Concat(GetClaimsForGroup(userProfileId, member.PrimaryGroup)).ToList();
+            claims = [.. claims, .. GetClaimsForGroup(userProfileId, member.PrimaryGroup)];
         }
 
         // Check if SecondaryGroups is not null before trying to use it

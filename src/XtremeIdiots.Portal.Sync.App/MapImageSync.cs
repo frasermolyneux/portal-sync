@@ -56,11 +56,11 @@ public class MapImageSync(
     {
         Dictionary<GameType, string> gamesToSync = new()
         {
-            {GameType.CallOfDuty2, "cod2"},
-            {GameType.CallOfDuty4, "cod4"},
-            {GameType.CallOfDuty5, "codww"},
-            {GameType.UnrealTournament2004, "ut2k4"},
-            {GameType.Insurgency, "ins"},
+            [GameType.CallOfDuty2] = "cod2",
+            [GameType.CallOfDuty4] = "cod4",
+            [GameType.CallOfDuty5] = "codww",
+            [GameType.UnrealTournament2004] = "ut2k4",
+            [GameType.Insurgency] = "ins"
         };
         await repositoryApiClient.DataMaintenance.V1.ValidateMapImages().ConfigureAwait(false);
 
