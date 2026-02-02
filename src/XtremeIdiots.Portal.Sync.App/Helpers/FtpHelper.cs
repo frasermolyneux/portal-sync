@@ -10,8 +10,6 @@ public class FtpHelper(
     TelemetryClient telemetryClient,
     IConfiguration configuration) : IFtpHelper
 {
-    private readonly TelemetryClient telemetryClient = telemetryClient;
-    private readonly IConfiguration configuration = configuration;
     public async Task<long?> GetFileSize(string hostname, int port, string filePath, string username, string password, Dictionary<string, string> telemetryProperties)
     {
         var operation = telemetryClient.StartOperation<DependencyTelemetry>("GetFileSize");

@@ -125,9 +125,9 @@ public class BanFilesRepository(
         do
         {
             // Null check to ensure Result and Entries exist before accessing them
-            if (adminActionsApiResponse?.IsSuccess == true && adminActionsApiResponse.Result?.Data?.Items != null)
+            if (adminActionsApiResponse?.IsSuccess == true && adminActionsApiResponse.Result?.Data?.Items is not null)
             {
-                adminActions = adminActions.Concat(adminActionsApiResponse.Result.Data.Items).ToList();
+                adminActions.AddRange(adminActionsApiResponse.Result.Data.Items);
 
                 skip += TakeEntries;
                 adminActionsApiResponse = await repositoryApiClient.AdminActions.V1.GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc).ConfigureAwait(false);

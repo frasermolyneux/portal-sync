@@ -5,6 +5,7 @@
     <RootNamespace>XtremeIdiots.Portal.Forums.Integration</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>13</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>

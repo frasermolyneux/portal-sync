@@ -56,11 +56,11 @@ public class MapImageSync(
     {
         Dictionary<GameType, string> gamesToSync = new()
         {
-            {GameType.CallOfDuty2, "cod2"},
-            {GameType.CallOfDuty4, "cod4"},
-            {GameType.CallOfDuty5, "codww"},
-            {GameType.UnrealTournament2004, "ut2k4"},
-            {GameType.Insurgency, "ins"},
+            [GameType.CallOfDuty2] = "cod2",
+            [GameType.CallOfDuty4] = "cod4",
+            [GameType.CallOfDuty5] = "codww",
+            [GameType.UnrealTournament2004] = "ut2k4",
+            [GameType.Insurgency] = "ins"
         };
         await repositoryApiClient.DataMaintenance.V1.ValidateMapImages().ConfigureAwait(false);
 
@@ -69,7 +69,7 @@ public class MapImageSync(
             var skip = 0;
             var mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null).ConfigureAwait(false);
 
-            if (mapsResponseDto == null || !mapsResponseDto.IsSuccess || mapsResponseDto.Result?.Data?.Items == null)
+            if (mapsResponseDto is null || !mapsResponseDto.IsSuccess || mapsResponseDto.Result?.Data?.Items is null)
             {
                 throw new ApplicationException("Failed to retrieve maps from the repository");
             }
@@ -155,7 +155,7 @@ public class MapImageSync(
 
                 skip += TakeEntries;
                 mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null).ConfigureAwait(false);
-            } while (mapsResponseDto != null && mapsResponseDto.IsSuccess && mapsResponseDto.Result != null && mapsResponseDto.Result.Data != null && mapsResponseDto.Result.Data.Items != null && mapsResponseDto.Result.Data.Items.Any()) ;
+            } while (mapsResponseDto is not null && mapsResponseDto.IsSuccess && mapsResponseDto.Result is not null && mapsResponseDto.Result.Data is not null && mapsResponseDto.Result.Data.Items is not null && mapsResponseDto.Result.Data.Items.Any()) ;
         }
     }
 }
