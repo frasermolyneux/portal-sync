@@ -24,7 +24,7 @@
 	  <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.2" />
 	  <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.2" />
 	  <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.2" />
-	  <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="2.1.59" />
+	  <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="2.1.85" />
     <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="2.1.52" />
   </ItemGroup>
   <ItemGroup>
