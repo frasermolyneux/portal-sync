@@ -1,18 +1,23 @@
 # XtremeIdiots Portal - Sync
 
-| Stage                   | Status                                                                                                                                                                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DevOps Secure Scanning  | [![DevOps Secure Scanning](https://github.com/frasermolyneux/portal-sync/actions/workflows/devops-secure-scanning.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/devops-secure-scanning.yml)    |
-| Code Quality            | [![Code Quality](https://github.com/frasermolyneux/portal-sync/actions/workflows/codequality.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/codequality.yml)                                    |
-| Feature Development     | [![Feature Development](https://github.com/frasermolyneux/portal-sync/actions/workflows/feature-development.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/feature-development.yml)             |
-| Pull Request Validation | [![Pull Request Validation](https://github.com/frasermolyneux/portal-sync/actions/workflows/pull-request-validation.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/pull-request-validation.yml) |
-| Release to Production   | [![Release to Production](https://github.com/frasermolyneux/portal-sync/actions/workflows/release-to-production.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/release-to-production.yml)       |
+| Stage                  | Status                                                                                                                                                                                                                        |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DevOps Secure Scanning | [![DevOps Secure Scanning](https://github.com/frasermolyneux/portal-sync/actions/workflows/devops-secure-scanning.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/devops-secure-scanning.yml) |
+| Code Quality           | [![Code Quality](https://github.com/frasermolyneux/portal-sync/actions/workflows/codequality.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/codequality.yml)                                 |
+| Build and Test         | [![Build and Test](https://github.com/frasermolyneux/portal-sync/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/build-and-test.yml)                         |
+| PR Verify              | [![PR Verify](https://github.com/frasermolyneux/portal-sync/actions/workflows/pr-verify.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/pr-verify.yml)                                        |
+| Deploy Dev             | [![Deploy Dev](https://github.com/frasermolyneux/portal-sync/actions/workflows/deploy-dev.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/deploy-dev.yml)                                     |
+| Deploy PRD             | [![Deploy PRD](https://github.com/frasermolyneux/portal-sync/actions/workflows/deploy-prd.yml/badge.svg)](https://github.com/frasermolyneux/portal-sync/actions/workflows/deploy-prd.yml)                                     |
 
 ---
 
 ## Overview
 
 This repository contains the sync function app for the XtremeIdiots Portal solution.
+
+## Documentation
+
+* [Development Workflows](docs/development-workflows.md) - Branch strategy, CI/CD triggers, and deployment flows
 
 ---
 
