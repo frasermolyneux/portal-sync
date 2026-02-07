@@ -10,9 +10,8 @@ on:
     branches:
       - main
     types: [opened, synchronize, reopened, ready_for_review]
-
-  
-permissions: read-all
+ 
+permissions: {}
 
 jobs:
   quality:
@@ -36,6 +35,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      id-token: write
       security-events: write
     uses: frasermolyneux/actions/.github/workflows/devops-secure-scanning.yml@main
 
