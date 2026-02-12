@@ -25,4 +25,4 @@ updates:
     assignees: ["frasermolyneux"]
     directory: "/"
     schedule:
-      interval: weekly
+      interval: "weekly"
