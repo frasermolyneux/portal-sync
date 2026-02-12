@@ -1,10 +1,5 @@
 name: PR Verify
 
-# Label-based workflow control:
-# - Always run Terraform plan against Development when Terraform exists (skips drafts)
-# - 'deploy-dev': Runs Terraform plan+apply and deploys the app to Development (skips drafts/dependabot)
-# - 'run-prd-plan': Runs Terraform plan against Production (skips drafts/dependabot)
-
 on:
   pull_request:
     branches:
