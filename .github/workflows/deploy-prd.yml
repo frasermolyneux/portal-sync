@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: frasermolyneux/actions/dotnet-func-ci@main
@@ -30,6 +31,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    if: github.event_name == 'push'
     environment: Development
     needs: build-and-test
     runs-on: ubuntu-latest
@@ -66,6 +68,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    if: github.event_name == 'push'
     environment: Development
     needs: [build-and-test, terraform-plan-and-apply-dev]
     runs-on: ubuntu-latest
@@ -86,10 +89,16 @@ jobs:
       contents: read
       id-token: write
     environment: Production
-    needs: function-app-deploy-dev
+    needs:
+      - build-and-test
+      - terraform-plan-and-apply-dev
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-prd
+    if: |
+      always() &&
+      needs.build-and-test.result == 'success' &&
+      (needs.terraform-plan-and-apply-dev.result == 'success' || needs.terraform-plan-and-apply-dev.result == 'skipped')
     steps:
       - uses: frasermolyneux/actions/terraform-plan-and-apply@main
         with:
@@ -122,10 +131,17 @@ jobs:
       contents: read
       id-token: write
     environment: Production
-    needs: [build-and-test, terraform-plan-and-apply-prd]
+    needs:
+      - build-and-test
+      - terraform-plan-and-apply-prd
+      - function-app-deploy-dev
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-prd
+    if: |
+      always() &&
+      needs.terraform-plan-and-apply-prd.result == 'success' &&
+      (needs.function-app-deploy-dev.result == 'success' || needs.function-app-deploy-dev.result == 'skipped')
     steps:
       - uses: frasermolyneux/actions/deploy-function-app@main
         with:
