@@ -65,6 +65,13 @@ public class UserProfileForumsSync(
                         try
                         {
                             var memberResult = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId).ConfigureAwait(false);
+
+                            if (!memberResult.IsSuccess)
+                            {
+                                logger.LogWarning("Failed to retrieve member {ForumId} from forums API (HTTP {StatusCode})", userProfileDto.XtremeIdiotsForumId, memberResult.StatusCode);
+                                continue;
+                            }
+
                             var member = memberResult.Result?.Data;
 
                             if (member is not null)
