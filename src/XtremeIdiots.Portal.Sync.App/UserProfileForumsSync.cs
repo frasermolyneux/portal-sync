@@ -5,8 +5,8 @@ using Microsoft.Extensions.Logging;
 using System.Linq;
 using System.Net;
 
-using XtremeIdiots.InvisionCommunity;
-using XtremeIdiots.InvisionCommunity.Models;
+using MX.InvisionCommunity.Api.Abstractions;
+using MX.InvisionCommunity.Api.Abstractions.Models;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.UserProfiles;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
@@ -64,7 +64,15 @@ public class UserProfileForumsSync(
                     {
                         try
                         {
-                            var member = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId).ConfigureAwait(false);
+                            var memberResult = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId).ConfigureAwait(false);
+
+                            if (!memberResult.IsSuccess)
+                            {
+                                logger.LogWarning("Failed to retrieve member {ForumId} from forums API (HTTP {StatusCode})", userProfileDto.XtremeIdiotsForumId, memberResult.StatusCode);
+                                continue;
+                            }
+
+                            var member = memberResult.Result?.Data;
 
                             if (member is not null)
                             {
@@ -113,7 +121,7 @@ public class UserProfileForumsSync(
         } while (userProfileResponseDto?.IsSuccess == true && userProfileResponseDto.Result?.Data?.Items?.Any() is true);
     }
 
-    private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, Member member)
+    private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, MemberDto member)
     {
         if (member is null)
         {
@@ -140,14 +148,14 @@ public class UserProfileForumsSync(
         {
             foreach (var group in member.SecondaryGroups)
             {
-                claims.AddRange(GetClaimsForGroup(userProfileId, group ?? new Group()));
+                claims.AddRange(GetClaimsForGroup(userProfileId, group ?? new GroupDto()));
             }
         }
 
         return claims;
     }
 
-    private static List<CreateUserProfileClaimDto> GetClaimsForGroup(Guid userProfileId, Group group)
+    private static List<CreateUserProfileClaimDto> GetClaimsForGroup(Guid userProfileId, GroupDto group)
     {
         List<CreateUserProfileClaimDto> claims = [];
 
