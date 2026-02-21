@@ -152,7 +152,11 @@ public class UserProfileForumsSync(
             }
         }
 
-        return claims;
+        // Deduplicate claims in case the same group appears in both primary and secondary groups
+        return claims
+            .GroupBy(c => (c.ClaimType.ToUpperInvariant(), c.ClaimValue.ToUpperInvariant()))
+            .Select(g => g.First())
+            .ToList();
     }
 
     private static List<CreateUserProfileClaimDto> GetClaimsForGroup(Guid userProfileId, GroupDto group)
