@@ -2,7 +2,7 @@
 
 using Microsoft.Extensions.Logging;
 
-using XtremeIdiots.InvisionCommunity;
+using MX.InvisionCommunity.Api.Abstractions;
 using XtremeIdiots.Portal.Forums.Integration.Extensions;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 
@@ -34,9 +34,9 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
 
             var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString()).ConfigureAwait(false);
 
-            if (postTopicResult != null)
+            if (postTopicResult.IsSuccess && postTopicResult.Result?.Data != null)
             {
-                return postTopicResult.TopicId;
+                return postTopicResult.Result.Data.TopicId;
             }
 
             _logger.LogError("Error creating admin action topic - call to post topic returned null");

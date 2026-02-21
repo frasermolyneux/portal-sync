@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using MX.Api.Client.Extensions;
-using XtremeIdiots.InvisionCommunity;
+using MX.InvisionCommunity.Api.Client;
 using XtremeIdiots.Portal.Forums.Integration.Extensions;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
@@ -48,11 +48,9 @@ var host = new HostBuilder()
             options.ApiKey = configuration["map_redirect_api_key"] ?? throw new ArgumentNullException("map_redirect_api_key");
         });
 
-        services.AddInvisionApiClient(options =>
-        {
-            options.BaseUrl = configuration["xtremeidiots_forums_base_url"] ?? throw new ArgumentNullException("xtremeidiots_forums_base_url");
-            options.ApiKey = configuration["xtremeidiots_forums_api_key"] ?? throw new ArgumentNullException("xtremeidiots_forums_api_key");
-        });
+        services.AddInvisionApiClient(options => options
+            .WithBaseUrl(configuration["xtremeidiots_forums_base_url"] ?? throw new ArgumentNullException("xtremeidiots_forums_base_url"))
+            .WithApiKeyAuthentication(configuration["xtremeidiots_forums_api_key"] ?? throw new ArgumentNullException("xtremeidiots_forums_api_key")));
 
         services.AddAdminActionTopics();
 
