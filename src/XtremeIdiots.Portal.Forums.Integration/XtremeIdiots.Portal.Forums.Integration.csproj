@@ -12,7 +12,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <PackageReference Include="MX.InvisionCommunity.Api.Abstractions" Version="1.0.18" />
-    <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="2.1.135" />
+    <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="2.1.139" />
   </ItemGroup>
 
 </Project>
