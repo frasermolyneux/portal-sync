@@ -40,5 +40,4 @@ locals {
   function_app_name         = "fn-portal-sync-func-${var.environment}-${var.location}-${random_id.environment_id.hex}"
   function_app_storage_name = "safn${random_id.environment_id.hex}"
   app_data_storage_name     = "saad${random_id.environment_id.hex}"
-  key_vault_name            = substr(format("kv-%s-%s", random_id.environment_id.hex, var.location), 0, 24)
 }

@@ -1,8 +1,11 @@
 ﻿using System.Reflection;
 
+using Azure.Identity;
+
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.AzureAppConfiguration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -21,6 +24,32 @@ var host = new HostBuilder()
     .ConfigureAppConfiguration(builder =>
     {
         builder.AddUserSecrets(Assembly.GetExecutingAssembly(), true);
+
+        var builtConfig = builder.Build();
+        var appConfigEndpoint = builtConfig["AzureAppConfiguration:Endpoint"];
+
+        if (!string.IsNullOrWhiteSpace(appConfigEndpoint))
+        {
+            var managedIdentityClientId = builtConfig["AzureAppConfiguration:ManagedIdentityClientId"];
+            var environmentLabel = builtConfig["AzureAppConfiguration:Environment"];
+
+            var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+            {
+                ManagedIdentityClientId = managedIdentityClientId,
+            });
+
+            builder.AddAzureAppConfiguration(options =>
+            {
+                options.Connect(new Uri(appConfigEndpoint), credential)
+                    .Select("RepositoryApi:*", environmentLabel)
+                    .Select("ServersIntegrationApi:*", environmentLabel)
+                    .Select("XtremeIdiots:*", environmentLabel)
+                    .Select("GameTracker:*", environmentLabel)
+                    .Select("MapRedirect:*", environmentLabel);
+
+                options.ConfigureKeyVault(kv => kv.SetCredential(credential));
+            });
+        }
     })
     .ConfigureFunctionsWebApplication(options => { })
     .ConfigureServices((context, services) =>
@@ -44,13 +73,13 @@ var host = new HostBuilder()
 
         services.AddMapRedirectRepository(options =>
         {
-            options.MapRedirectBaseUrl = configuration["map_redirect_base_url"] ?? throw new ArgumentNullException("map_redirect_base_url");
-            options.ApiKey = configuration["map_redirect_api_key"] ?? throw new ArgumentNullException("map_redirect_api_key");
+            options.MapRedirectBaseUrl = configuration["MapRedirect:BaseUrl"] ?? throw new ArgumentNullException("MapRedirect:BaseUrl");
+            options.ApiKey = configuration["MapRedirect:ApiKey"] ?? throw new ArgumentNullException("MapRedirect:ApiKey");
         });
 
         services.AddInvisionApiClient(options => options
-            .WithBaseUrl(configuration["xtremeidiots_forums_base_url"] ?? throw new ArgumentNullException("xtremeidiots_forums_base_url"))
-            .WithApiKeyAuthentication(configuration["xtremeidiots_forums_api_key"] ?? throw new ArgumentNullException("xtremeidiots_forums_api_key"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter));
+            .WithBaseUrl(configuration["XtremeIdiots:Forums:BaseUrl"] ?? throw new ArgumentNullException("XtremeIdiots:Forums:BaseUrl"))
+            .WithApiKeyAuthentication(configuration["XtremeIdiots:Forums:ApiKey"] ?? throw new ArgumentNullException("XtremeIdiots:Forums:ApiKey"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter));
 
         services.AddAdminActionTopics();
 

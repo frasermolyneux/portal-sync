@@ -10,8 +10,5 @@ resource "azurerm_role_assignment" "app-to-app-data-storage" {
   principal_id         = local.sync_identity.principal_id
 }
 
-resource "azurerm_role_assignment" "app-to-key-vault" {
-  scope                = azurerm_key_vault.kv.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = local.sync_identity.principal_id
-}
+// Local Key Vault role assignment removed — the sync identity now has
+// Key Vault Secrets User on the shared Key Vault in portal-environments.

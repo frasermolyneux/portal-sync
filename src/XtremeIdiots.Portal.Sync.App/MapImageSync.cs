@@ -5,6 +5,7 @@ using System.Text;
 using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.ApplicationInsights;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using XtremeIdiots.Portal.Sync.App.Configuration;
 
@@ -23,9 +24,11 @@ public class MapImageSync(
     IRepositoryApiClient repositoryApiClient,
     HttpClient httpClient,
     IOptions<MapImagesStorageOptions> mapImagesStorageOptions,
-    TelemetryClient telemetryClient)
+    TelemetryClient telemetryClient,
+    IConfiguration configuration)
 {
     private const int TakeEntries = 50;
+    private readonly string gameTrackerMapImageBaseUrl = (configuration["GameTracker:MapImageBaseUrl"] ?? "https://image.gametracker.com/images/maps/160x120/").TrimEnd('/') + "/";
     // Single attempt; retry & bot-avoidance logic removed.
     private readonly ILogger<MapImageSync> logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IRepositoryApiClient repositoryApiClient = repositoryApiClient ?? throw new ArgumentNullException(nameof(repositoryApiClient));
@@ -79,7 +82,7 @@ public class MapImageSync(
 
                 foreach (var mapDto in mapsResponseDto.Result.Data.Items)
                 {
-                    var gameTrackerImageUrl = $"https://image.gametracker.com/images/maps/160x120/{game.Value}/{mapDto.MapName}.jpg";
+                    var gameTrackerImageUrl = $"{gameTrackerMapImageBaseUrl}{game.Value}/{mapDto.MapName}.jpg";
 
                     string? tempFilePath = null;
                     try

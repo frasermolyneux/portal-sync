@@ -17,7 +17,7 @@ This repository contains **portal-sync**, an Azure Functions (v4, isolated worke
 
 - `src/XtremeIdiots.Portal.Sync.App/` — Main Azure Functions app (timer-triggered and HTTP-triggered sync functions)
 - `src/XtremeIdiots.Portal.Forums.Integration/` — Forum integration library (admin action topics, demo manager)
-- `terraform/` — Infrastructure-as-code for Function App, Key Vault, Storage, alerts
+- `terraform/` — Infrastructure-as-code for Function App, Storage, alerts
 - `docs/` — Development workflows and telemetry documentation
 
 ## Key Conventions
@@ -27,12 +27,12 @@ This repository contains **portal-sync**, an Azure Functions (v4, isolated worke
 - Every timer-triggered function should have a corresponding manual HTTP-triggered function.
 - Use `ConfigureAwait(false)` on all async calls.
 - Follow the existing pattern of interfaces in `Interfaces/` and implementations in peer folders.
-- Configuration classes live in `Configuration/` and are bound via `IOptions<T>`.
+- Configuration classes live in `Configuration/` and are bound via `IOptions<T>`. Some settings are read directly from `IConfiguration` (e.g., `MapRedirect:BaseUrl`, forum IDs).
 
 ## Terraform Conventions
 
 - Resources use `local.*` references defined in `locals.tf`.
-- Secrets are stored in Key Vault and referenced via `@Microsoft.KeyVault(...)` app settings.
+- Configuration and secrets are managed centrally via Azure App Configuration (with Key Vault references hosted in the shared `portal-environments` Key Vault).
 - Remote state data sources pull outputs from other portal infrastructure repositories.
 
 ## Testing and Quality
@@ -45,4 +45,4 @@ This repository contains **portal-sync**, an Azure Functions (v4, isolated worke
 
 - Ban file sync uses FTP to monitor and push ban files to game servers.
 - Map image sync downloads images from GameTracker, detects HTML anti-bot pages, and uploads to blob storage via the Repository API.
-- All API clients are registered in `Program.cs` using builder-pattern extension methods with Entra ID (Azure AD) authentication.
+- All API clients are registered in `Program.cs` using builder-pattern extension methods with Entra ID (Azure AD) authentication. Configuration is loaded from Azure App Configuration with label-based selectors.
