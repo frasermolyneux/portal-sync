@@ -50,7 +50,7 @@ var host = new HostBuilder()
 
         services.AddInvisionApiClient(options => options
             .WithBaseUrl(configuration["xtremeidiots_forums_base_url"] ?? throw new ArgumentNullException("xtremeidiots_forums_base_url"))
-            .WithApiKeyAuthentication(configuration["xtremeidiots_forums_api_key"] ?? throw new ArgumentNullException("xtremeidiots_forums_api_key")));
+            .WithApiKeyAuthentication(configuration["xtremeidiots_forums_api_key"] ?? throw new ArgumentNullException("xtremeidiots_forums_api_key"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter));
 
         services.AddAdminActionTopics();
 
