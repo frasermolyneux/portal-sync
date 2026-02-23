@@ -17,7 +17,7 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
     {
         try
         {
-            var userId = int.Parse(configuration["XtremeIdiots:Forums:DefaultAdminUserId"] ?? "21145");
+            var userId = int.TryParse(configuration["XtremeIdiots:Forums:DefaultAdminUserId"], out var defaultUserId) ? defaultUserId : 21145;
             if (!string.IsNullOrEmpty(adminId) && int.TryParse(adminId, out var parsedUserId))
             {
                 userId = parsedUserId;
@@ -49,7 +49,7 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
 
         try
         {
-            var userId = int.Parse(configuration["XtremeIdiots:Forums:DefaultAdminUserId"] ?? "21145");
+            var userId = int.TryParse(configuration["XtremeIdiots:Forums:DefaultAdminUserId"], out var defaultUserId) ? defaultUserId : 21145;
             if (!string.IsNullOrEmpty(adminId) && int.TryParse(adminId, out var parsedUserId))
             {
                 userId = parsedUserId;
@@ -84,7 +84,7 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
 
     private int ResolveForumId(AdminActionType type, GameType gameType)
     {
-        var defaultForumId = int.Parse(configuration["XtremeIdiots:Forums:DefaultForumId"] ?? "28");
+        var defaultForumId = int.TryParse(configuration["XtremeIdiots:Forums:DefaultForumId"], out var parsedForumId) ? parsedForumId : 28;
 
         var category = type switch
         {

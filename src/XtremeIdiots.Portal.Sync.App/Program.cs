@@ -67,19 +67,19 @@ var host = new HostBuilder()
 
         services.AddServersApiClient(options =>
         {
-            options.WithBaseUrl(configuration["ServersIntegrationApi:BaseUrl"] ?? throw new ArgumentNullException("ServersIntegrationApi:BaseUrl"))
-                .WithEntraIdAuthentication(configuration["ServersIntegrationApi:ApplicationAudience"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApplicationAudience"));
+            options.WithBaseUrl(configuration["ServersIntegrationApi:BaseUrl"] ?? throw new InvalidOperationException("ServersIntegrationApi:BaseUrl configuration is required"))
+                .WithEntraIdAuthentication(configuration["ServersIntegrationApi:ApplicationAudience"] ?? throw new InvalidOperationException("ServersIntegrationApi:ApplicationAudience configuration is required"));
         });
 
         services.AddMapRedirectRepository(options =>
         {
-            options.MapRedirectBaseUrl = configuration["MapRedirect:BaseUrl"] ?? throw new ArgumentNullException("MapRedirect:BaseUrl");
-            options.ApiKey = configuration["MapRedirect:ApiKey"] ?? throw new ArgumentNullException("MapRedirect:ApiKey");
+            options.MapRedirectBaseUrl = configuration["MapRedirect:BaseUrl"] ?? throw new InvalidOperationException("MapRedirect:BaseUrl configuration is required");
+            options.ApiKey = configuration["MapRedirect:ApiKey"] ?? throw new InvalidOperationException("MapRedirect:ApiKey configuration is required");
         });
 
         services.AddInvisionApiClient(options => options
-            .WithBaseUrl(configuration["XtremeIdiots:Forums:BaseUrl"] ?? throw new ArgumentNullException("XtremeIdiots:Forums:BaseUrl"))
-            .WithApiKeyAuthentication(configuration["XtremeIdiots:Forums:ApiKey"] ?? throw new ArgumentNullException("XtremeIdiots:Forums:ApiKey"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter));
+            .WithBaseUrl(configuration["XtremeIdiots:Forums:BaseUrl"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:BaseUrl configuration is required"))
+            .WithApiKeyAuthentication(configuration["XtremeIdiots:Forums:ApiKey"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:ApiKey configuration is required"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter));
 
         services.AddAdminActionTopics();
 
