@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 using MX.InvisionCommunity.Api.Abstractions;
@@ -8,7 +9,7 @@ using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 
 namespace XtremeIdiots.Portal.Forums.Integration;
 
-public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiClient forumsClient) : IAdminActionTopics
+public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiClient forumsClient, IConfiguration configuration) : IAdminActionTopics
 {
     private readonly IInvisionApiClient _invisionClient = forumsClient ?? throw new ArgumentNullException(nameof(forumsClient));
     private readonly ILogger<AdminActionTopics> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -16,21 +17,13 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
     {
         try
         {
-            var userId = 21145; // Default Admin user
+            var userId = int.TryParse(configuration["XtremeIdiots:Forums:DefaultAdminUserId"], out var defaultUserId) ? defaultUserId : 21145;
             if (!string.IsNullOrEmpty(adminId) && int.TryParse(adminId, out var parsedUserId))
             {
                 userId = parsedUserId;
             }
 
-            var forumId = type switch
-            {
-                AdminActionType.Observation => gameType.ForumIdForObservations(),
-                AdminActionType.Warning => gameType.ForumIdForWarnings(),
-                AdminActionType.Kick => gameType.ForumIdForKicks(),
-                AdminActionType.TempBan => gameType.ForumIdForTempBans(),
-                AdminActionType.Ban => gameType.ForumIdForBans(),
-                _ => 28
-            };
+            var forumId = ResolveForumId(type, gameType);
 
             var postTopicResult = await _invisionClient.Forums.PostTopic(forumId, userId, $"{username} - {type}", PostContent(type, playerId, username, created, text), type.ToString()).ConfigureAwait(false);
 
@@ -56,7 +49,7 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
 
         try
         {
-            var userId = 21145; // Default Admin user
+            var userId = int.TryParse(configuration["XtremeIdiots:Forums:DefaultAdminUserId"], out var defaultUserId) ? defaultUserId : 21145;
             if (!string.IsNullOrEmpty(adminId) && int.TryParse(adminId, out var parsedUserId))
             {
                 userId = parsedUserId;
@@ -73,10 +66,11 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
 
     private string PostContent(AdminActionType type, Guid playerId, string username, DateTime created, string text)
     {
+        var portalBaseUrl = (configuration["XtremeIdiots:PortalBaseUrl"] ?? "https://portal.xtremeidiots.com").TrimEnd('/');
         return $"""
             <p>
                Username: {username}<br>
-               Player Link: <a href="https://portal.xtremeidiots.com/Players/Details/{playerId}">Portal</a><br>
+               Player Link: <a href="{portalBaseUrl}/Players/Details/{playerId}">Portal</a><br>
                {type} Created: {created.ToString(CultureInfo.InvariantCulture)}
             </p>
             <p>
@@ -86,5 +80,41 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
                <small>Do not edit this post directly as it will be overwritten by the Portal. Add comments on posts below or edit the record in the Portal.</small>
             </p>
             """;
+    }
+
+    private int ResolveForumId(AdminActionType type, GameType gameType)
+    {
+        var defaultForumId = int.TryParse(configuration["XtremeIdiots:Forums:DefaultForumId"], out var parsedForumId) ? parsedForumId : 28;
+
+        var category = type switch
+        {
+            AdminActionType.Observation or AdminActionType.Warning or AdminActionType.Kick => "AdminLogs",
+            AdminActionType.TempBan or AdminActionType.Ban => "Bans",
+            _ => null
+        };
+
+        if (category is null)
+            return defaultForumId;
+
+        var gameKey = gameType switch
+        {
+            GameType.Arma or GameType.Arma2 or GameType.Arma3 => "Arma",
+            _ => gameType.ToString()
+        };
+
+        var configValue = configuration[$"XtremeIdiots:Forums:{category}:{gameKey}"];
+        if (configValue is not null && int.TryParse(configValue, out var forumId))
+            return forumId;
+
+        // Fallback to hardcoded values from GameTypeExtensions
+        return type switch
+        {
+            AdminActionType.Observation => gameType.ForumIdForObservations(),
+            AdminActionType.Warning => gameType.ForumIdForWarnings(),
+            AdminActionType.Kick => gameType.ForumIdForKicks(),
+            AdminActionType.TempBan => gameType.ForumIdForTempBans(),
+            AdminActionType.Ban => gameType.ForumIdForBans(),
+            _ => defaultForumId
+        };
     }
 }

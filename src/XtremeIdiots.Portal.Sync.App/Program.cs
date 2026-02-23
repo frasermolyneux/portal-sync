@@ -1,8 +1,11 @@
 ﻿using System.Reflection;
 
+using Azure.Identity;
+
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.AzureAppConfiguration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -21,6 +24,32 @@ var host = new HostBuilder()
     .ConfigureAppConfiguration(builder =>
     {
         builder.AddUserSecrets(Assembly.GetExecutingAssembly(), true);
+
+        var builtConfig = builder.Build();
+        var appConfigEndpoint = builtConfig["AzureAppConfiguration:Endpoint"];
+
+        if (!string.IsNullOrWhiteSpace(appConfigEndpoint))
+        {
+            var managedIdentityClientId = builtConfig["AzureAppConfiguration:ManagedIdentityClientId"];
+            var environmentLabel = builtConfig["AzureAppConfiguration:Environment"];
+
+            var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+            {
+                ManagedIdentityClientId = managedIdentityClientId,
+            });
+
+            builder.AddAzureAppConfiguration(options =>
+            {
+                options.Connect(new Uri(appConfigEndpoint), credential)
+                    .Select("RepositoryApi:*", environmentLabel)
+                    .Select("ServersIntegrationApi:*", environmentLabel)
+                    .Select("XtremeIdiots:*", environmentLabel)
+                    .Select("GameTracker:*", environmentLabel)
+                    .Select("MapRedirect:*", environmentLabel);
+
+                options.ConfigureKeyVault(kv => kv.SetCredential(credential));
+            });
+        }
     })
     .ConfigureFunctionsWebApplication(options => { })
     .ConfigureServices((context, services) =>
@@ -38,19 +67,19 @@ var host = new HostBuilder()
 
         services.AddServersApiClient(options =>
         {
-            options.WithBaseUrl(configuration["ServersIntegrationApi:BaseUrl"] ?? throw new ArgumentNullException("ServersIntegrationApi:BaseUrl"))
-                .WithEntraIdAuthentication(configuration["ServersIntegrationApi:ApplicationAudience"] ?? throw new ArgumentNullException("ServersIntegrationApi:ApplicationAudience"));
+            options.WithBaseUrl(configuration["ServersIntegrationApi:BaseUrl"] ?? throw new InvalidOperationException("ServersIntegrationApi:BaseUrl configuration is required"))
+                .WithEntraIdAuthentication(configuration["ServersIntegrationApi:ApplicationAudience"] ?? throw new InvalidOperationException("ServersIntegrationApi:ApplicationAudience configuration is required"));
         });
 
         services.AddMapRedirectRepository(options =>
         {
-            options.MapRedirectBaseUrl = configuration["map_redirect_base_url"] ?? throw new ArgumentNullException("map_redirect_base_url");
-            options.ApiKey = configuration["map_redirect_api_key"] ?? throw new ArgumentNullException("map_redirect_api_key");
+            options.MapRedirectBaseUrl = configuration["MapRedirect:BaseUrl"] ?? throw new InvalidOperationException("MapRedirect:BaseUrl configuration is required");
+            options.ApiKey = configuration["MapRedirect:ApiKey"] ?? throw new InvalidOperationException("MapRedirect:ApiKey configuration is required");
         });
 
         services.AddInvisionApiClient(options => options
-            .WithBaseUrl(configuration["xtremeidiots_forums_base_url"] ?? throw new ArgumentNullException("xtremeidiots_forums_base_url"))
-            .WithApiKeyAuthentication(configuration["xtremeidiots_forums_api_key"] ?? throw new ArgumentNullException("xtremeidiots_forums_api_key"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter));
+            .WithBaseUrl(configuration["XtremeIdiots:Forums:BaseUrl"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:BaseUrl configuration is required"))
+            .WithApiKeyAuthentication(configuration["XtremeIdiots:Forums:ApiKey"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:ApiKey configuration is required"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter));
 
         services.AddAdminActionTopics();
 

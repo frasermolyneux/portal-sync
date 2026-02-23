@@ -19,8 +19,11 @@ public class MapRedirectSync(
     ILogger<MapRedirectSync> logger,
     IRepositoryApiClient repositoryApiClient,
     IMapRedirectRepository mapRedirectRepository,
+    Microsoft.Extensions.Configuration.IConfiguration configuration,
     TelemetryClient telemetryClient)
 {
+    private readonly string _mapRedirectBaseUrl = (configuration["MapRedirect:BaseUrl"] ?? "https://redirect.xtremeidiots.net").TrimEnd('/');
+
     private readonly string[] _defaultMaps =
     [
         "mp_ambush", "mp_backlot", "mp_bloc", "mp_bog", "mp_broadcast", "mp_chinatown", "mp_countdown", "mp_crash", "mp_creek", "mp_crossfire",
@@ -103,7 +106,7 @@ public class MapRedirectSync(
                     var mapDtoToCreate = new CreateMapDto(gameType, mapRedirectEntry.MapName)
                     {
                         MapFiles = [..mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).Select(mf =>
-                            new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
+                            new MapFileDto(mf, $"{_mapRedirectBaseUrl}/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
                     };
 
                     mapDtosToCreate.Add(mapDtoToCreate);
@@ -117,7 +120,7 @@ public class MapRedirectSync(
                         mapDtosToUpdate.Add(new EditMapDto(repositoryMap.MapId)
                         {
                             MapFiles = [..mapFiles.Select(mf =>
-                                new MapFileDto(mf, $"https://redirect.xtremeidiots.net/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
+                                new MapFileDto(mf, $"{_mapRedirectBaseUrl}/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
                         });
                     }
                 }

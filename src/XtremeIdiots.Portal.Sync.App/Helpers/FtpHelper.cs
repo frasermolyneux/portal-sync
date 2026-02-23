@@ -1,4 +1,4 @@
-﻿using FluentFTP;
+using FluentFTP;
 
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
@@ -27,7 +27,7 @@ public class FtpHelper(
             ftpClient = new AsyncFtpClient(hostname, username, password, port);
             ftpClient.ValidateCertificate += (control, e) =>
             {
-                if (e.Certificate.GetCertHashString().Equals(configuration["xtremeidiots_ftp_certificate_thumbprint"]))
+                if (e.Certificate != null && e.Certificate.GetCertHashString().Equals(configuration["XtremeIdiots:FtpCertificateThumbprint"], StringComparison.OrdinalIgnoreCase))
                 { // Account for self-signed FTP certificate for self-hosted servers
                     e.Accept = true;
                 }
@@ -71,7 +71,7 @@ public class FtpHelper(
             ftpClient = new AsyncFtpClient(hostname, username, password, port);
             ftpClient.ValidateCertificate += (control, e) =>
             {
-                if (e.Certificate.GetCertHashString().Equals(configuration["xtremeidiots_ftp_certificate_thumbprint"]))
+                if (e.Certificate != null && e.Certificate.GetCertHashString().Equals(configuration["XtremeIdiots:FtpCertificateThumbprint"], StringComparison.OrdinalIgnoreCase))
                 { // Account for self-signed FTP certificate for self-hosted servers
                     e.Accept = true;
                 }
@@ -115,7 +115,7 @@ public class FtpHelper(
             ftpClient = new AsyncFtpClient(hostname, username, password, port);
             ftpClient.ValidateCertificate += (control, e) =>
             {
-                if (e.Certificate.GetCertHashString().Equals(configuration["xtremeidiots_ftp_certificate_thumbprint"]))
+                if (e.Certificate != null && e.Certificate.GetCertHashString().Equals(configuration["XtremeIdiots:FtpCertificateThumbprint"], StringComparison.OrdinalIgnoreCase))
                 { // Account for self-signed FTP certificate for self-hosted servers
                     e.Accept = true;
                 }
@@ -161,7 +161,7 @@ public class FtpHelper(
             ftpClient = new AsyncFtpClient(hostname, username, password, port);
             ftpClient.ValidateCertificate += (control, e) =>
             {
-                if (e.Certificate.GetCertHashString().Equals(configuration["xtremeidiots_ftp_certificate_thumbprint"]))
+                if (e.Certificate != null && e.Certificate.GetCertHashString().Equals(configuration["XtremeIdiots:FtpCertificateThumbprint"], StringComparison.OrdinalIgnoreCase))
                 { // Account for self-signed FTP certificate for self-hosted servers
                     e.Accept = true;
                 }
