@@ -23,6 +23,7 @@ using XtremeIdiots.Portal.Sync.App.Configuration;
 var host = new HostBuilder()
     .ConfigureAppConfiguration(builder =>
     {
+        builder.AddEnvironmentVariables();
         builder.AddUserSecrets(Assembly.GetExecutingAssembly(), true);
 
         var builtConfig = builder.Build();
