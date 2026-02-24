@@ -46,13 +46,26 @@ var host = new HostBuilder()
                     .Select("ServersIntegrationApi:*", environmentLabel)
                     .Select("XtremeIdiots:*", environmentLabel)
                     .Select("GameTracker:*", environmentLabel)
-                    .Select("MapRedirect:*", environmentLabel);
+                    .Select("MapRedirect:*", environmentLabel)
+                    .ConfigureRefresh(refresh =>
+                    {
+                        refresh.Register("Sentinel", environmentLabel, refreshAll: true)
+                               .SetRefreshInterval(TimeSpan.FromMinutes(5));
+                    });
 
-                options.ConfigureKeyVault(kv => kv.SetCredential(credential));
+                options.ConfigureKeyVault(kv =>
+                {
+                    kv.SetCredential(credential);
+                    kv.SetSecretRefreshInterval(TimeSpan.FromHours(1));
+                });
             });
         }
     })
-    .ConfigureFunctionsWebApplication(options => { })
+    .ConfigureFunctionsWebApplication(options =>
+    {
+        options.Services.AddAzureAppConfiguration();
+        options.UseAzureAppConfiguration();
+    })
     .ConfigureServices((context, services) =>
     {
         var configuration = context.Configuration;
