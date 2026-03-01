@@ -95,6 +95,12 @@ public class UserProfileForumsSync(
                                 var activeClaims = GetClaimsForMember(userProfileDto.UserProfileId, member);
                                 List<CreateUserProfileClaimDto> claimsToSave = [.. activeClaims, .. nonSystemGeneratedClaims];
 
+                                // Deduplicate claims to prevent BadRequest from API duplicate validation
+                                claimsToSave = claimsToSave
+                                    .GroupBy(c => (c.ClaimType.ToUpperInvariant(), c.ClaimValue.ToUpperInvariant()))
+                                    .Select(g => g.First())
+                                    .ToList();
+
                                 await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave).ConfigureAwait(false);
                             }
                             else
