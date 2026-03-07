@@ -38,9 +38,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_resources: ${{ steps.state-check.outputs.has_resources }}
+      state_tainted: ${{ steps.state-check.outputs.state_tainted }}
     steps:
       - id: state-check
-        uses: frasermolyneux/actions/terraform-state-check@terraform-state-check/v1.0
+        uses: frasermolyneux/actions/terraform-state-check@terraform-state-check/v1.1
         with:
           terraform-folder: "terraform"
           terraform-var-file: "tfvars/dev.tfvars"
@@ -56,7 +57,7 @@ jobs:
     needs:
       - detect-changes
       - terraform-state-check-dev
-    if: "!failure() && !cancelled() && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.has_resources != 'true')"
+    if: "!failure() && !cancelled() && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')"
     runs-on: ubuntu-latest
     steps:
       - uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v1.4
@@ -78,7 +79,7 @@ jobs:
     concurrency:
       group: ${{ github.repository }}-dev
     steps:
-      - if: needs.detect-changes.outputs.terraform == 'true' || needs.terraform-state-check-dev.outputs.has_resources != 'true'
+      - if: needs.detect-changes.outputs.terraform == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true'
         uses: frasermolyneux/actions/terraform-plan-and-apply@terraform-plan-and-apply/v1.4
         with:
           terraform-folder: "terraform"
@@ -88,7 +89,7 @@ jobs:
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - if: needs.detect-changes.outputs.terraform != 'true' && needs.terraform-state-check-dev.outputs.has_resources == 'true'
+      - if: needs.detect-changes.outputs.terraform != 'true' && needs.terraform-state-check-dev.outputs.state_tainted != 'true'
         uses: frasermolyneux/actions/terraform-output@terraform-output/v1.0
         with:
           terraform-folder: "terraform"
@@ -128,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-dev
-    if: "!failure() && !cancelled() && github.event_name != 'schedule' && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.has_resources != 'true')"
+    if: "!failure() && !cancelled() && github.event_name != 'schedule' && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')"
     steps:
       - uses: frasermolyneux/actions/deploy-function-app@deploy-function-app/v1.2
         with:
