@@ -355,8 +355,12 @@ __blobstorage__/
 __queuestorage__/
 __tablestorage__/
 
-terraform/.terraform.lock.hcl
-terraform/.terraform/*
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.terraform.lock.hcl
 
 # Shared Copilot configuration checked out during copilot-setup-steps
 .github-copilot/
