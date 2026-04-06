@@ -4,6 +4,18 @@ resource "azurerm_role_assignment" "app-to-storage" {
   principal_id         = local.sync_identity.principal_id
 }
 
+resource "azurerm_role_assignment" "app-to-storage-table" {
+  scope                = azurerm_storage_account.function_app_storage.id
+  role_definition_name = "Storage Table Data Contributor"
+  principal_id         = local.sync_identity.principal_id
+}
+
+resource "azurerm_role_assignment" "app-to-storage-queue" {
+  scope                = azurerm_storage_account.function_app_storage.id
+  role_definition_name = "Storage Queue Data Contributor"
+  principal_id         = local.sync_identity.principal_id
+}
+
 resource "azurerm_role_assignment" "app-to-app-data-storage" {
   scope                = azurerm_storage_account.app_data_storage.id
   role_definition_name = "Storage Blob Data Owner"
