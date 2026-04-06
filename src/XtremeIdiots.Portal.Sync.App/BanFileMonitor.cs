@@ -29,14 +29,16 @@ public class BanFileMonitor(
     private readonly IRepositoryApiClient repositoryApiClient = repositoryApiClient ?? throw new ArgumentNullException(nameof(repositoryApiClient));
     private readonly TelemetryClient telemetryClient = telemetryClient ?? throw new ArgumentNullException(nameof(telemetryClient));
 
-    [Function(nameof(ImportLatestBanFilesManual))]
-    public async Task ImportLatestBanFilesManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
-    {
-        await ImportLatestBanFiles(null).ConfigureAwait(false);
-    }
+    // DISABLED: Replaced by portal-server-agent ban file watcher + portal-server-events ban processor
+    // [Function(nameof(ImportLatestBanFilesManual))]
+    // public async Task ImportLatestBanFilesManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
+    // {
+    //     await ImportLatestBanFiles(null).ConfigureAwait(false);
+    // }
 
-    [Function(nameof(ImportLatestBanFiles))]
-    public async Task ImportLatestBanFiles([TimerTrigger("0 */5 * * * *")] TimerInfo? myTimer)
+    // DISABLED: Replaced by portal-server-agent ban file watcher + portal-server-events ban processor
+    // [Function(nameof(ImportLatestBanFiles))]
+    public async Task ImportLatestBanFiles(TimerInfo? myTimer)
     {
         await ScheduledJobTelemetry.ExecuteWithTelemetry(
             telemetryClient,
