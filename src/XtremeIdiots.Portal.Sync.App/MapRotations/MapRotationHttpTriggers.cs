@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace XtremeIdiots.Portal.Sync.App.MapRotations;
 
+[Authorize(Roles = "ServiceAccount")]
 public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 {
     private readonly ILogger<MapRotationHttpTriggers> logger = logger ?? throw new ArgumentNullException(nameof(logger));

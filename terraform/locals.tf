@@ -33,6 +33,7 @@ locals {
   api_management          = data.terraform_remote_state.portal_environments.outputs.api_management
   repository_api          = data.terraform_remote_state.portal_environments.outputs.repository_api
   servers_integration_api = data.terraform_remote_state.portal_environments.outputs.servers_integration_api
+  sync_api                = data.terraform_remote_state.portal_environments.outputs.sync_api
   app_insights            = data.terraform_remote_state.portal_core.outputs.app_insights
   app_service_plan        = data.terraform_remote_state.portal_core.outputs.app_service_plans["apps"]
 

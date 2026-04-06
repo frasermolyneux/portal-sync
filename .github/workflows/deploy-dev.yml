@@ -43,6 +43,10 @@ jobs:
           cd terraform
           echo "function_app_name=$(terraform output -raw function_app_name)" >> $GITHUB_OUTPUT
           echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
+          echo "api_management_name=$(terraform output -raw api_management_name)" >> $GITHUB_OUTPUT
+          echo "api_management_resource_group_name=$(terraform output -raw api_management_resource_group_name)" >> $GITHUB_OUTPUT
+          echo "api_management_product_id=$(terraform output -raw api_management_product_id)" >> $GITHUB_OUTPUT
+          echo "api_version_set_id=$(terraform output -raw api_version_set_id)" >> $GITHUB_OUTPUT
         env:
           ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -53,6 +57,10 @@ jobs:
     outputs:
       function_app_name: ${{ steps.terraform-output.outputs.function_app_name }}
       resource_group_name: ${{ steps.terraform-output.outputs.resource_group_name }}
+      api_management_name: ${{ steps.terraform-output.outputs.api_management_name }}
+      api_management_resource_group_name: ${{ steps.terraform-output.outputs.api_management_resource_group_name }}
+      api_management_product_id: ${{ steps.terraform-output.outputs.api_management_product_id }}
+      api_version_set_id: ${{ steps.terraform-output.outputs.api_version_set_id }}
 
   function-app-deploy-dev:
     permissions:
@@ -72,3 +80,49 @@ jobs:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+  apim-api-import-dev:
+    permissions:
+      contents: read
+      id-token: write
+    environment: Development
+    needs: [terraform-plan-and-apply-dev, function-app-deploy-dev]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.repository }}-dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Import Sync API to APIM
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az apim api import \
+              --resource-group "${{ needs.terraform-plan-and-apply-dev.outputs.api_management_resource_group_name }}" \
+              --service-name "${{ needs.terraform-plan-and-apply-dev.outputs.api_management_name }}" \
+              --api-id "sync-api-v1" \
+              --display-name "Sync API" \
+              --path "sync" \
+              --api-version "v1" \
+              --api-version-set-id "${{ needs.terraform-plan-and-apply-dev.outputs.api_version_set_id }}" \
+              --protocols https \
+              --specification-format OpenApi \
+              --specification-path src/XtremeIdiots.Portal.Sync.App/openapi.json \
+              --service-url "https://${{ needs.terraform-plan-and-apply-dev.outputs.function_app_name }}.azurewebsites.net" \
+              --subscription-required false
+
+      - name: Add Sync API to APIM product
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az apim product api add \
+              --resource-group "${{ needs.terraform-plan-and-apply-dev.outputs.api_management_resource_group_name }}" \
+              --service-name "${{ needs.terraform-plan-and-apply-dev.outputs.api_management_name }}" \
+              --product-id "${{ needs.terraform-plan-and-apply-dev.outputs.api_management_product_id }}" \
+              --api-id "sync-api-v1" || true

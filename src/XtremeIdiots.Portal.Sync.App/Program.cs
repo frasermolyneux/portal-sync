@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.AzureAppConfiguration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Identity.Web;
 
 using MX.Api.Client.Extensions;
 using MX.InvisionCommunity.Api.Client;
@@ -42,6 +43,8 @@ var host = new HostBuilder()
             builder.AddAzureAppConfiguration(options =>
             {
                 options.Connect(new Uri(appConfigEndpoint), credential)
+                    .Select("XtremeIdiots.Portal.Sync.App:*", environmentLabel)
+                    .TrimKeyPrefix("XtremeIdiots.Portal.Sync.App:")
                     .Select("RepositoryApi:*", environmentLabel)
                     .Select("ServersIntegrationApi:*", environmentLabel)
                     .Select("XtremeIdiots:*", environmentLabel)
@@ -71,6 +74,8 @@ var host = new HostBuilder()
         var configuration = context.Configuration;
 
         services.AddLogging();
+        services.AddMicrosoftIdentityWebApiAuthentication(configuration);
+        services.AddAuthorization();
         services.AddSingleton<ITelemetryInitializer, TelemetryInitializer>();
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();

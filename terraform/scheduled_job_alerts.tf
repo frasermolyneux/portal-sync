@@ -8,9 +8,9 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "scheduled_job_failure
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = data.azurerm_resource_group.rg.location
 
-  scopes              = [data.azurerm_application_insights.app_insights.id]
-  severity            = 4 # Informational
-  description         = "Alert when any scheduled job fails in the Portal Sync Function App"
+  scopes               = [data.azurerm_application_insights.app_insights.id]
+  severity             = 4 # Informational
+  description          = "Alert when any scheduled job fails in the Portal Sync Function App"
   evaluation_frequency = "PT5M"
   window_duration      = "PT5M"
 
@@ -46,9 +46,9 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "import_ban_files_not_
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = data.azurerm_resource_group.rg.location
 
-  scopes              = [data.azurerm_application_insights.app_insights.id]
-  severity            = 4 # Informational
-  description         = "Alert when ImportLatestBanFiles job hasn't run in the expected timeframe (10 minutes)"
+  scopes               = [data.azurerm_application_insights.app_insights.id]
+  severity             = 4 # Informational
+  description          = "Alert when ImportLatestBanFiles job hasn't run in the expected timeframe (10 minutes)"
   evaluation_frequency = "PT5M"
   window_duration      = "PT15M"
 
@@ -89,9 +89,9 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "generate_ban_files_no
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = data.azurerm_resource_group.rg.location
 
-  scopes              = [data.azurerm_application_insights.app_insights.id]
-  severity            = 4 # Informational
-  description         = "Alert when GenerateLatestBansFile job hasn't run in the expected timeframe (20 minutes)"
+  scopes               = [data.azurerm_application_insights.app_insights.id]
+  severity             = 4 # Informational
+  description          = "Alert when GenerateLatestBansFile job hasn't run in the expected timeframe (20 minutes)"
   evaluation_frequency = "PT10M"
   window_duration      = "PT30M"
 
@@ -132,9 +132,9 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_redirect_sync_not
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = data.azurerm_resource_group.rg.location
 
-  scopes              = [data.azurerm_application_insights.app_insights.id]
-  severity            = 4 # Informational
-  description         = "Alert when RunMapRedirectSync job hasn't run in the expected timeframe (26 hours)"
+  scopes               = [data.azurerm_application_insights.app_insights.id]
+  severity             = 4 # Informational
+  description          = "Alert when RunMapRedirectSync job hasn't run in the expected timeframe (26 hours)"
   evaluation_frequency = "PT1H"
   window_duration      = "P2D"
 
@@ -175,9 +175,9 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "user_profile_sync_not
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = data.azurerm_resource_group.rg.location
 
-  scopes              = [data.azurerm_application_insights.app_insights.id]
-  severity            = 4 # Informational
-  description         = "Alert when RunUserProfileForumsSync job hasn't run in the expected timeframe (5 hours)"
+  scopes               = [data.azurerm_application_insights.app_insights.id]
+  severity             = 4 # Informational
+  description          = "Alert when RunUserProfileForumsSync job hasn't run in the expected timeframe (5 hours)"
   evaluation_frequency = "PT1H"
   window_duration      = "PT6H"
 
@@ -261,9 +261,9 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "redirect_to_server_sy
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = data.azurerm_resource_group.rg.location
 
-  scopes              = [data.azurerm_application_insights.app_insights.id]
-  severity            = 4 # Informational
-  description         = "Alert when RunRedirectToGameServerMapSync job hasn't run in the expected timeframe (26 hours)"
+  scopes               = [data.azurerm_application_insights.app_insights.id]
+  severity             = 4 # Informational
+  description          = "Alert when RunRedirectToGameServerMapSync job hasn't run in the expected timeframe (26 hours)"
   evaluation_frequency = "PT1H"
   window_duration      = "P2D"
 
