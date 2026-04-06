@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json.Nodes;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
@@ -13,7 +14,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
     [Function(nameof(TriggerSyncMapRotation))]
     public async Task<HttpResponseData> TriggerSyncMapRotation(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "map-rotations/sync/{assignmentId}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "map-rotations/sync/{assignmentId}")] HttpRequestData req,
         [DurableClient] DurableTaskClient client,
         Guid assignmentId)
     {
@@ -37,7 +38,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
     [Function(nameof(TriggerRemoveMapRotation))]
     public async Task<HttpResponseData> TriggerRemoveMapRotation(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "map-rotations/remove/{assignmentId}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "map-rotations/remove/{assignmentId}")] HttpRequestData req,
         [DurableClient] DurableTaskClient client,
         Guid assignmentId)
     {
@@ -61,7 +62,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
     [Function(nameof(TriggerActivateMapRotation))]
     public async Task<HttpResponseData> TriggerActivateMapRotation(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "map-rotations/activate/{assignmentId}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "map-rotations/activate/{assignmentId}")] HttpRequestData req,
         [DurableClient] DurableTaskClient client,
         Guid assignmentId)
     {
@@ -85,7 +86,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
     [Function(nameof(TriggerDeactivateMapRotation))]
     public async Task<HttpResponseData> TriggerDeactivateMapRotation(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "map-rotations/deactivate/{assignmentId}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "map-rotations/deactivate/{assignmentId}")] HttpRequestData req,
         [DurableClient] DurableTaskClient client,
         Guid assignmentId)
     {
@@ -109,11 +110,11 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
     [Function(nameof(GetMapRotationOrchestrationStatus))]
     public async Task<HttpResponseData> GetMapRotationOrchestrationStatus(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "map-rotations/status/{instanceId}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "map-rotations/status/{instanceId}")] HttpRequestData req,
         [DurableClient] DurableTaskClient client,
         string instanceId)
     {
-        var metadata = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
+        var metadata = await client.GetInstanceAsync(instanceId, getInputsAndOutputs: true).ConfigureAwait(false);
 
         if (metadata is null)
         {
@@ -122,13 +123,22 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
             return notFoundResponse;
         }
 
+        // Parse custom status from serialized JSON to avoid double-encoding
+        JsonNode? customStatus = null;
+        if (!string.IsNullOrEmpty(metadata.SerializedCustomStatus))
+        {
+            try { customStatus = JsonNode.Parse(metadata.SerializedCustomStatus); }
+            catch { /* ignore parse failures */ }
+        }
+
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(new
         {
             instanceId = metadata.InstanceId,
             runtimeStatus = metadata.RuntimeStatus.ToString(),
             createdAt = metadata.CreatedAt,
-            lastUpdatedAt = metadata.LastUpdatedAt
+            lastUpdatedAt = metadata.LastUpdatedAt,
+            progress = customStatus
         }).ConfigureAwait(false);
 
         return response;

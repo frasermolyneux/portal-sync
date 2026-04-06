@@ -30,6 +30,16 @@ public record ResolveMapNamesInput(List<Guid> MapIds);
 public record WriteConfigInput(Guid GameServerId, string ConfigFilePath, string ConfigVariableName, string Value);
 public record SetRconDvarInput(Guid GameServerId, string DvarName, string Value);
 
+// Progress tracking
+public record OrchestrationProgress(
+    string Operation,
+    int TotalMaps,
+    int CompletedMaps,
+    List<MapProgress> Maps);
+
+public record MapProgress(string MapName, string Status, string? Error = null);
+// Status values: "Pending", "InProgress", "Completed", "Failed", "Skipped"
+
 // Activity outputs
 public record MapOperationResult(string MapName, bool Success, string? Error = null);
 public record RotationDetails(

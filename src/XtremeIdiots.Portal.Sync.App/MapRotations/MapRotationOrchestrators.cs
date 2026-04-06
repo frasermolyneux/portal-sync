@@ -44,19 +44,43 @@ public static class MapRotationOrchestrators
                 throw new InvalidOperationException("No maps resolved for rotation");
             }
 
+            // Initialize progress tracking
+            var mapProgress = mapNames.Select(m => new MapProgress(m, "Pending")).ToList();
+            context.SetCustomStatus(new OrchestrationProgress("Sync", mapNames.Count, 0, mapProgress));
+
             // Push each map sequentially to avoid FTP overload
             var failures = new List<string>();
-            foreach (var mapName in mapNames)
+            for (var i = 0; i < mapNames.Count; i++)
             {
-                var result = await context.CallActivityAsync<MapOperationResult>(
-                    nameof(MapRotationActivities.SyncSingleMapToServer),
-                    new SyncMapInput(details.GameServerId, mapName)).ConfigureAwait(false);
+                var mapName = mapNames[i];
+                mapProgress[i] = mapProgress[i] with { Status = "InProgress" };
+                context.SetCustomStatus(new OrchestrationProgress("Sync", mapNames.Count, i, mapProgress));
 
-                if (!result.Success)
+                try
                 {
-                    failures.Add($"{result.MapName}: {result.Error}");
-                    logger.LogWarning("Failed to sync map {MapName}: {Error}", result.MapName, result.Error);
+                    var result = await context.CallActivityAsync<MapOperationResult>(
+                        nameof(MapRotationActivities.SyncSingleMapToServer),
+                        new SyncMapInput(details.GameServerId, mapName)).ConfigureAwait(false);
+
+                    if (result.Success)
+                    {
+                        mapProgress[i] = mapProgress[i] with { Status = "Completed" };
+                    }
+                    else
+                    {
+                        mapProgress[i] = mapProgress[i] with { Status = "Failed", Error = result.Error };
+                        failures.Add($"{result.MapName}: {result.Error}");
+                        logger.LogWarning("Failed to sync map {MapName}: {Error}", result.MapName, result.Error);
+                    }
                 }
+                catch (Exception mapEx)
+                {
+                    mapProgress[i] = mapProgress[i] with { Status = "Failed", Error = mapEx.Message };
+                    failures.Add($"{mapName}: {mapEx.Message}");
+                    logger.LogWarning(mapEx, "Exception syncing map {MapName}", mapName);
+                }
+
+                context.SetCustomStatus(new OrchestrationProgress("Sync", mapNames.Count, i + 1, mapProgress));
             }
 
             if (failures.Count > 0)
@@ -150,19 +174,52 @@ public static class MapRotationOrchestrators
                 "Removing {SafeCount} maps (skipping {SharedCount} shared maps) for assignment {AssignmentId}",
                 safeToRemove.Count, mapNames.Count - safeToRemove.Count, input.AssignmentId);
 
+            // Initialize progress tracking — include all maps, mark shared ones as Skipped
+            var mapProgress = mapNames.Select(m =>
+                sharedMapNames.Contains(m, StringComparer.OrdinalIgnoreCase)
+                    ? new MapProgress(m, "Skipped")
+                    : new MapProgress(m, "Pending")).ToList();
+            var totalToProcess = safeToRemove.Count;
+            context.SetCustomStatus(new OrchestrationProgress("Remove", totalToProcess, 0, mapProgress));
+
             // Remove each safe map sequentially
             var failures = new List<string>();
-            foreach (var mapName in safeToRemove)
+            var processed = 0;
+            for (var i = 0; i < mapNames.Count; i++)
             {
-                var result = await context.CallActivityAsync<MapOperationResult>(
-                    nameof(MapRotationActivities.RemoveSingleMapFromServer),
-                    new RemoveMapInput(details.GameServerId, mapName)).ConfigureAwait(false);
+                if (mapProgress[i].Status == "Skipped")
+                    continue;
 
-                if (!result.Success)
+                var mapName = mapNames[i];
+                mapProgress[i] = mapProgress[i] with { Status = "InProgress" };
+                context.SetCustomStatus(new OrchestrationProgress("Remove", totalToProcess, processed, mapProgress));
+
+                try
                 {
-                    failures.Add($"{result.MapName}: {result.Error}");
-                    logger.LogWarning("Failed to remove map {MapName}: {Error}", result.MapName, result.Error);
+                    var result = await context.CallActivityAsync<MapOperationResult>(
+                        nameof(MapRotationActivities.RemoveSingleMapFromServer),
+                        new RemoveMapInput(details.GameServerId, mapName)).ConfigureAwait(false);
+
+                    if (result.Success)
+                    {
+                        mapProgress[i] = mapProgress[i] with { Status = "Completed" };
+                    }
+                    else
+                    {
+                        mapProgress[i] = mapProgress[i] with { Status = "Failed", Error = result.Error };
+                        failures.Add($"{result.MapName}: {result.Error}");
+                        logger.LogWarning("Failed to remove map {MapName}: {Error}", result.MapName, result.Error);
+                    }
                 }
+                catch (Exception mapEx)
+                {
+                    mapProgress[i] = mapProgress[i] with { Status = "Failed", Error = mapEx.Message };
+                    failures.Add($"{mapName}: {mapEx.Message}");
+                    logger.LogWarning(mapEx, "Exception removing map {MapName}", mapName);
+                }
+
+                processed++;
+                context.SetCustomStatus(new OrchestrationProgress("Remove", totalToProcess, processed, mapProgress));
             }
 
             if (failures.Count > 0)
@@ -247,12 +304,30 @@ public static class MapRotationOrchestrators
                 throw new InvalidOperationException("No maps resolved for rotation activation");
             }
 
+            // Initialize step progress tracking
+            var steps = new List<MapProgress>
+            {
+                new("Format rotation string", "Pending"),
+                new("Write config file", "Pending"),
+                new("Set RCON dvar", "Pending")
+            };
+            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 0, steps));
+
             // Format the rotation string
+            steps[0] = steps[0] with { Status = "InProgress" };
+            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 0, steps));
+
             var rotationString = await context.CallActivityAsync<string>(
                 nameof(MapRotationActivities.FormatRotationString),
                 new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation")).ConfigureAwait(false);
 
+            steps[0] = steps[0] with { Status = "Completed" };
+            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 1, steps));
+
             // Write config variable
+            steps[1] = steps[1] with { Status = "InProgress" };
+            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 1, steps));
+
             var configResult = await context.CallActivityAsync<MapOperationResult>(
                 nameof(MapRotationActivities.WriteConfigVariable),
                 new WriteConfigInput(
@@ -261,13 +336,26 @@ public static class MapRotationOrchestrators
                     details.ConfigVariableName ?? "sv_maprotation",
                     rotationString)).ConfigureAwait(false);
 
+            steps[1] = configResult.Success
+                ? steps[1] with { Status = "Completed" }
+                : steps[1] with { Status = "Failed", Error = configResult.Error };
+            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 2, steps));
+
             // Set RCON dvar
+            steps[2] = steps[2] with { Status = "InProgress" };
+            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 2, steps));
+
             var rconResult = await context.CallActivityAsync<MapOperationResult>(
                 nameof(MapRotationActivities.SetRconDvar),
                 new SetRconDvarInput(
                     details.GameServerId,
                     details.ConfigVariableName ?? "sv_maprotation",
                     rotationString)).ConfigureAwait(false);
+
+            steps[2] = rconResult.Success
+                ? steps[2] with { Status = "Completed" }
+                : steps[2] with { Status = "Failed", Error = rconResult.Error };
+            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 3, steps));
 
             // Both must succeed for activation to be considered complete
             if (!configResult.Success || !rconResult.Success)
@@ -345,7 +433,18 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.GetRotationDetails),
                 new GetRotationDetailsInput(input.AssignmentId)).ConfigureAwait(false);
 
+            // Initialize step progress tracking
+            var steps = new List<MapProgress>
+            {
+                new("Write config file", "Pending"),
+                new("Set RCON dvar", "Pending")
+            };
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 0, steps));
+
             // Write empty value to config variable
+            steps[0] = steps[0] with { Status = "InProgress" };
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 0, steps));
+
             var configResult = await context.CallActivityAsync<MapOperationResult>(
                 nameof(MapRotationActivities.WriteConfigVariable),
                 new WriteConfigInput(
@@ -354,13 +453,26 @@ public static class MapRotationOrchestrators
                     details.ConfigVariableName ?? "sv_maprotation",
                     "")).ConfigureAwait(false);
 
+            steps[0] = configResult.Success
+                ? steps[0] with { Status = "Completed" }
+                : steps[0] with { Status = "Failed", Error = configResult.Error };
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 1, steps));
+
             // Set RCON dvar to empty
+            steps[1] = steps[1] with { Status = "InProgress" };
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 1, steps));
+
             var rconResult = await context.CallActivityAsync<MapOperationResult>(
                 nameof(MapRotationActivities.SetRconDvar),
                 new SetRconDvarInput(
                     details.GameServerId,
                     details.ConfigVariableName ?? "sv_maprotation",
                     "")).ConfigureAwait(false);
+
+            steps[1] = rconResult.Success
+                ? steps[1] with { Status = "Completed" }
+                : steps[1] with { Status = "Failed", Error = rconResult.Error };
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 2, steps));
 
             // Both must succeed for deactivation to be considered complete
             if (!configResult.Success || !rconResult.Success)
