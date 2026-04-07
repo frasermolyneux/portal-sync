@@ -29,6 +29,13 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
         }
 
+        // Purge any previous terminal instance so the ID can be reused
+        if (existing is not null)
+        {
+            logger.LogInformation("Purging previous orchestration {InstanceId} in state {RuntimeStatus}", instanceId, existing.RuntimeStatus);
+            await client.PurgeInstanceAsync(instanceId).ConfigureAwait(false);
+        }
+
         await client.ScheduleNewOrchestrationInstanceAsync(
             nameof(MapRotationOrchestrators.SyncMapRotationOrchestrator),
             new SyncOrchestrationInput(assignmentId),
@@ -51,6 +58,12 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         {
             logger.LogWarning("RemoveMapRotation already running for assignment {AssignmentId}, instance {InstanceId}", assignmentId, instanceId);
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+        }
+
+        if (existing is not null)
+        {
+            logger.LogInformation("Purging previous orchestration {InstanceId} in state {RuntimeStatus}", instanceId, existing.RuntimeStatus);
+            await client.PurgeInstanceAsync(instanceId).ConfigureAwait(false);
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
@@ -77,6 +90,12 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
         }
 
+        if (existing is not null)
+        {
+            logger.LogInformation("Purging previous orchestration {InstanceId} in state {RuntimeStatus}", instanceId, existing.RuntimeStatus);
+            await client.PurgeInstanceAsync(instanceId).ConfigureAwait(false);
+        }
+
         await client.ScheduleNewOrchestrationInstanceAsync(
             nameof(MapRotationOrchestrators.ActivateMapRotationOrchestrator),
             new ActivateOrchestrationInput(assignmentId),
@@ -99,6 +118,12 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         {
             logger.LogWarning("DeactivateMapRotation already running for assignment {AssignmentId}, instance {InstanceId}", assignmentId, instanceId);
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+        }
+
+        if (existing is not null)
+        {
+            logger.LogInformation("Purging previous orchestration {InstanceId} in state {RuntimeStatus}", instanceId, existing.RuntimeStatus);
+            await client.PurgeInstanceAsync(instanceId).ConfigureAwait(false);
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
