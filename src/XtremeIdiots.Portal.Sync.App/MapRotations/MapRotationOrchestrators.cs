@@ -20,24 +20,24 @@ public static class MapRotationOrchestrators
         // Record operation
         var operationId = await context.CallActivityAsync<Guid>(
             nameof(MapRotationActivities.RecordOperation),
-            new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Sync, instanceId)).ConfigureAwait(false);
+            new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Sync, instanceId));
 
         try
         {
             // Update assignment status to Syncing
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
-                new UpdateStatusInput(input.AssignmentId, DeploymentState: DeploymentState.Syncing)).ConfigureAwait(false);
+                new UpdateStatusInput(input.AssignmentId, DeploymentState: DeploymentState.Syncing));
 
             // Get rotation details
             var details = await context.CallActivityAsync<RotationDetails>(
                 nameof(MapRotationActivities.GetRotationDetails),
-                new GetRotationDetailsInput(input.AssignmentId)).ConfigureAwait(false);
+                new GetRotationDetailsInput(input.AssignmentId));
 
             // Resolve map IDs to names
             var mapNames = await context.CallActivityAsync<List<string>>(
                 nameof(MapRotationActivities.ResolveMapNames),
-                new ResolveMapNamesInput(details.MapIds)).ConfigureAwait(false);
+                new ResolveMapNamesInput(details.MapIds));
 
             if (mapNames.Count == 0)
             {
@@ -60,7 +60,7 @@ public static class MapRotationOrchestrators
                 {
                     var result = await context.CallActivityAsync<MapOperationResult>(
                         nameof(MapRotationActivities.SyncSingleMapToServer),
-                        new SyncMapInput(details.GameServerId, mapName)).ConfigureAwait(false);
+                        new SyncMapInput(details.GameServerId, mapName));
 
                     if (result.Success)
                     {
@@ -92,11 +92,11 @@ public static class MapRotationOrchestrators
                     new UpdateStatusInput(input.AssignmentId,
                         DeploymentState: DeploymentState.Failed,
                         LastError: errorMessage,
-                        LastErrorAt: context.CurrentUtcDateTime)).ConfigureAwait(false);
+                        LastErrorAt: context.CurrentUtcDateTime));
 
                 await context.CallActivityAsync(
                     nameof(MapRotationActivities.CompleteOperation),
-                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage)).ConfigureAwait(false);
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage));
 
                 return;
             }
@@ -106,11 +106,11 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
                 new UpdateStatusInput(input.AssignmentId,
                     DeploymentState: DeploymentState.Synced,
-                    DeployedVersion: details.RotationVersion)).ConfigureAwait(false);
+                    DeployedVersion: details.RotationVersion));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded)).ConfigureAwait(false);
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded));
         }
         catch (Exception ex)
         {
@@ -121,11 +121,11 @@ public static class MapRotationOrchestrators
                 new UpdateStatusInput(input.AssignmentId,
                     DeploymentState: DeploymentState.Failed,
                     LastError: ex.Message,
-                    LastErrorAt: context.CurrentUtcDateTime)).ConfigureAwait(false);
+                    LastErrorAt: context.CurrentUtcDateTime));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message)).ConfigureAwait(false);
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message));
         }
     }
 
@@ -141,29 +141,29 @@ public static class MapRotationOrchestrators
 
         var operationId = await context.CallActivityAsync<Guid>(
             nameof(MapRotationActivities.RecordOperation),
-            new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Remove, instanceId)).ConfigureAwait(false);
+            new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Remove, instanceId));
 
         try
         {
             // Update assignment status to Removing
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
-                new UpdateStatusInput(input.AssignmentId, DeploymentState: DeploymentState.Removing)).ConfigureAwait(false);
+                new UpdateStatusInput(input.AssignmentId, DeploymentState: DeploymentState.Removing));
 
             // Get rotation details
             var details = await context.CallActivityAsync<RotationDetails>(
                 nameof(MapRotationActivities.GetRotationDetails),
-                new GetRotationDetailsInput(input.AssignmentId)).ConfigureAwait(false);
+                new GetRotationDetailsInput(input.AssignmentId));
 
             // Resolve map IDs to names
             var mapNames = await context.CallActivityAsync<List<string>>(
                 nameof(MapRotationActivities.ResolveMapNames),
-                new ResolveMapNamesInput(details.MapIds)).ConfigureAwait(false);
+                new ResolveMapNamesInput(details.MapIds));
 
             // Get maps that are still needed by other active rotations on the same server
             var sharedMapNames = await context.CallActivityAsync<List<string>>(
                 nameof(MapRotationActivities.GetMapsInOtherActiveRotations),
-                new GetSharedMapsInput(details.GameServerId, input.AssignmentId)).ConfigureAwait(false);
+                new GetSharedMapsInput(details.GameServerId, input.AssignmentId));
 
             // Only remove maps that are NOT used by other active rotations
             var safeToRemove = mapNames
@@ -198,7 +198,7 @@ public static class MapRotationOrchestrators
                 {
                     var result = await context.CallActivityAsync<MapOperationResult>(
                         nameof(MapRotationActivities.RemoveSingleMapFromServer),
-                        new RemoveMapInput(details.GameServerId, mapName)).ConfigureAwait(false);
+                        new RemoveMapInput(details.GameServerId, mapName));
 
                     if (result.Success)
                     {
@@ -231,11 +231,11 @@ public static class MapRotationOrchestrators
                     new UpdateStatusInput(input.AssignmentId,
                         DeploymentState: DeploymentState.Failed,
                         LastError: errorMessage,
-                        LastErrorAt: context.CurrentUtcDateTime)).ConfigureAwait(false);
+                        LastErrorAt: context.CurrentUtcDateTime));
 
                 await context.CallActivityAsync(
                     nameof(MapRotationActivities.CompleteOperation),
-                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage)).ConfigureAwait(false);
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage));
 
                 return;
             }
@@ -245,11 +245,11 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
                 new UpdateStatusInput(input.AssignmentId,
                     DeploymentState: DeploymentState.Removed,
-                    UnassignedAt: context.CurrentUtcDateTime)).ConfigureAwait(false);
+                    UnassignedAt: context.CurrentUtcDateTime));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded)).ConfigureAwait(false);
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded));
         }
         catch (Exception ex)
         {
@@ -260,11 +260,11 @@ public static class MapRotationOrchestrators
                 new UpdateStatusInput(input.AssignmentId,
                     DeploymentState: DeploymentState.Failed,
                     LastError: ex.Message,
-                    LastErrorAt: context.CurrentUtcDateTime)).ConfigureAwait(false);
+                    LastErrorAt: context.CurrentUtcDateTime));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message)).ConfigureAwait(false);
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message));
         }
     }
 
@@ -280,24 +280,24 @@ public static class MapRotationOrchestrators
 
         var operationId = await context.CallActivityAsync<Guid>(
             nameof(MapRotationActivities.RecordOperation),
-            new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Activate, instanceId)).ConfigureAwait(false);
+            new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Activate, instanceId));
 
         try
         {
             // Update activation state to Activating
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
-                new UpdateStatusInput(input.AssignmentId, ActivationState: ActivationState.Activating)).ConfigureAwait(false);
+                new UpdateStatusInput(input.AssignmentId, ActivationState: ActivationState.Activating));
 
             // Get rotation details
             var details = await context.CallActivityAsync<RotationDetails>(
                 nameof(MapRotationActivities.GetRotationDetails),
-                new GetRotationDetailsInput(input.AssignmentId)).ConfigureAwait(false);
+                new GetRotationDetailsInput(input.AssignmentId));
 
             // Resolve map IDs to names
             var mapNames = await context.CallActivityAsync<List<string>>(
                 nameof(MapRotationActivities.ResolveMapNames),
-                new ResolveMapNamesInput(details.MapIds)).ConfigureAwait(false);
+                new ResolveMapNamesInput(details.MapIds));
 
             if (mapNames.Count == 0)
             {
@@ -319,7 +319,7 @@ public static class MapRotationOrchestrators
 
             var rotationString = await context.CallActivityAsync<string>(
                 nameof(MapRotationActivities.FormatRotationString),
-                new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation")).ConfigureAwait(false);
+                new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation"));
 
             steps[0] = steps[0] with { Status = "Completed" };
             context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 1, steps));
@@ -334,7 +334,7 @@ public static class MapRotationOrchestrators
                     details.GameServerId,
                     details.ConfigFilePath ?? "",
                     details.ConfigVariableName ?? "sv_maprotation",
-                    rotationString)).ConfigureAwait(false);
+                    rotationString));
 
             steps[1] = configResult.Success
                 ? steps[1] with { Status = "Completed" }
@@ -350,7 +350,7 @@ public static class MapRotationOrchestrators
                 new SetRconDvarInput(
                     details.GameServerId,
                     details.ConfigVariableName ?? "sv_maprotation",
-                    rotationString)).ConfigureAwait(false);
+                    rotationString));
 
             steps[2] = rconResult.Success
                 ? steps[2] with { Status = "Completed" }
@@ -370,11 +370,11 @@ public static class MapRotationOrchestrators
                     new UpdateStatusInput(input.AssignmentId,
                         ActivationState: ActivationState.Failed,
                         LastError: errorMessage,
-                        LastErrorAt: context.CurrentUtcDateTime)).ConfigureAwait(false);
+                        LastErrorAt: context.CurrentUtcDateTime));
 
                 await context.CallActivityAsync(
                     nameof(MapRotationActivities.CompleteOperation),
-                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage)).ConfigureAwait(false);
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage));
 
                 return;
             }
@@ -384,11 +384,11 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
                 new UpdateStatusInput(input.AssignmentId,
                     ActivationState: ActivationState.Active,
-                    ActivatedVersion: details.RotationVersion)).ConfigureAwait(false);
+                    ActivatedVersion: details.RotationVersion));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded)).ConfigureAwait(false);
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded));
         }
         catch (Exception ex)
         {
@@ -399,11 +399,11 @@ public static class MapRotationOrchestrators
                 new UpdateStatusInput(input.AssignmentId,
                     ActivationState: ActivationState.Failed,
                     LastError: ex.Message,
-                    LastErrorAt: context.CurrentUtcDateTime)).ConfigureAwait(false);
+                    LastErrorAt: context.CurrentUtcDateTime));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message)).ConfigureAwait(false);
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message));
         }
     }
 
@@ -419,19 +419,19 @@ public static class MapRotationOrchestrators
 
         var operationId = await context.CallActivityAsync<Guid>(
             nameof(MapRotationActivities.RecordOperation),
-            new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Deactivate, instanceId)).ConfigureAwait(false);
+            new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Deactivate, instanceId));
 
         try
         {
             // Update activation state to Deactivating
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
-                new UpdateStatusInput(input.AssignmentId, ActivationState: ActivationState.Deactivating)).ConfigureAwait(false);
+                new UpdateStatusInput(input.AssignmentId, ActivationState: ActivationState.Deactivating));
 
             // Get rotation details
             var details = await context.CallActivityAsync<RotationDetails>(
                 nameof(MapRotationActivities.GetRotationDetails),
-                new GetRotationDetailsInput(input.AssignmentId)).ConfigureAwait(false);
+                new GetRotationDetailsInput(input.AssignmentId));
 
             // Initialize step progress tracking
             var steps = new List<MapProgress>
@@ -451,7 +451,7 @@ public static class MapRotationOrchestrators
                     details.GameServerId,
                     details.ConfigFilePath ?? "",
                     details.ConfigVariableName ?? "sv_maprotation",
-                    "")).ConfigureAwait(false);
+                    ""));
 
             steps[0] = configResult.Success
                 ? steps[0] with { Status = "Completed" }
@@ -467,7 +467,7 @@ public static class MapRotationOrchestrators
                 new SetRconDvarInput(
                     details.GameServerId,
                     details.ConfigVariableName ?? "sv_maprotation",
-                    "")).ConfigureAwait(false);
+                    ""));
 
             steps[1] = rconResult.Success
                 ? steps[1] with { Status = "Completed" }
@@ -487,11 +487,11 @@ public static class MapRotationOrchestrators
                     new UpdateStatusInput(input.AssignmentId,
                         ActivationState: ActivationState.Failed,
                         LastError: errorMessage,
-                        LastErrorAt: context.CurrentUtcDateTime)).ConfigureAwait(false);
+                        LastErrorAt: context.CurrentUtcDateTime));
 
                 await context.CallActivityAsync(
                     nameof(MapRotationActivities.CompleteOperation),
-                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage)).ConfigureAwait(false);
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage));
 
                 return;
             }
@@ -499,11 +499,11 @@ public static class MapRotationOrchestrators
             // Update activation state to Inactive
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
-                new UpdateStatusInput(input.AssignmentId, ActivationState: ActivationState.Inactive)).ConfigureAwait(false);
+                new UpdateStatusInput(input.AssignmentId, ActivationState: ActivationState.Inactive));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded)).ConfigureAwait(false);
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded));
         }
         catch (Exception ex)
         {
@@ -514,11 +514,11 @@ public static class MapRotationOrchestrators
                 new UpdateStatusInput(input.AssignmentId,
                     ActivationState: ActivationState.Failed,
                     LastError: ex.Message,
-                    LastErrorAt: context.CurrentUtcDateTime)).ConfigureAwait(false);
+                    LastErrorAt: context.CurrentUtcDateTime));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message)).ConfigureAwait(false);
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message));
         }
     }
 }
