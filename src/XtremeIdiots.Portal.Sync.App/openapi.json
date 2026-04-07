@@ -124,6 +124,29 @@
         }
       }
     },
+    "/api/map-rotations/terminate/{instanceId}": {
+      "post": {
+        "operationId": "TerminateMapRotationOrchestration",
+        "parameters": [
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Orchestration instance not found"
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "HealthCheck",
