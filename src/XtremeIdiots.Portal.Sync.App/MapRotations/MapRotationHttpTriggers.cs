@@ -145,4 +145,34 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
         return response;
     }
+
+    [Function(nameof(TerminateMapRotationOrchestration))]
+    public async Task<HttpResponseData> TerminateMapRotationOrchestration(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "map-rotations/terminate/{instanceId}")] HttpRequestData req,
+        [DurableClient] DurableTaskClient client,
+        string instanceId)
+    {
+        var metadata = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
+
+        if (metadata is null)
+        {
+            var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
+            await notFoundResponse.WriteAsJsonAsync(new { error = "Orchestration instance not found", instanceId }).ConfigureAwait(false);
+            return notFoundResponse;
+        }
+
+        if (metadata.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        {
+            await client.TerminateInstanceAsync(instanceId, "Manually cancelled by user via portal").ConfigureAwait(false);
+            logger.LogInformation("Terminated orchestration {InstanceId} (was {RuntimeStatus})", instanceId, metadata.RuntimeStatus);
+        }
+        else
+        {
+            logger.LogInformation("Orchestration {InstanceId} already in terminal state {RuntimeStatus}, no termination needed", instanceId, metadata.RuntimeStatus);
+        }
+
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(new { instanceId, terminated = true, previousStatus = metadata.RuntimeStatus.ToString() }).ConfigureAwait(false);
+        return response;
+    }
 }
