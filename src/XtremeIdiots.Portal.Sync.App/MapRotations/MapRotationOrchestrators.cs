@@ -101,12 +101,14 @@ public static class MapRotationOrchestrators
                 return;
             }
 
-            // Success — update assignment to Synced with version
+            // Success — update assignment to Synced with version, clear any previous error
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
                 new UpdateStatusInput(input.AssignmentId,
                     DeploymentState: DeploymentState.Synced,
-                    DeployedVersion: details.RotationVersion));
+                    DeployedVersion: details.RotationVersion,
+                    LastError: "",
+                    LastErrorAt: null));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
@@ -245,7 +247,9 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
                 new UpdateStatusInput(input.AssignmentId,
                     DeploymentState: DeploymentState.Removed,
-                    UnassignedAt: context.CurrentUtcDateTime));
+                    UnassignedAt: context.CurrentUtcDateTime,
+                    LastError: "",
+                    LastErrorAt: null));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
@@ -384,7 +388,9 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
                 new UpdateStatusInput(input.AssignmentId,
                     ActivationState: ActivationState.Active,
-                    ActivatedVersion: details.RotationVersion));
+                    ActivatedVersion: details.RotationVersion,
+                    LastError: "",
+                    LastErrorAt: null));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
@@ -499,7 +505,10 @@ public static class MapRotationOrchestrators
             // Update activation state to Inactive
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
-                new UpdateStatusInput(input.AssignmentId, ActivationState: ActivationState.Inactive));
+                new UpdateStatusInput(input.AssignmentId,
+                    ActivationState: ActivationState.Inactive,
+                    LastError: "",
+                    LastErrorAt: null));
 
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.CompleteOperation),
