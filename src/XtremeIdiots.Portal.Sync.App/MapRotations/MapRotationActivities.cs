@@ -55,22 +55,13 @@ public class MapRotationActivities(
     public async Task<List<string>> GetLoadedMapsFromServer(
         [ActivityTrigger] GetLoadedMapsInput input)
     {
-        try
+        var result = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(input.GameServerId).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Result?.Data?.Items is null)
         {
-            var result = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(input.GameServerId).ConfigureAwait(false);
-            if (!result.IsSuccess || result.Result?.Data?.Items is null)
-            {
-                logger.LogWarning("Failed to get loaded maps from server {GameServerId}", input.GameServerId);
-                return [];
-            }
+            throw new InvalidOperationException($"Failed to get loaded maps from server {input.GameServerId}. Cannot verify map presence.");
+        }
 
-            return result.Result.Data.Items.Select(m => m.Name).ToList();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to get loaded maps from server {GameServerId}", input.GameServerId);
-            return [];
-        }
+        return result.Result.Data.Items.Select(m => m.Name).ToList();
     }
 
     [Function(nameof(GetMapsInOtherActiveRotations))]

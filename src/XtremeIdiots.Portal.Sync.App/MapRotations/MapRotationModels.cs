@@ -7,6 +7,7 @@ public record SyncOrchestrationInput(Guid AssignmentId);
 public record RemoveOrchestrationInput(Guid AssignmentId);
 public record ActivateOrchestrationInput(Guid AssignmentId);
 public record DeactivateOrchestrationInput(Guid AssignmentId);
+public record VerifyOrchestrationInput(Guid AssignmentId);
 
 // Activity inputs
 public record SyncMapInput(Guid GameServerId, string MapName);

@@ -135,6 +135,36 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
     }
 
+    [Function(nameof(TriggerVerifyMapRotation))]
+    public async Task<HttpResponseData> TriggerVerifyMapRotation(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "map-rotations/verify/{assignmentId}")] HttpRequestData req,
+        [DurableClient] DurableTaskClient client,
+        Guid assignmentId)
+    {
+        var instanceId = $"maprot-verify-{assignmentId}";
+
+        var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
+        if (existing is not null && existing.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        {
+            logger.LogWarning("VerifyMapRotation already running for assignment {AssignmentId}, instance {InstanceId}", assignmentId, instanceId);
+            return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+        }
+
+        if (existing is not null)
+        {
+            logger.LogInformation("Purging previous orchestration {InstanceId} in state {RuntimeStatus}", instanceId, existing.RuntimeStatus);
+            await client.PurgeInstanceAsync(instanceId).ConfigureAwait(false);
+        }
+
+        await client.ScheduleNewOrchestrationInstanceAsync(
+            nameof(MapRotationOrchestrators.VerifyMapRotationOrchestrator),
+            new VerifyOrchestrationInput(assignmentId),
+            new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
+
+        logger.LogInformation("Started VerifyMapRotation orchestration {InstanceId} for assignment {AssignmentId}", instanceId, assignmentId);
+        return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+    }
+
     [Function(nameof(GetMapRotationOrchestrationStatus))]
     public async Task<HttpResponseData> GetMapRotationOrchestrationStatus(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "map-rotations/status/{instanceId}")] HttpRequestData req,

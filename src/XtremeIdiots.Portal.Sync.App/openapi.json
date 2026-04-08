@@ -147,6 +147,27 @@
         }
       }
     },
+    "/api/map-rotations/verify/{assignmentId}": {
+      "post": {
+        "operationId": "TriggerVerifyMapRotation",
+        "parameters": [
+          {
+            "name": "assignmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "HealthCheck",

@@ -530,4 +530,83 @@ public static class MapRotationOrchestrators
                 new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message));
         }
     }
+
+    [Function(nameof(VerifyMapRotationOrchestrator))]
+    public static async Task VerifyMapRotationOrchestrator(
+        [OrchestrationTrigger] TaskOrchestrationContext context)
+    {
+        var input = context.GetInput<VerifyOrchestrationInput>()
+            ?? throw new InvalidOperationException("VerifyOrchestrationInput is required");
+
+        var logger = context.CreateReplaySafeLogger(nameof(VerifyMapRotationOrchestrator));
+        var instanceId = context.InstanceId;
+
+        var operationId = await context.CallActivityAsync<Guid>(
+            nameof(MapRotationActivities.RecordOperation),
+            new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Verify, instanceId));
+
+        try
+        {
+            // Get rotation details
+            var details = await context.CallActivityAsync<RotationDetails>(
+                nameof(MapRotationActivities.GetRotationDetails),
+                new GetRotationDetailsInput(input.AssignmentId));
+
+            // Resolve map IDs to names
+            var mapNames = await context.CallActivityAsync<List<string>>(
+                nameof(MapRotationActivities.ResolveMapNames),
+                new ResolveMapNamesInput(details.MapIds));
+
+            // Initialize progress
+            var mapProgress = mapNames.Select(m => new MapProgress(m, "Pending")).ToList();
+            context.SetCustomStatus(new OrchestrationProgress("Verify", mapNames.Count, 0, mapProgress));
+
+            // Get maps currently loaded on server via FTP
+            var loadedMaps = await context.CallActivityAsync<List<string>>(
+                nameof(MapRotationActivities.GetLoadedMapsFromServer),
+                new GetLoadedMapsInput(details.GameServerId));
+
+            // Check each map against loaded maps
+            var missing = new List<string>();
+            for (var i = 0; i < mapNames.Count; i++)
+            {
+                var mapName = mapNames[i];
+                var isPresent = loadedMaps.Any(m => string.Equals(m, mapName, StringComparison.OrdinalIgnoreCase));
+
+                mapProgress[i] = mapProgress[i] with
+                {
+                    Status = isPresent ? "Completed" : "Failed",
+                    Error = isPresent ? null : "Not found on server"
+                };
+
+                if (!isPresent)
+                    missing.Add(mapName);
+
+                context.SetCustomStatus(new OrchestrationProgress("Verify", mapNames.Count, i + 1, mapProgress));
+            }
+
+            if (missing.Count > 0)
+            {
+                var errorMessage = $"Verification found {missing.Count}/{mapNames.Count} maps missing from server: {string.Join(", ", missing)}";
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage));
+
+                return;
+            }
+
+            await context.CallActivityAsync(
+                nameof(MapRotationActivities.CompleteOperation),
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "VerifyMapRotation orchestration failed for assignment {AssignmentId}", input.AssignmentId);
+
+            await context.CallActivityAsync(
+                nameof(MapRotationActivities.CompleteOperation),
+                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message));
+        }
+    }
 }
