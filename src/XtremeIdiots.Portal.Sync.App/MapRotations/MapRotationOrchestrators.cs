@@ -309,28 +309,34 @@ public static class MapRotationOrchestrators
             }
 
             // Initialize step progress tracking
+            var isAacpVariable = (details.ConfigVariableName ?? "").StartsWith("scr_aacp_maps_", StringComparison.OrdinalIgnoreCase);
             var steps = new List<MapProgress>
             {
                 new("Format rotation string", "Pending"),
                 new("Write config file", "Pending"),
                 new("Set RCON dvar", "Pending")
             };
-            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 0, steps));
+            if (!isAacpVariable)
+            {
+                steps.Add(new("Set g_gametype dvar", "Pending"));
+            }
+            var totalSteps = steps.Count;
+            context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 0, steps));
 
             // Format the rotation string
             steps[0] = steps[0] with { Status = "InProgress" };
-            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 0, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 0, steps));
 
             var rotationString = await context.CallActivityAsync<string>(
                 nameof(MapRotationActivities.FormatRotationString),
                 new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation"));
 
             steps[0] = steps[0] with { Status = "Completed" };
-            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 1, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 1, steps));
 
             // Write config variable
             steps[1] = steps[1] with { Status = "InProgress" };
-            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 1, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 1, steps));
 
             var configResult = await context.CallActivityAsync<MapOperationResult>(
                 nameof(MapRotationActivities.WriteConfigVariable),
@@ -343,11 +349,11 @@ public static class MapRotationOrchestrators
             steps[1] = configResult.Success
                 ? steps[1] with { Status = "Completed" }
                 : steps[1] with { Status = "Failed", Error = configResult.Error };
-            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 2, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 2, steps));
 
             // Set RCON dvar
             steps[2] = steps[2] with { Status = "InProgress" };
-            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 2, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 2, steps));
 
             var rconResult = await context.CallActivityAsync<MapOperationResult>(
                 nameof(MapRotationActivities.SetRconDvar),
@@ -359,7 +365,30 @@ public static class MapRotationOrchestrators
             steps[2] = rconResult.Success
                 ? steps[2] with { Status = "Completed" }
                 : steps[2] with { Status = "Failed", Error = rconResult.Error };
-            context.SetCustomStatus(new OrchestrationProgress("Activate", 3, 3, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 3, steps));
+
+            // Set g_gametype via RCON (best-effort, non-blocking for non-AACP variables)
+            if (!isAacpVariable && configResult.Success && rconResult.Success)
+            {
+                steps[3] = steps[3] with { Status = "InProgress" };
+                context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 3, steps));
+
+                var gameMode = details.GameMode ?? "war";
+                var gametypeResult = await context.CallActivityAsync<MapOperationResult>(
+                    nameof(MapRotationActivities.SetRconDvar),
+                    new SetRconDvarInput(details.GameServerId, "g_gametype", gameMode));
+
+                steps[3] = gametypeResult.Success
+                    ? steps[3] with { Status = "Completed" }
+                    : steps[3] with { Status = "Failed", Error = gametypeResult.Error };
+                context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, totalSteps, steps));
+
+                if (!gametypeResult.Success)
+                {
+                    logger.LogWarning("Failed to set g_gametype to {GameMode} for assignment {AssignmentId}: {Error}",
+                        gameMode, input.AssignmentId, gametypeResult.Error);
+                }
+            }
 
             // Both must succeed for activation to be considered complete
             if (!configResult.Success || !rconResult.Success)
