@@ -27,9 +27,52 @@ public record RecordOperationInput(Guid AssignmentId, AssignmentOperationType Op
 public record CompleteOperationInput(Guid OperationId, AssignmentOperationStatus Status, string? Error = null);
 public record GetRotationDetailsInput(Guid AssignmentId);
 public record FormatRotationInput(List<string> MapNames, string GameMode, string ConfigVariableName);
+public record FormatRotationOutput(List<RotationStringPart> Parts);
+public record RotationStringPart(string VariableName, string Value);
 public record ResolveMapNamesInput(List<Guid> MapIds);
 public record WriteConfigInput(Guid GameServerId, string ConfigFilePath, string ConfigVariableName, string Value);
 public record SetRconDvarInput(Guid GameServerId, string DvarName, string Value);
+
+public static class RotationVariableNaming
+{
+    /// <summary>
+    /// Parses a variable name into its root prefix and starting numeric suffix.
+    /// E.g., "scr_aacp_maps_2" → ("scr_aacp_maps_", 2), "sv_maprotation" → ("sv_maprotation_", 1)
+    /// </summary>
+    public static (string Root, int StartIndex) ParseVariableNameBase(string variableName)
+    {
+        var i = variableName.Length - 1;
+        while (i >= 0 && char.IsDigit(variableName[i]))
+        {
+            i--;
+        }
+
+        if (i < variableName.Length - 1 && int.TryParse(variableName.AsSpan(i + 1), out var startIndex))
+        {
+            return (variableName[..(i + 1)], startIndex);
+        }
+
+        return (variableName + "_", 1);
+    }
+
+    /// <summary>
+    /// Generates overflow variable names for cleanup, starting after the last used index.
+    /// </summary>
+    public static IEnumerable<string> GetOverflowVariableNames(string baseVariable, HashSet<string> usedNames, int maxOverflow = 9)
+    {
+        var (root, startIndex) = ParseVariableNameBase(baseVariable);
+
+        for (var idx = startIndex; idx <= startIndex + maxOverflow; idx++)
+        {
+            var varName = $"{root}{idx}";
+
+            if (!usedNames.Contains(varName))
+            {
+                yield return varName;
+            }
+        }
+    }
+}
 
 // Progress tracking
 public record OrchestrationProgress(

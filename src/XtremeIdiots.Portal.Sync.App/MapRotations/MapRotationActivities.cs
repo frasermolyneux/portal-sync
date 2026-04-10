@@ -233,26 +233,106 @@ public class MapRotationActivities(
         return mapNames;
     }
 
+    private const int MaxVariableLength = 1024;
+
     [Function(nameof(FormatRotationString))]
-    public Task<string> FormatRotationString(
+    public Task<FormatRotationOutput> FormatRotationString(
         [ActivityTrigger] FormatRotationInput input)
     {
-        string result;
+        var isAacp = input.ConfigVariableName.StartsWith("scr_aacp_maps_", StringComparison.OrdinalIgnoreCase);
 
-        if (input.ConfigVariableName.StartsWith("scr_aacp_maps_", StringComparison.OrdinalIgnoreCase))
+        if (isAacp)
         {
-            // Semicolon-separated format
-            result = string.Join(";", input.MapNames);
-        }
-        else
-        {
-            // Standard rotation format: gametype {gameMode} map {map1} map {map2} ...
-            var mapEntries = string.Join(" ", input.MapNames.Select(m => $"map {m}"));
-            result = $"gametype {input.GameMode} {mapEntries}";
+            return Task.FromResult(FormatAacpRotation(input.MapNames, input.ConfigVariableName));
         }
 
-        return Task.FromResult(result);
+        return Task.FromResult(FormatStandardRotation(input.MapNames, input.GameMode, input.ConfigVariableName));
     }
+
+    private static FormatRotationOutput FormatStandardRotation(List<string> mapNames, string gameMode, string baseVariable)
+    {
+        if (mapNames.Count == 0)
+        {
+            return new FormatRotationOutput([new RotationStringPart(baseVariable, $"gametype {gameMode}")]);
+        }
+
+        var prefix = $"gametype {gameMode} ";
+        var mapEntries = mapNames.Select(m => $"map {m}").ToList();
+
+        var parts = new List<RotationStringPart>();
+        var currentChunk = prefix;
+        var currentVarName = baseVariable;
+        var suffixIndex = 1;
+
+        foreach (var entry in mapEntries)
+        {
+            var candidate = currentChunk.Length == 0 ? entry : currentChunk + entry;
+
+            if (candidate.Length > MaxVariableLength && currentChunk.TrimEnd().Length > 0 && currentChunk != prefix)
+            {
+                // Current chunk is full, emit it and start a new one
+                parts.Add(new RotationStringPart(currentVarName, currentChunk.TrimEnd()));
+                currentVarName = $"{baseVariable}_{suffixIndex}";
+                suffixIndex++;
+                currentChunk = entry + " ";
+            }
+            else
+            {
+                // Entry fits, or chunk is empty/prefix-only (must accept to avoid infinite loop)
+                currentChunk = candidate + " ";
+            }
+        }
+
+        // Emit final chunk
+        if (currentChunk.Trim().Length > 0)
+        {
+            parts.Add(new RotationStringPart(currentVarName, currentChunk.TrimEnd()));
+        }
+
+        return new FormatRotationOutput(parts);
+    }
+
+    private static FormatRotationOutput FormatAacpRotation(List<string> mapNames, string baseVariable)
+    {
+        if (mapNames.Count == 0)
+        {
+            return new FormatRotationOutput([new RotationStringPart(baseVariable, "")]);
+        }
+
+        // Parse the base variable to determine the suffix series (e.g., scr_aacp_maps_1 -> root=scr_aacp_maps_, start=1)
+        var (root, startIndex) = ParseVariableNameBase(baseVariable);
+
+        var parts = new List<RotationStringPart>();
+        var currentChunk = "";
+        var currentIndex = startIndex;
+
+        foreach (var mapName in mapNames)
+        {
+            var candidate = currentChunk.Length == 0 ? mapName : $"{currentChunk};{mapName}";
+
+            if (candidate.Length > MaxVariableLength && currentChunk.Length > 0)
+            {
+                parts.Add(new RotationStringPart($"{root}{currentIndex}", currentChunk));
+                currentIndex++;
+                currentChunk = mapName;
+            }
+            else
+            {
+                // Entry fits, or chunk is empty (must accept to avoid infinite loop on oversized single entry)
+                currentChunk = candidate;
+            }
+        }
+
+        if (currentChunk.Length > 0)
+        {
+            parts.Add(new RotationStringPart($"{root}{currentIndex}", currentChunk));
+        }
+
+        return new FormatRotationOutput(parts);
+    }
+
+    private static (string Root, int StartIndex) ParseVariableNameBase(string variableName)
+        => RotationVariableNaming.ParseVariableNameBase(variableName);
 
     [Function(nameof(WriteConfigVariable))]
     public async Task<MapOperationResult> WriteConfigVariable(

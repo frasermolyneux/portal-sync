@@ -313,8 +313,9 @@ public static class MapRotationOrchestrators
             var steps = new List<MapProgress>
             {
                 new("Format rotation string", "Pending"),
-                new("Write config file", "Pending"),
-                new("Set RCON dvar", "Pending")
+                new("Write config variables", "Pending"),
+                new("Set RCON dvars", "Pending"),
+                new("Clear old overflow variables", "Pending")
             };
             if (!isAacpVariable)
             {
@@ -323,64 +324,109 @@ public static class MapRotationOrchestrators
             var totalSteps = steps.Count;
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 0, steps));
 
-            // Format the rotation string
+            // Format the rotation string (may return multiple parts if >1024 chars)
             steps[0] = steps[0] with { Status = "InProgress" };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 0, steps));
 
-            var rotationString = await context.CallActivityAsync<string>(
+            var rotationOutput = await context.CallActivityAsync<FormatRotationOutput>(
                 nameof(MapRotationActivities.FormatRotationString),
                 new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation"));
 
-            steps[0] = steps[0] with { Status = "Completed" };
+            steps[0] = steps[0] with { Status = $"Completed ({rotationOutput.Parts.Count} part{(rotationOutput.Parts.Count != 1 ? "s" : "")})" };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 1, steps));
 
-            // Write config variable
+            // Write config variables (base variable must exist; overflow vars are best-effort)
             steps[1] = steps[1] with { Status = "InProgress" };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 1, steps));
 
-            var configResult = await context.CallActivityAsync<MapOperationResult>(
-                nameof(MapRotationActivities.WriteConfigVariable),
-                new WriteConfigInput(
-                    details.GameServerId,
-                    details.ConfigFilePath ?? "",
-                    details.ConfigVariableName ?? "sv_maprotation",
-                    rotationString));
+            var configSuccess = true;
+            string? configError = null;
+            for (var i = 0; i < rotationOutput.Parts.Count; i++)
+            {
+                var part = rotationOutput.Parts[i];
+                var result = await context.CallActivityAsync<MapOperationResult>(
+                    nameof(MapRotationActivities.WriteConfigVariable),
+                    new WriteConfigInput(details.GameServerId, details.ConfigFilePath ?? "", part.VariableName, part.Value));
 
-            steps[1] = configResult.Success
+                if (!result.Success)
+                {
+                    if (i == 0)
+                    {
+                        // Base variable failure is critical
+                        configSuccess = false;
+                        configError = result.Error;
+                    }
+                    else
+                    {
+                        // Overflow variable failure is non-critical (var may not exist in config file)
+                        logger.LogWarning("Failed to write overflow config variable {VarName} for assignment {AssignmentId}: {Error}. " +
+                            "The variable may not exist in the config file. RCON will still apply the full rotation at runtime.",
+                            part.VariableName, input.AssignmentId, result.Error);
+                    }
+                }
+            }
+
+            steps[1] = configSuccess
                 ? steps[1] with { Status = "Completed" }
-                : steps[1] with { Status = "Failed", Error = configResult.Error };
+                : steps[1] with { Status = "Failed", Error = configError };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 2, steps));
 
-            // Set RCON dvar
+            // Set RCON dvars (all parts)
             steps[2] = steps[2] with { Status = "InProgress" };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 2, steps));
 
-            var rconResult = await context.CallActivityAsync<MapOperationResult>(
-                nameof(MapRotationActivities.SetRconDvar),
-                new SetRconDvarInput(
-                    details.GameServerId,
-                    details.ConfigVariableName ?? "sv_maprotation",
-                    rotationString));
+            var rconSuccess = true;
+            string? rconError = null;
+            foreach (var part in rotationOutput.Parts)
+            {
+                var result = await context.CallActivityAsync<MapOperationResult>(
+                    nameof(MapRotationActivities.SetRconDvar),
+                    new SetRconDvarInput(details.GameServerId, part.VariableName, part.Value));
 
-            steps[2] = rconResult.Success
+                if (!result.Success)
+                {
+                    rconSuccess = false;
+                    rconError ??= result.Error;
+                }
+            }
+
+            steps[2] = rconSuccess
                 ? steps[2] with { Status = "Completed" }
-                : steps[2] with { Status = "Failed", Error = rconResult.Error };
+                : steps[2] with { Status = "Failed", Error = rconError };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 3, steps));
 
-            // Set g_gametype via RCON (best-effort, non-blocking for non-AACP variables)
-            if (!isAacpVariable && configResult.Success && rconResult.Success)
+            // Clear old overflow variables that are no longer needed (best-effort)
+            steps[3] = steps[3] with { Status = "InProgress" };
+            context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 3, steps));
+
+            var usedVarNames = rotationOutput.Parts.Select(p => p.VariableName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var baseVar = details.ConfigVariableName ?? "sv_maprotation";
+            foreach (var overflowVar in RotationVariableNaming.GetOverflowVariableNames(baseVar, usedVarNames))
             {
-                steps[3] = steps[3] with { Status = "InProgress" };
-                context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 3, steps));
+                // Best-effort clear via RCON (config file clear may fail if var doesn't exist)
+                await context.CallActivityAsync<MapOperationResult>(
+                    nameof(MapRotationActivities.SetRconDvar),
+                    new SetRconDvarInput(details.GameServerId, overflowVar, ""));
+            }
+
+            steps[3] = steps[3] with { Status = "Completed" };
+            context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 4, steps));
+
+            // Set g_gametype via RCON (best-effort, non-blocking for non-AACP variables)
+            if (!isAacpVariable && configSuccess && rconSuccess)
+            {
+                var gametypeStepIdx = steps.Count - 1;
+                steps[gametypeStepIdx] = steps[gametypeStepIdx] with { Status = "InProgress" };
+                context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 4, steps));
 
                 var gameMode = details.GameMode ?? "war";
                 var gametypeResult = await context.CallActivityAsync<MapOperationResult>(
                     nameof(MapRotationActivities.SetRconDvar),
                     new SetRconDvarInput(details.GameServerId, "g_gametype", gameMode));
 
-                steps[3] = gametypeResult.Success
-                    ? steps[3] with { Status = "Completed" }
-                    : steps[3] with { Status = "Failed", Error = gametypeResult.Error };
+                steps[gametypeStepIdx] = gametypeResult.Success
+                    ? steps[gametypeStepIdx] with { Status = "Completed" }
+                    : steps[gametypeStepIdx] with { Status = "Failed", Error = gametypeResult.Error };
                 context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, totalSteps, steps));
 
                 if (!gametypeResult.Success)
@@ -391,11 +437,11 @@ public static class MapRotationOrchestrators
             }
 
             // Both must succeed for activation to be considered complete
-            if (!configResult.Success || !rconResult.Success)
+            if (!configSuccess || !rconSuccess)
             {
                 var errors = new List<string>();
-                if (!configResult.Success) errors.Add($"Config write failed: {configResult.Error}");
-                if (!rconResult.Success) errors.Add($"RCON set failed: {rconResult.Error}");
+                if (!configSuccess) errors.Add($"Config write failed: {configError}");
+                if (!rconSuccess) errors.Add($"RCON set failed: {rconError}");
                 var errorMessage = string.Join("; ", errors);
 
                 await context.CallActivityAsync(
@@ -472,13 +518,14 @@ public static class MapRotationOrchestrators
             var steps = new List<MapProgress>
             {
                 new("Write config file", "Pending"),
-                new("Set RCON dvar", "Pending")
+                new("Set RCON dvar", "Pending"),
+                new("Clear overflow variables", "Pending")
             };
-            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 0, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 0, steps));
 
             // Write empty value to config variable
             steps[0] = steps[0] with { Status = "InProgress" };
-            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 0, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 0, steps));
 
             var configResult = await context.CallActivityAsync<MapOperationResult>(
                 nameof(MapRotationActivities.WriteConfigVariable),
@@ -491,11 +538,11 @@ public static class MapRotationOrchestrators
             steps[0] = configResult.Success
                 ? steps[0] with { Status = "Completed" }
                 : steps[0] with { Status = "Failed", Error = configResult.Error };
-            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 1, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 1, steps));
 
             // Set RCON dvar to empty
             steps[1] = steps[1] with { Status = "InProgress" };
-            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 1, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 1, steps));
 
             var rconResult = await context.CallActivityAsync<MapOperationResult>(
                 nameof(MapRotationActivities.SetRconDvar),
@@ -507,7 +554,23 @@ public static class MapRotationOrchestrators
             steps[1] = rconResult.Success
                 ? steps[1] with { Status = "Completed" }
                 : steps[1] with { Status = "Failed", Error = rconResult.Error };
-            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 2, 2, steps));
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 2, steps));
+
+            // Clear overflow variables via RCON (best-effort)
+            steps[2] = steps[2] with { Status = "InProgress" };
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 2, steps));
+
+            var baseVar = details.ConfigVariableName ?? "sv_maprotation";
+            var emptySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var overflowVar in RotationVariableNaming.GetOverflowVariableNames(baseVar, emptySet))
+            {
+                await context.CallActivityAsync<MapOperationResult>(
+                    nameof(MapRotationActivities.SetRconDvar),
+                    new SetRconDvarInput(details.GameServerId, overflowVar, ""));
+            }
+
+            steps[2] = steps[2] with { Status = "Completed" };
+            context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 3, steps));
 
             // Both must succeed for deactivation to be considered complete
             if (!configResult.Success || !rconResult.Success)
