@@ -50,6 +50,7 @@ var host = new HostBuilder()
                     .Select("XtremeIdiots:*", environmentLabel)
                     .Select("GameTracker:*", environmentLabel)
                     .Select("MapRedirect:*", environmentLabel)
+                    .Select("ApplicationInsights:*", environmentLabel)
                     .ConfigureRefresh(refresh =>
                     {
                         refresh.Register("Sentinel", environmentLabel, refreshAll: true)
@@ -79,6 +80,7 @@ var host = new HostBuilder()
         services.AddSingleton<ITelemetryInitializer, TelemetryInitializer>();
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
+        services.AddApplicationInsightsTelemetryProcessor<DependencyFilterTelemetryProcessor>();
 
         services.AddRepositoryApiClient(options => options
             .WithBaseUrl(configuration["RepositoryApi:BaseUrl"] ?? throw new InvalidOperationException("RepositoryApi:BaseUrl configuration is required"))
