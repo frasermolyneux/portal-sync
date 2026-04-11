@@ -381,6 +381,23 @@ public static class MapRotationOrchestrators
                 : steps[1] with { Status = "Failed", Error = configError };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 2, steps));
 
+            // Early exit if config write failed — don't attempt RCON on a broken config
+            if (!configSuccess)
+            {
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        ActivationState: ActivationState.Failed,
+                        LastError: $"Config write failed: {configError}",
+                        LastErrorAt: context.CurrentUtcDateTime));
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, $"Config write failed: {configError}"));
+
+                return;
+            }
+
             // Set RCON dvars (all parts)
             steps[2] = steps[2] with { Status = "InProgress" };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 2, steps));

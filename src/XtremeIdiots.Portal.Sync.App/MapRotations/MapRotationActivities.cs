@@ -348,13 +348,22 @@ public class MapRotationActivities(
                 .UpdateConfigVariable(input.GameServerId, input.ConfigFilePath, input.ConfigVariableName, input.Value, input.CommentLines)
                 .ConfigureAwait(false);
 
-            return new MapOperationResult(input.ConfigVariableName, result.IsSuccess,
-                result.IsSuccess ? null : "Config API returned failure");
+            if (result.IsSuccess)
+                return new MapOperationResult(input.ConfigVariableName, true);
+
+            var errorDetail = result.Result?.Errors?.FirstOrDefault()?.Message
+                ?? result.Result?.Errors?.FirstOrDefault()?.Code
+                ?? "Config API returned failure";
+
+            logger.LogWarning("Config API returned failure for {ConfigVariableName} in {ConfigFilePath}: {Error}",
+                input.ConfigVariableName, input.ConfigFilePath, errorDetail);
+
+            return new MapOperationResult(input.ConfigVariableName, false, errorDetail);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to write config variable {ConfigVariableName} on server {GameServerId}",
-                input.ConfigVariableName, input.GameServerId);
+            logger.LogError(ex, "Failed to write config variable {ConfigVariableName} in {ConfigFilePath} on server {GameServerId}",
+                input.ConfigVariableName, input.ConfigFilePath, input.GameServerId);
             return new MapOperationResult(input.ConfigVariableName, false, ex.Message);
         }
     }
@@ -372,8 +381,16 @@ public class MapRotationActivities(
                 .SetDvar(input.GameServerId, input.DvarName, input.Value)
                 .ConfigureAwait(false);
 
-            return new MapOperationResult(input.DvarName, result.IsSuccess,
-                result.IsSuccess ? null : "RCON API returned failure");
+            if (result.IsSuccess)
+                return new MapOperationResult(input.DvarName, true);
+
+            var errorDetail = result.Result?.Errors?.FirstOrDefault()?.Message
+                ?? result.Result?.Errors?.FirstOrDefault()?.Code
+                ?? "RCON API returned failure";
+
+            logger.LogWarning("RCON API returned failure for {DvarName}: {Error}", input.DvarName, errorDetail);
+
+            return new MapOperationResult(input.DvarName, false, errorDetail);
         }
         catch (Exception ex)
         {
