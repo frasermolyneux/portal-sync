@@ -332,7 +332,7 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.FormatRotationString),
                 new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation"));
 
-            steps[0] = steps[0] with { Status = $"Completed ({rotationOutput.Parts.Count} part{(rotationOutput.Parts.Count != 1 ? "s" : "")})" };
+            steps[0] = steps[0] with { Status = "Completed" };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 1, steps));
 
             // Write config variables (base variable must exist; overflow vars are best-effort)
