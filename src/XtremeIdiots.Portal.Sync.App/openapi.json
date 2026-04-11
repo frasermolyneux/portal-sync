@@ -168,6 +168,38 @@
         }
       }
     },
+    "/api/maps/push/{gameServerId}/{mapName}": {
+      "post": {
+        "operationId": "TriggerPushMapToServer",
+        "parameters": [
+          {
+            "name": "gameServerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "mapName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          },
+          "400": {
+            "description": "Bad Request - invalid map name"
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "HealthCheck",

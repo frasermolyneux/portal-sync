@@ -230,4 +230,41 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         await response.WriteAsJsonAsync(new { instanceId, terminated = true, previousStatus = metadata.RuntimeStatus.ToString() }).ConfigureAwait(false);
         return response;
     }
+
+    [Function(nameof(TriggerPushMapToServer))]
+    public async Task<HttpResponseData> TriggerPushMapToServer(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "maps/push/{gameServerId}/{mapName}")] HttpRequestData req,
+        [DurableClient] DurableTaskClient client,
+        Guid gameServerId,
+        string mapName)
+    {
+        var safeMapName = new string(mapName.Where(c => char.IsLetterOrDigit(c) || c == '_' || c == '-').ToArray());
+        if (string.IsNullOrEmpty(safeMapName))
+        {
+            var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+            await badResponse.WriteStringAsync("Map name must contain at least one alphanumeric character").ConfigureAwait(false);
+            return badResponse;
+        }
+        var instanceId = $"map-push-{gameServerId}-{safeMapName}";
+
+        var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
+        if (existing is not null && existing.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        {
+            logger.LogWarning("PushMapToServer already running for {GameServerId}/{MapName}, instance {InstanceId}", gameServerId, mapName, instanceId);
+            return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+        }
+
+        if (existing is not null)
+        {
+            await client.PurgeInstanceAsync(instanceId).ConfigureAwait(false);
+        }
+
+        await client.ScheduleNewOrchestrationInstanceAsync(
+            nameof(MapRotationOrchestrators.PushMapToServerOrchestrator),
+            new PushMapOrchestrationInput(gameServerId, mapName),
+            new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
+
+        logger.LogInformation("Started PushMapToServer orchestration {InstanceId} for {GameServerId}/{MapName}", instanceId, gameServerId, mapName);
+        return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+    }
 }

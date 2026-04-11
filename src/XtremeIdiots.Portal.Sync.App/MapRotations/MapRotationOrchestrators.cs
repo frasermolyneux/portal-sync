@@ -729,4 +729,49 @@ public static class MapRotationOrchestrators
                 new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message));
         }
     }
+
+    [Function(nameof(PushMapToServerOrchestrator))]
+    public static async Task PushMapToServerOrchestrator(
+        [OrchestrationTrigger] TaskOrchestrationContext context)
+    {
+        var input = context.GetInput<PushMapOrchestrationInput>()
+            ?? throw new InvalidOperationException("PushMapOrchestrationInput is required");
+
+        var logger = context.CreateReplaySafeLogger(nameof(PushMapToServerOrchestrator));
+
+        var steps = new List<MapProgress>
+        {
+            new(input.MapName, "Pending")
+        };
+        context.SetCustomStatus(new OrchestrationProgress("PushMap", 1, 0, steps));
+
+        try
+        {
+            steps[0] = steps[0] with { Status = "InProgress" };
+            context.SetCustomStatus(new OrchestrationProgress("PushMap", 1, 0, steps));
+
+            var result = await context.CallActivityAsync<MapOperationResult>(
+                nameof(MapRotationActivities.SyncSingleMapToServer),
+                new SyncMapInput(input.GameServerId, input.MapName));
+
+            if (result.Success)
+            {
+                steps[0] = steps[0] with { Status = "Completed" };
+                context.SetCustomStatus(new OrchestrationProgress("PushMap", 1, 1, steps));
+                logger.LogInformation("Successfully pushed map {MapName} to server {GameServerId}", input.MapName, input.GameServerId);
+            }
+            else
+            {
+                steps[0] = steps[0] with { Status = "Failed", Error = result.Error };
+                context.SetCustomStatus(new OrchestrationProgress("PushMap", 1, 1, steps));
+                logger.LogWarning("Failed to push map {MapName} to server {GameServerId}: {Error}", input.MapName, input.GameServerId, result.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            steps[0] = steps[0] with { Status = "Failed", Error = ex.Message };
+            context.SetCustomStatus(new OrchestrationProgress("PushMap", 1, 1, steps));
+            logger.LogError(ex, "PushMapToServer orchestration failed for {MapName} on {GameServerId}", input.MapName, input.GameServerId);
+        }
+    }
 }

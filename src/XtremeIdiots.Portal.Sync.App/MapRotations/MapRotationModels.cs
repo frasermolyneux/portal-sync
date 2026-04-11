@@ -8,6 +8,7 @@ public record RemoveOrchestrationInput(Guid AssignmentId);
 public record ActivateOrchestrationInput(Guid AssignmentId);
 public record DeactivateOrchestrationInput(Guid AssignmentId);
 public record VerifyOrchestrationInput(Guid AssignmentId);
+public record PushMapOrchestrationInput(Guid GameServerId, string MapName);
 
 // Activity inputs
 public record SyncMapInput(Guid GameServerId, string MapName);
