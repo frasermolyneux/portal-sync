@@ -208,7 +208,8 @@ public class MapRotationActivities(
             ConfigFilePath: assignment.ConfigFilePath,
             ConfigVariableName: assignment.ConfigVariableName,
             GameMode: rotation.GameMode,
-            MapIds: mapIds);
+            MapIds: mapIds,
+            Title: rotation.Title);
     }
 
     [Function(nameof(ResolveMapNames))]
@@ -344,7 +345,7 @@ public class MapRotationActivities(
                 input.ConfigVariableName, input.ConfigFilePath, input.GameServerId);
 
             var result = await serversApiClient.Config.V1
-                .UpdateConfigVariable(input.GameServerId, input.ConfigFilePath, input.ConfigVariableName, input.Value)
+                .UpdateConfigVariable(input.GameServerId, input.ConfigFilePath, input.ConfigVariableName, input.Value, input.CommentLines)
                 .ConfigureAwait(false);
 
             return new MapOperationResult(input.ConfigVariableName, result.IsSuccess,

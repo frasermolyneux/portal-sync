@@ -341,12 +341,22 @@ public static class MapRotationOrchestrators
 
             var configSuccess = true;
             string? configError = null;
+            var portalUrl = $"https://portal.xtremeidiots.com/MapRotations/Details/{details.MapRotationId}";
+            var managedCommentLines = new[]
+            {
+                $"Managed by XtremeIdiots Portal - {details.Title ?? "Map Rotation"}",
+                portalUrl,
+                "Do not edit manually - changes will be overwritten on next activation"
+            };
+
             for (var i = 0; i < rotationOutput.Parts.Count; i++)
             {
                 var part = rotationOutput.Parts[i];
+                // Only attach the managed comment block to the first (base) variable
+                var commentLines = i == 0 ? managedCommentLines : null;
                 var result = await context.CallActivityAsync<MapOperationResult>(
                     nameof(MapRotationActivities.WriteConfigVariable),
-                    new WriteConfigInput(details.GameServerId, details.ConfigFilePath ?? "", part.VariableName, part.Value));
+                    new WriteConfigInput(details.GameServerId, details.ConfigFilePath ?? "", part.VariableName, part.Value, commentLines));
 
                 if (!result.Success)
                 {
@@ -533,7 +543,8 @@ public static class MapRotationOrchestrators
                     details.GameServerId,
                     details.ConfigFilePath ?? "",
                     details.ConfigVariableName ?? "sv_maprotation",
-                    ""));
+                    "",
+                    Array.Empty<string>()));
 
             steps[0] = configResult.Success
                 ? steps[0] with { Status = "Completed" }
