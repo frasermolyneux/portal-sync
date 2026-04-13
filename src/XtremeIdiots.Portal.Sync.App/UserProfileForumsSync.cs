@@ -138,7 +138,7 @@ public class UserProfileForumsSync(
         [
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.UserProfileId, userProfileId.ToString(), true),
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.XtremeIdiotsId, member.Id.ToString(), true),
-            new CreateUserProfileClaimDto(userProfileId, "Email", member.Email ?? string.Empty, true),
+            new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Email, member.Email ?? string.Empty, true),
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.PhotoUrl, member.PhotoUrl ?? string.Empty, true),
             new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.TimeZone, member.TimeZone ?? string.Empty, true)
         ];
