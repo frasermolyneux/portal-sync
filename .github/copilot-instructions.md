@@ -41,6 +41,37 @@ This repository contains **portal-sync**, an Azure Functions (v4, isolated worke
 - The `codequality.yml` workflow runs static analysis; `build-and-test.yml` handles build verification.
 - There are currently no unit test projects; validate changes through build and code review.
 
+## Forum Group → Claim Mapping
+
+The `UserProfileForumsSync` class synchronizes forum group membership to portal claims. Key details:
+
+### System-Generated Claims (`UserProfileClaimType` constants)
+
+These claims are generated from Invision Community forum member data and group membership:
+
+- **Identity claims** (always generated): `UserProfileId`, `XtremeIdiotsId`, `Email`, `PhotoUrl`, `TimeZone`
+- **Role claims** (from forum group names): `SeniorAdmin`, `HeadAdmin`, `GameAdmin`, `Moderator`
+
+Forum group names map to role claims with game-type scoping. For example:
+- `"Senior Admin"` → `SeniorAdmin` (global, value `Unknown`)
+- `"COD4 Head Admin"` → `HeadAdmin` with value `CallOfDuty4`
+- `"COD4 Admin"` → `GameAdmin` with value `CallOfDuty4`
+- `"COD4 Moderator"` → `Moderator` with value `CallOfDuty4`
+
+Supported games: COD2, COD4, COD5, Insurgency, Minecraft, ARMA (maps to Arma/Arma2/Arma3), Battlefield (maps to BF1/BF3/BF4/BF5/BFBC2).
+
+### Additional Permissions Survive Sync
+
+Manually assigned additional permissions (using `AdditionalPermission` claim types like `GameServers.Admin.Rcon`) are **preserved across sync cycles**. The sync process:
+
+1. Fetches all existing claims for a user
+2. Separates system-generated claims from manually assigned ones (`SystemGenerated=false`)
+3. Regenerates system claims from current forum group membership
+4. Merges the preserved manual claims back in (with deduplication)
+5. Calls `SetUserProfileClaims()` atomically to replace all claims
+
+This means administrators can safely assign additional permissions via the portal UI knowing they will not be overwritten by the next forum sync.
+
 ## Important Patterns
 
 - Ban file sync uses FTP to monitor and push ban files to game servers.
