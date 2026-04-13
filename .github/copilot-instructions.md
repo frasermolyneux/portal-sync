@@ -60,6 +60,8 @@ Forum group names map to role claims with game-type scoping. For example:
 
 Supported games: COD2, COD4, COD5, Insurgency, Minecraft, ARMA (maps to Arma/Arma2/Arma3), Battlefield (maps to BF1/BF3/BF4/BF5/BFBC2).
 
+> **Note:** portal-sync only generates the system claims listed above. Manually-assigned permissions use `AdditionalPermission` claim types (e.g. `GameServers.Admin.Rcon`, `GameServers.Credentials.Ftp.Read`) and are not managed by portal-sync.
+
 ### Additional Permissions Survive Sync
 
 Manually assigned additional permissions (using `AdditionalPermission` claim types like `GameServers.Admin.Rcon`) are **preserved across sync cycles**. The sync process:
