@@ -168,7 +168,7 @@
         }
       }
     },
-    "/api/maps/push/{gameServerId}/{mapName}": {
+    "/api/maps/push/{gameServerId}/{gameType}/{mapName}": {
       "post": {
         "operationId": "TriggerPushMapToServer",
         "parameters": [
@@ -179,6 +179,14 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "gameType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -195,7 +203,7 @@
             "description": "Accepted"
           },
           "400": {
-            "description": "Bad Request - invalid map name"
+            "description": "Bad Request - invalid map name or game type"
           }
         }
       }

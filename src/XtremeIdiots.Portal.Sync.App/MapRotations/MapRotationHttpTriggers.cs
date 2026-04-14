@@ -233,11 +233,19 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
     [Function(nameof(TriggerPushMapToServer))]
     public async Task<HttpResponseData> TriggerPushMapToServer(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "maps/push/{gameServerId}/{mapName}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "maps/push/{gameServerId}/{gameType}/{mapName}")] HttpRequestData req,
         [DurableClient] DurableTaskClient client,
         Guid gameServerId,
+        string gameType,
         string mapName)
     {
+        if (!Enum.TryParse<XtremeIdiots.Portal.Repository.Abstractions.Constants.V1.GameType>(gameType, true, out var parsedGameType))
+        {
+            var badGameTypeResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+            await badGameTypeResponse.WriteStringAsync($"Invalid game type: {gameType}").ConfigureAwait(false);
+            return badGameTypeResponse;
+        }
+
         var safeMapName = new string(mapName.Where(c => char.IsLetterOrDigit(c) || c == '_' || c == '-').ToArray());
         if (string.IsNullOrEmpty(safeMapName))
         {
@@ -261,7 +269,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
         await client.ScheduleNewOrchestrationInstanceAsync(
             nameof(MapRotationOrchestrators.PushMapToServerOrchestrator),
-            new PushMapOrchestrationInput(gameServerId, mapName),
+            new PushMapOrchestrationInput(gameServerId, mapName, parsedGameType),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
         logger.LogInformation("Started PushMapToServer orchestration {InstanceId} for {GameServerId}/{MapName}", instanceId, gameServerId, mapName);

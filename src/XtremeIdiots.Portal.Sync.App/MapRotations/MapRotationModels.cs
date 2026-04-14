@@ -8,11 +8,11 @@ public record RemoveOrchestrationInput(Guid AssignmentId);
 public record ActivateOrchestrationInput(Guid AssignmentId);
 public record DeactivateOrchestrationInput(Guid AssignmentId);
 public record VerifyOrchestrationInput(Guid AssignmentId);
-public record PushMapOrchestrationInput(Guid GameServerId, string MapName);
+public record PushMapOrchestrationInput(Guid GameServerId, string MapName, GameType GameType);
 
 // Activity inputs
-public record SyncMapInput(Guid GameServerId, string MapName);
-public record RemoveMapInput(Guid GameServerId, string MapName);
+public record SyncMapInput(Guid GameServerId, string MapName, GameType GameType);
+public record RemoveMapInput(Guid GameServerId, string MapName, GameType GameType);
 public record GetLoadedMapsInput(Guid GameServerId);
 public record GetSharedMapsInput(Guid GameServerId, Guid ExcludeAssignmentId);
 public record UpdateStatusInput(
@@ -86,11 +86,18 @@ public record MapProgress(string MapName, string Status, string? Error = null);
 // Status values: "Pending", "InProgress", "Completed", "Failed", "Skipped"
 
 // Activity outputs
-public record MapOperationResult(string MapName, bool Success, string? Error = null);
+public record MapOperationResult(string MapName, bool Success, string? Error = null, string? SkipReason = null);
+
+public static class SkipReasons
+{
+    public const string BuiltInMap = "Built-in map";
+    public const string NoMapFiles = "No map files available";
+}
 public record RotationDetails(
     Guid AssignmentId,
     Guid GameServerId,
     Guid MapRotationId,
+    GameType GameType,
     DeploymentState DeploymentState,
     ActivationState ActivationState,
     int? DeployedVersion,

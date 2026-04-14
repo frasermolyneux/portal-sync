@@ -21,11 +21,25 @@ public class MapRotationActivities(
     public async Task<MapOperationResult> SyncSingleMapToServer(
         [ActivityTrigger] SyncMapInput input)
     {
+        if (BuiltInMaps.IsBuiltIn(input.GameType, input.MapName))
+        {
+            logger.LogInformation("Skipping built-in map {MapName} for server {GameServerId}", input.MapName, input.GameServerId);
+            return new MapOperationResult(input.MapName, true, SkipReason: SkipReasons.BuiltInMap);
+        }
+
         try
         {
             logger.LogInformation("Pushing map {MapName} to server {GameServerId}", input.MapName, input.GameServerId);
             var result = await serversApiClient.Maps.V1.PushServerMapToHost(input.GameServerId, input.MapName).ConfigureAwait(false);
-            return new MapOperationResult(input.MapName, result.IsSuccess);
+
+            if (!result.IsSuccess && result.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                logger.LogWarning("Map {MapName} has no files available for server {GameServerId}", input.MapName, input.GameServerId);
+                return new MapOperationResult(input.MapName, true, SkipReason: SkipReasons.NoMapFiles);
+            }
+
+            return new MapOperationResult(input.MapName, result.IsSuccess,
+                Error: result.IsSuccess ? null : $"Failed to push map: {result.StatusCode}");
         }
         catch (Exception ex)
         {
@@ -38,6 +52,12 @@ public class MapRotationActivities(
     public async Task<MapOperationResult> RemoveSingleMapFromServer(
         [ActivityTrigger] RemoveMapInput input)
     {
+        if (BuiltInMaps.IsBuiltIn(input.GameType, input.MapName))
+        {
+            logger.LogInformation("Skipping removal of built-in map {MapName} for server {GameServerId}", input.MapName, input.GameServerId);
+            return new MapOperationResult(input.MapName, true, SkipReason: SkipReasons.BuiltInMap);
+        }
+
         try
         {
             logger.LogInformation("Removing map {MapName} from server {GameServerId}", input.MapName, input.GameServerId);
@@ -200,6 +220,7 @@ public class MapRotationActivities(
             AssignmentId: assignment.MapRotationServerAssignmentId,
             GameServerId: assignment.GameServerId,
             MapRotationId: assignment.MapRotationId,
+            GameType: rotation.GameType,
             DeploymentState: assignment.DeploymentState,
             ActivationState: assignment.ActivationState,
             DeployedVersion: assignment.DeployedVersion,

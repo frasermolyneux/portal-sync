@@ -24,14 +24,6 @@ public class MapRedirectSync(
 {
     private readonly string _mapRedirectBaseUrl = (configuration["MapRedirect:BaseUrl"] ?? "https://redirect.xtremeidiots.net").TrimEnd('/');
 
-    private readonly string[] _defaultMaps =
-    [
-        "mp_ambush", "mp_backlot", "mp_bloc", "mp_bog", "mp_broadcast", "mp_chinatown", "mp_countdown", "mp_crash", "mp_creek", "mp_crossfire",
-        "mp_district", "mp_downpour", "mp_killhouse", "mp_overgrown", "mp_pipeline", "mp_shipment", "mp_showdown", "mp_strike", "mp_vacant", "mp_cargoship",
-        "mp_airfield", "mp_asylum", "mp_castle", "mp_cliffside", "mp_courtyard", "mp_dome", "mp_downfall", "mp_hanger", "mp_makin", "mp_outskirts", "mp_roundhouse",
-        "mp_seelow", "mp_upheaval"
-    ];
-
     public IRepositoryApiClient repositoryApiClient { get; } = repositoryApiClient;
     public IMapRedirectRepository MapRedirectRepository { get; } = mapRedirectRepository;
     [Function(nameof(RunMapRedirectSyncManual))]

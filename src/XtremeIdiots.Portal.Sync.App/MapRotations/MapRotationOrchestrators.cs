@@ -60,9 +60,13 @@ public static class MapRotationOrchestrators
                 {
                     var result = await context.CallActivityAsync<MapOperationResult>(
                         nameof(MapRotationActivities.SyncSingleMapToServer),
-                        new SyncMapInput(details.GameServerId, mapName));
+                        new SyncMapInput(details.GameServerId, mapName, details.GameType));
 
-                    if (result.Success)
+                    if (result.SkipReason != null)
+                    {
+                        mapProgress[i] = mapProgress[i] with { Status = "Skipped", Error = result.SkipReason };
+                    }
+                    else if (result.Success)
                     {
                         mapProgress[i] = mapProgress[i] with { Status = "Completed" };
                     }
@@ -83,6 +87,8 @@ public static class MapRotationOrchestrators
                 context.SetCustomStatus(new OrchestrationProgress("Sync", mapNames.Count, i + 1, mapProgress));
             }
 
+            var skippedNoFiles = mapProgress.Where(p => p.Status == "Skipped" && p.Error == SkipReasons.NoMapFiles).ToList();
+
             if (failures.Count > 0)
             {
                 var errorMessage = $"Failed to sync {failures.Count}/{mapNames.Count} maps: {string.Join("; ", failures)}";
@@ -100,19 +106,37 @@ public static class MapRotationOrchestrators
 
                 return;
             }
+            else if (skippedNoFiles.Count > 0)
+            {
+                var warningMessage = $"Partially deployed: {skippedNoFiles.Count} map(s) skipped (no files available): {string.Join(", ", skippedNoFiles.Select(s => s.MapName))}";
 
-            // Success — update assignment to Synced with version, clear any previous error
-            await context.CallActivityAsync(
-                nameof(MapRotationActivities.UpdateAssignmentStatus),
-                new UpdateStatusInput(input.AssignmentId,
-                    DeploymentState: DeploymentState.Synced,
-                    DeployedVersion: details.RotationVersion,
-                    LastError: "",
-                    LastErrorAt: null));
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        DeploymentState: DeploymentState.PartiallyDeployed,
+                        DeployedVersion: details.RotationVersion,
+                        LastError: warningMessage,
+                        LastErrorAt: context.CurrentUtcDateTime));
 
-            await context.CallActivityAsync(
-                nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded));
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded));
+            }
+            else
+            {
+                // All succeeded or were built-in skips
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        DeploymentState: DeploymentState.Synced,
+                        DeployedVersion: details.RotationVersion,
+                        LastError: "",
+                        LastErrorAt: null));
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded));
+            }
         }
         catch (Exception ex)
         {
@@ -200,9 +224,13 @@ public static class MapRotationOrchestrators
                 {
                     var result = await context.CallActivityAsync<MapOperationResult>(
                         nameof(MapRotationActivities.RemoveSingleMapFromServer),
-                        new RemoveMapInput(details.GameServerId, mapName));
+                        new RemoveMapInput(details.GameServerId, mapName, details.GameType));
 
-                    if (result.Success)
+                    if (result.SkipReason != null)
+                    {
+                        mapProgress[i] = mapProgress[i] with { Status = "Skipped", Error = result.SkipReason };
+                    }
+                    else if (result.Success)
                     {
                         mapProgress[i] = mapProgress[i] with { Status = "Completed" };
                     }
@@ -752,9 +780,15 @@ public static class MapRotationOrchestrators
 
             var result = await context.CallActivityAsync<MapOperationResult>(
                 nameof(MapRotationActivities.SyncSingleMapToServer),
-                new SyncMapInput(input.GameServerId, input.MapName));
+                new SyncMapInput(input.GameServerId, input.MapName, input.GameType));
 
-            if (result.Success)
+            if (result.SkipReason != null)
+            {
+                steps[0] = steps[0] with { Status = "Skipped", Error = result.SkipReason };
+                context.SetCustomStatus(new OrchestrationProgress("PushMap", 1, 1, steps));
+                logger.LogInformation("Skipped map {MapName} for server {GameServerId}: {Reason}", input.MapName, input.GameServerId, result.SkipReason);
+            }
+            else if (result.Success)
             {
                 steps[0] = steps[0] with { Status = "Completed" };
                 context.SetCustomStatus(new OrchestrationProgress("PushMap", 1, 1, steps));
