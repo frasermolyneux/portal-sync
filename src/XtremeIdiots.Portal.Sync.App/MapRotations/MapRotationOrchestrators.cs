@@ -714,11 +714,24 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.GetLoadedMapsFromServer),
                 new GetLoadedMapsInput(details.GameServerId));
 
-            // Check each map against loaded maps
+            // Check each map against loaded maps (skip built-in maps)
             var missing = new List<string>();
             for (var i = 0; i < mapNames.Count; i++)
             {
                 var mapName = mapNames[i];
+
+                if (BuiltInMaps.IsBuiltIn(details.GameType, mapName))
+                {
+                    mapProgress[i] = mapProgress[i] with
+                    {
+                        Status = "Skipped",
+                        Error = SkipReasons.BuiltInMap
+                    };
+
+                    context.SetCustomStatus(new OrchestrationProgress("Verify", mapNames.Count, i + 1, mapProgress));
+                    continue;
+                }
+
                 var isPresent = loadedMaps.Any(m => string.Equals(m, mapName, StringComparison.OrdinalIgnoreCase));
 
                 mapProgress[i] = mapProgress[i] with
@@ -735,7 +748,8 @@ public static class MapRotationOrchestrators
 
             if (missing.Count > 0)
             {
-                var errorMessage = $"Verification found {missing.Count}/{mapNames.Count} maps missing from server: {string.Join(", ", missing)}";
+                var verifiedCount = mapNames.Count - mapProgress.Count(p => p.Status == "Skipped");
+                var errorMessage = $"Verification found {missing.Count}/{verifiedCount} maps missing from server: {string.Join(", ", missing)}";
 
                 await context.CallActivityAsync(
                     nameof(MapRotationActivities.CompleteOperation),
