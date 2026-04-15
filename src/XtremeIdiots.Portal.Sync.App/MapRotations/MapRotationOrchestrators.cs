@@ -48,6 +48,35 @@ public static class MapRotationOrchestrators
             var mapProgress = mapNames.Select(m => new MapProgress(m, "Pending")).ToList();
             context.SetCustomStatus(new OrchestrationProgress("Sync", mapNames.Count, 0, mapProgress));
 
+            // AACP assignments share maps with the main rotation — skip FTP uploads
+            var isAacpVariable = (details.ConfigVariableName ?? "").StartsWith("scr_aacp_maps_", StringComparison.OrdinalIgnoreCase);
+            if (isAacpVariable)
+            {
+                logger.LogInformation(
+                    "AACP assignment detected for {AssignmentId} — skipping FTP uploads for {MapCount} maps (maps assumed present via main rotation)",
+                    input.AssignmentId, mapNames.Count);
+
+                for (var i = 0; i < mapProgress.Count; i++)
+                {
+                    mapProgress[i] = mapProgress[i] with { Status = "Skipped", Error = SkipReasons.AacpSharedMaps };
+                }
+                context.SetCustomStatus(new OrchestrationProgress("Sync", mapNames.Count, mapNames.Count, mapProgress));
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        DeploymentState: DeploymentState.Synced,
+                        DeployedVersion: details.RotationVersion,
+                        LastError: "",
+                        LastErrorAt: null));
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Succeeded));
+
+                return;
+            }
+
             // Push each map sequentially to avoid FTP overload
             var failures = new List<string>();
             for (var i = 0; i < mapNames.Count; i++)

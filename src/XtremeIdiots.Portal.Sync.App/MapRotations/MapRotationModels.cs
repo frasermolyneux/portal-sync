@@ -92,6 +92,7 @@ public static class SkipReasons
 {
     public const string BuiltInMap = "Built-in map";
     public const string NoMapFiles = "No map files available";
+    public const string AacpSharedMaps = "AACP — maps shared with main rotation";
 }
 public record RotationDetails(
     Guid AssignmentId,
