@@ -1,7 +1,7 @@
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
 
@@ -11,12 +11,21 @@ public class BanFileMonitorTests
 {
     private readonly Mock<ILogger<BanFileMonitor>> _loggerMock = new();
     private readonly Mock<IBanFilesRepository> _banFilesRepositoryMock = new();
-    private readonly TelemetryClient _telemetryClient = new(new TelemetryConfiguration());
+    private readonly Mock<IJobTelemetry> _jobTelemetryMock = new();
+    private readonly Mock<IAuditLogger> _auditLoggerMock = new();
+
+    public BanFileMonitorTests()
+    {
+        _jobTelemetryMock
+            .Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<Func<Task>>(), It.IsAny<Dictionary<string, string>?>()))
+            .Returns<string, Func<Task>, Dictionary<string, string>?>((_, action, _) => action());
+    }
 
     private BanFileMonitor CreateSut() => new(
         _loggerMock.Object,
         _banFilesRepositoryMock.Object,
-        _telemetryClient);
+        _jobTelemetryMock.Object,
+        _auditLoggerMock.Object);
 
     [Fact]
     public void Constructor_WithValidDependencies_ShouldNotThrow()
@@ -31,7 +40,8 @@ public class BanFileMonitorTests
         Assert.Throws<ArgumentNullException>(() => new BanFileMonitor(
             null!,
             _banFilesRepositoryMock.Object,
-            _telemetryClient));
+            _jobTelemetryMock.Object,
+            _auditLoggerMock.Object));
     }
 
     [Fact]
@@ -40,7 +50,8 @@ public class BanFileMonitorTests
         Assert.Throws<ArgumentNullException>(() => new BanFileMonitor(
             _loggerMock.Object,
             null!,
-            _telemetryClient));
+            _jobTelemetryMock.Object,
+            _auditLoggerMock.Object));
     }
 
     [Fact]
@@ -49,7 +60,8 @@ public class BanFileMonitorTests
         Assert.Throws<ArgumentNullException>(() => new BanFileMonitor(
             _loggerMock.Object,
             _banFilesRepositoryMock.Object,
-            null!));
+            null!,
+            _auditLoggerMock.Object));
     }
 
     [Fact]

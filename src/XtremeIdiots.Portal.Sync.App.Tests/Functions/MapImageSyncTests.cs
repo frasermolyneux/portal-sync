@@ -1,10 +1,10 @@
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using MX.Api.Abstractions;
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
@@ -22,7 +22,8 @@ public class MapImageSyncTests
         StorageBlobEndpoint = "https://test.blob.core.windows.net",
         ContainerName = "map-images"
     });
-    private readonly TelemetryClient _telemetryClient = new(new TelemetryConfiguration());
+    private readonly Mock<IJobTelemetry> _jobTelemetryMock = new();
+    private readonly Mock<IAuditLogger> _auditLoggerMock = new();
     private readonly IConfiguration _configuration;
 
     public MapImageSyncTests()
@@ -33,6 +34,10 @@ public class MapImageSyncTests
                 ["GameTracker:MapImageBaseUrl"] = "https://image.gametracker.com/images/maps/160x120/"
             })
             .Build();
+
+        _jobTelemetryMock
+            .Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<Func<Task>>(), It.IsAny<Dictionary<string, string>?>()))
+            .Returns<string, Func<Task>, Dictionary<string, string>?>((_, action, _) => action());
     }
 
     private MapImageSync CreateSut() => new(
@@ -40,8 +45,9 @@ public class MapImageSyncTests
         _repositoryApiClientMock.Object,
         _httpClient,
         _mapImagesStorageOptions,
-        _telemetryClient,
-        _configuration);
+        _jobTelemetryMock.Object,
+        _configuration,
+        _auditLoggerMock.Object);
 
     [Fact]
     public void Constructor_WithValidDependencies_ShouldNotThrow()
@@ -58,8 +64,9 @@ public class MapImageSyncTests
             _repositoryApiClientMock.Object,
             _httpClient,
             _mapImagesStorageOptions,
-            _telemetryClient,
-            _configuration));
+            _jobTelemetryMock.Object,
+            _configuration,
+            _auditLoggerMock.Object));
     }
 
     [Fact]
@@ -70,8 +77,9 @@ public class MapImageSyncTests
             null!,
             _httpClient,
             _mapImagesStorageOptions,
-            _telemetryClient,
-            _configuration));
+            _jobTelemetryMock.Object,
+            _configuration,
+            _auditLoggerMock.Object));
     }
 
     [Fact]
@@ -82,8 +90,9 @@ public class MapImageSyncTests
             _repositoryApiClientMock.Object,
             null!,
             _mapImagesStorageOptions,
-            _telemetryClient,
-            _configuration));
+            _jobTelemetryMock.Object,
+            _configuration,
+            _auditLoggerMock.Object));
     }
 
     [Fact]
@@ -94,8 +103,9 @@ public class MapImageSyncTests
             _repositoryApiClientMock.Object,
             _httpClient,
             null!,
-            _telemetryClient,
-            _configuration));
+            _jobTelemetryMock.Object,
+            _configuration,
+            _auditLoggerMock.Object));
     }
 
     [Fact]
@@ -107,7 +117,8 @@ public class MapImageSyncTests
             _httpClient,
             _mapImagesStorageOptions,
             null!,
-            _configuration));
+            _configuration,
+            _auditLoggerMock.Object));
     }
 
     [Fact]

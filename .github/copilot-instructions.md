@@ -9,7 +9,7 @@ This repository contains **portal-sync**, an Azure Functions (v4, isolated worke
 - **Runtime:** .NET 9, C# 13, Azure Functions v4 (isolated worker model)
 - **Infrastructure:** Terraform (Azure provider) — see `terraform/`
 - **CI/CD:** GitHub Actions with OIDC authentication — see `.github/workflows/`
-- **Observability:** Application Insights (TelemetryClient, custom `ScheduledJobTelemetry`)
+- **Observability:** Application Insights via MX.Observability.ApplicationInsights (telemetry filtering, audit logging, job telemetry)
 - **Storage:** Azure Blob Storage for ban files and map images
 - **External APIs:** Portal Repository API, Servers Integration API, InvisionCommunity forums, GameTracker map images, map redirect service
 
@@ -23,7 +23,7 @@ This repository contains **portal-sync**, an Azure Functions (v4, isolated worke
 ## Key Conventions
 
 - Use **primary constructor injection** with null-guard fields for all function classes.
-- Wrap all scheduled jobs with `ScheduledJobTelemetry.ExecuteWithTelemetry()` for consistent start/success/failure telemetry.
+- Wrap all scheduled jobs with `IJobTelemetry.ExecuteAsync()` from MX.Observability.ApplicationInsights for consistent start/success/failure telemetry.
 - Every timer-triggered function should have a corresponding manual HTTP-triggered function.
 - Use `ConfigureAwait(false)` on all async calls.
 - Follow the existing pattern of interfaces in `Interfaces/` and implementations in peer folders.

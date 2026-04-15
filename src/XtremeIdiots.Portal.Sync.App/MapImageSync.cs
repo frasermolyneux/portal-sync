@@ -4,7 +4,6 @@ using System.Net;
 using System.Text;
 using Azure.Identity;
 using Azure.Storage.Blobs;
-using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using XtremeIdiots.Portal.Sync.App.Configuration;
@@ -13,9 +12,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Auditing.Models;
+using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
-using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
@@ -24,18 +25,18 @@ public class MapImageSync(
     IRepositoryApiClient repositoryApiClient,
     HttpClient httpClient,
     IOptions<MapImagesStorageOptions> mapImagesStorageOptions,
-    TelemetryClient telemetryClient,
-    IConfiguration configuration)
+    IJobTelemetry jobTelemetry,
+    IConfiguration configuration,
+    IAuditLogger auditLogger)
 {
     private const int TakeEntries = 50;
     private readonly string gameTrackerMapImageBaseUrl = (configuration["GameTracker:MapImageBaseUrl"] ?? "https://image.gametracker.com/images/maps/160x120/").TrimEnd('/') + "/";
-    // Single attempt; retry & bot-avoidance logic removed.
     private readonly ILogger<MapImageSync> logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IRepositoryApiClient repositoryApiClient = repositoryApiClient ?? throw new ArgumentNullException(nameof(repositoryApiClient));
     private readonly HttpClient httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     private readonly IOptions<MapImagesStorageOptions> mapImagesStorageOptions = mapImagesStorageOptions ?? throw new ArgumentNullException(nameof(mapImagesStorageOptions));
-    private readonly TelemetryClient telemetryClient = telemetryClient ?? throw new ArgumentNullException(nameof(telemetryClient));
-    // Note: HTML detection maintained to avoid storing block/anti-bot pages as images.
+    private readonly IJobTelemetry jobTelemetry = jobTelemetry ?? throw new ArgumentNullException(nameof(jobTelemetry));
+    private readonly IAuditLogger auditLogger = auditLogger ?? throw new ArgumentNullException(nameof(auditLogger));
 
     [Function(nameof(RunMapImageSyncManual))]
     public async Task RunMapImageSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
@@ -46,8 +47,7 @@ public class MapImageSync(
     [Function(nameof(RunMapImageSync))]
     public async Task RunMapImageSync([TimerTrigger("0 0 0 * * 3")] TimerInfo? myTimer)
     {
-        await ScheduledJobTelemetry.ExecuteWithTelemetry(
-            telemetryClient,
+        await jobTelemetry.ExecuteAsync(
             nameof(RunMapImageSync),
             async () =>
             {
@@ -132,6 +132,13 @@ public class MapImageSync(
                         tempFilePath = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
                         await File.WriteAllBytesAsync(tempFilePath, bytes).ConfigureAwait(false);
                         await repositoryApiClient.Maps.V1.UpdateMapImage(mapDto.MapId, tempFilePath).ConfigureAwait(false);
+
+                        auditLogger.LogAudit(AuditEvent.SystemAction("MapImageUploaded", AuditAction.Update)
+                            .WithService("MapImageSync")
+                            .WithProperty("GameType", game.Key.ToString())
+                            .WithProperty("MapName", mapDto.MapName)
+                            .WithSource("MapImageSync")
+                            .Build());
                     }
                     catch (Exception ex)
                     {

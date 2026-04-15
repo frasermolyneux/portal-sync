@@ -1,8 +1,7 @@
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MX.Api.Abstractions;
+using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.GameServers;
@@ -15,13 +14,20 @@ public class RedirectToGameServerMapSyncTests
     private readonly Mock<ILogger<RedirectToGameServerMapSync>> _loggerMock = new();
     private readonly Mock<IRepositoryApiClient> _repositoryApiClientMock = new(MockBehavior.Loose) { DefaultValue = DefaultValue.Mock };
     private readonly Mock<IServersApiClient> _serversApiClientMock = new(MockBehavior.Loose) { DefaultValue = DefaultValue.Mock };
-    private readonly TelemetryClient _telemetryClient = new(new TelemetryConfiguration());
+    private readonly Mock<IJobTelemetry> _jobTelemetryMock = new();
+
+    public RedirectToGameServerMapSyncTests()
+    {
+        _jobTelemetryMock
+            .Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<Func<Task>>(), It.IsAny<Dictionary<string, string>?>()))
+            .Returns<string, Func<Task>, Dictionary<string, string>?>((_, action, _) => action());
+    }
 
     private RedirectToGameServerMapSync CreateSut() => new(
         _loggerMock.Object,
         _repositoryApiClientMock.Object,
         _serversApiClientMock.Object,
-        _telemetryClient);
+        _jobTelemetryMock.Object);
 
     [Fact]
     public void Constructor_WithValidDependencies_ShouldNotThrow()

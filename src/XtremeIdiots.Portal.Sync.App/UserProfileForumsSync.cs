@@ -1,4 +1,3 @@
-using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
@@ -7,10 +6,12 @@ using System.Net;
 
 using MX.InvisionCommunity.Api.Abstractions;
 using MX.InvisionCommunity.Api.Abstractions.Models;
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Auditing.Models;
+using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.UserProfiles;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
-using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
@@ -18,7 +19,8 @@ public class UserProfileForumsSync(
     ILogger<UserProfileForumsSync> logger,
     IRepositoryApiClient repositoryApiClient,
     IInvisionApiClient invisionApiClient,
-    TelemetryClient telemetryClient)
+    IJobTelemetry jobTelemetry,
+    IAuditLogger auditLogger)
 {
     private const int TakeEntries = 20;
 
@@ -31,8 +33,7 @@ public class UserProfileForumsSync(
     [Function(nameof(RunUserProfileForumsSync))]
     public async Task RunUserProfileForumsSync([TimerTrigger("0 0 */1 * * *")] TimerInfo? myTimer)
     {
-        await ScheduledJobTelemetry.ExecuteWithTelemetry(
-            telemetryClient,
+        await jobTelemetry.ExecuteAsync(
             nameof(RunUserProfileForumsSync),
             async () =>
             {
@@ -102,6 +103,26 @@ public class UserProfileForumsSync(
                                     .ToList();
 
                                 await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave).ConfigureAwait(false);
+
+                                var existingSystemClaims = userProfileDto.UserProfileClaims
+                                    .Where(upc => upc.SystemGenerated)
+                                    .Select(upc => (upc.ClaimType.ToUpperInvariant(), upc.ClaimValue.ToUpperInvariant()))
+                                    .OrderBy(c => c)
+                                    .ToList();
+
+                                var newSystemClaims = activeClaims
+                                    .Select(c => (c.ClaimType.ToUpperInvariant(), c.ClaimValue.ToUpperInvariant()))
+                                    .OrderBy(c => c)
+                                    .ToList();
+
+                                if (!existingSystemClaims.SequenceEqual(newSystemClaims))
+                                {
+                                    auditLogger.LogAudit(AuditEvent.SystemAction("UserProfileClaimsUpdated", AuditAction.Update)
+                                        .WithService("UserProfileForumsSync")
+                                        .WithTarget(userProfileDto.UserProfileId.ToString(), "UserProfile", userProfileDto.DisplayName)
+                                        .WithSource("UserProfileForumsSync")
+                                        .Build());
+                                }
                             }
                             else
                             {

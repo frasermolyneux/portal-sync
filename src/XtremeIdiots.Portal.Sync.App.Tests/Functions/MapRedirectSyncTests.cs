@@ -1,9 +1,9 @@
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MX.Api.Abstractions;
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
@@ -17,7 +17,8 @@ public class MapRedirectSyncTests
     private readonly Mock<ILogger<MapRedirectSync>> _loggerMock = new();
     private readonly Mock<IRepositoryApiClient> _repositoryApiClientMock = new(MockBehavior.Loose) { DefaultValue = DefaultValue.Mock };
     private readonly Mock<IMapRedirectRepository> _mapRedirectRepositoryMock = new();
-    private readonly TelemetryClient _telemetryClient = new(new TelemetryConfiguration());
+    private readonly Mock<IJobTelemetry> _jobTelemetryMock = new();
+    private readonly Mock<IAuditLogger> _auditLoggerMock = new();
     private readonly IConfiguration _configuration;
 
     public MapRedirectSyncTests()
@@ -28,6 +29,10 @@ public class MapRedirectSyncTests
                 ["MapRedirect:BaseUrl"] = "https://redirect.test.com"
             })
             .Build();
+
+        _jobTelemetryMock
+            .Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<Func<Task>>(), It.IsAny<Dictionary<string, string>?>()))
+            .Returns<string, Func<Task>, Dictionary<string, string>?>((_, action, _) => action());
     }
 
     private MapRedirectSync CreateSut() => new(
@@ -35,7 +40,8 @@ public class MapRedirectSyncTests
         _repositoryApiClientMock.Object,
         _mapRedirectRepositoryMock.Object,
         _configuration,
-        _telemetryClient);
+        _jobTelemetryMock.Object,
+        _auditLoggerMock.Object);
 
     [Fact]
     public void Constructor_WithValidDependencies_ShouldNotThrow()

@@ -1,22 +1,25 @@
-using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Auditing.Models;
+using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
-using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
 public class BanFileMonitor(
     ILogger<BanFileMonitor> logger,
     IBanFilesRepository banFilesRepository,
-    TelemetryClient telemetryClient)
+    IJobTelemetry jobTelemetry,
+    IAuditLogger auditLogger)
 {
     private readonly ILogger<BanFileMonitor> logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IBanFilesRepository banFilesRepository = banFilesRepository ?? throw new ArgumentNullException(nameof(banFilesRepository));
-    private readonly TelemetryClient telemetryClient = telemetryClient ?? throw new ArgumentNullException(nameof(telemetryClient));
+    private readonly IJobTelemetry jobTelemetry = jobTelemetry ?? throw new ArgumentNullException(nameof(jobTelemetry));
+    private readonly IAuditLogger auditLogger = auditLogger ?? throw new ArgumentNullException(nameof(auditLogger));
 
     [Function(nameof(GenerateLatestBansFileManual))]
     public async Task GenerateLatestBansFileManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
@@ -27,8 +30,7 @@ public class BanFileMonitor(
     [Function(nameof(GenerateLatestBansFile))]
     public async Task GenerateLatestBansFile([TimerTrigger("0 */10 * * * *")] TimerInfo? myTimer)
     {
-        await ScheduledJobTelemetry.ExecuteWithTelemetry(
-            telemetryClient,
+        await jobTelemetry.ExecuteAsync(
             nameof(GenerateLatestBansFile),
             async () =>
             {
@@ -39,6 +41,12 @@ public class BanFileMonitor(
                     try
                     {
                         await banFilesRepository.RegenerateBanFileForGame(gameType).ConfigureAwait(false);
+
+                        auditLogger.LogAudit(AuditEvent.SystemAction("BanFileGenerated", AuditAction.Export)
+                            .WithService("BanFileMonitor")
+                            .WithProperty("GameType", gameType.ToString())
+                            .WithSource("BanFileMonitor")
+                            .Build());
                     }
                     catch (Exception ex)
                     {

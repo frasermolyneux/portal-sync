@@ -1,17 +1,18 @@
 using System.Diagnostics;
 using System.Linq;
 
-using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MX.Api.Abstractions;
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Auditing.Models;
+using MX.Observability.ApplicationInsights.Jobs;
 
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App.Redirect;
-using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
@@ -20,7 +21,8 @@ public class MapRedirectSync(
     IRepositoryApiClient repositoryApiClient,
     IMapRedirectRepository mapRedirectRepository,
     Microsoft.Extensions.Configuration.IConfiguration configuration,
-    TelemetryClient telemetryClient)
+    IJobTelemetry jobTelemetry,
+    IAuditLogger auditLogger)
 {
     private readonly string _mapRedirectBaseUrl = (configuration["MapRedirect:BaseUrl"] ?? "https://redirect.xtremeidiots.net").TrimEnd('/');
 
@@ -36,8 +38,7 @@ public class MapRedirectSync(
     // ReSharper disable once UnusedMember.Global
     public async Task RunMapRedirectSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
     {
-        await ScheduledJobTelemetry.ExecuteWithTelemetry(
-            telemetryClient,
+        await jobTelemetry.ExecuteAsync(
             nameof(RunMapRedirectSync),
             async () =>
             {
@@ -122,10 +123,34 @@ public class MapRedirectSync(
                 mapDtosToCreate.Count, mapDtosToUpdate.Count);
 
             if (mapDtosToCreate.Count != 0)
+            {
                 await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate).ConfigureAwait(false);
 
+                foreach (var mapDto in mapDtosToCreate)
+                {
+                    auditLogger.LogAudit(AuditEvent.SystemAction("MapCreatedFromRedirect", AuditAction.Create)
+                        .WithService("MapRedirectSync")
+                        .WithProperty("GameType", gameType.ToString())
+                        .WithProperty("MapName", mapDto.MapName)
+                        .WithSource("MapRedirectSync")
+                        .Build());
+                }
+            }
+
             if (mapDtosToUpdate.Count != 0)
+            {
                 await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate).ConfigureAwait(false);
+
+                foreach (var mapDto in mapDtosToUpdate)
+                {
+                    auditLogger.LogAudit(AuditEvent.SystemAction("MapUpdatedFromRedirect", AuditAction.Update)
+                        .WithService("MapRedirectSync")
+                        .WithProperty("GameType", gameType.ToString())
+                        .WithProperty("MapId", mapDto.MapId.ToString())
+                        .WithSource("MapRedirectSync")
+                        .Build());
+                }
+            }
                 
             logger.LogInformation("Completed map sync for game '{GameType}'", gameType);
         }

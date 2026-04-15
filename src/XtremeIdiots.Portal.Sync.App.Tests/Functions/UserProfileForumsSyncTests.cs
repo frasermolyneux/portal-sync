@@ -1,8 +1,8 @@
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MX.Api.Abstractions;
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Jobs;
 using MX.InvisionCommunity.Api.Abstractions;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.UserProfiles;
@@ -15,13 +15,22 @@ public class UserProfileForumsSyncTests
     private readonly Mock<ILogger<UserProfileForumsSync>> _loggerMock = new();
     private readonly Mock<IRepositoryApiClient> _repositoryApiClientMock = new(MockBehavior.Loose) { DefaultValue = DefaultValue.Mock };
     private readonly Mock<IInvisionApiClient> _invisionApiClientMock = new();
-    private readonly TelemetryClient _telemetryClient = new(new TelemetryConfiguration());
+    private readonly Mock<IJobTelemetry> _jobTelemetryMock = new();
+    private readonly Mock<IAuditLogger> _auditLoggerMock = new();
+
+    public UserProfileForumsSyncTests()
+    {
+        _jobTelemetryMock
+            .Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<Func<Task>>(), It.IsAny<Dictionary<string, string>?>()))
+            .Returns<string, Func<Task>, Dictionary<string, string>?>((_, action, _) => action());
+    }
 
     private UserProfileForumsSync CreateSut() => new(
         _loggerMock.Object,
         _repositoryApiClientMock.Object,
         _invisionApiClientMock.Object,
-        _telemetryClient);
+        _jobTelemetryMock.Object,
+        _auditLoggerMock.Object);
 
     [Fact]
     public void Constructor_WithValidDependencies_ShouldNotThrow()

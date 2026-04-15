@@ -1,21 +1,24 @@
-using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Auditing.Models;
+using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
-using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App.MapRotations;
 
 public class MapRotationCleanup(
     ILogger<MapRotationCleanup> logger,
     IRepositoryApiClient repositoryApiClient,
-    TelemetryClient telemetryClient)
+    IJobTelemetry jobTelemetry,
+    IAuditLogger auditLogger)
 {
     private readonly ILogger<MapRotationCleanup> logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IRepositoryApiClient repositoryApiClient = repositoryApiClient ?? throw new ArgumentNullException(nameof(repositoryApiClient));
-    private readonly TelemetryClient telemetryClient = telemetryClient ?? throw new ArgumentNullException(nameof(telemetryClient));
+    private readonly IJobTelemetry jobTelemetry = jobTelemetry ?? throw new ArgumentNullException(nameof(jobTelemetry));
+    private readonly IAuditLogger auditLogger = auditLogger ?? throw new ArgumentNullException(nameof(auditLogger));
 
     [Function(nameof(RunMapRotationCleanupManual))]
     public async Task RunMapRotationCleanupManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
@@ -26,8 +29,7 @@ public class MapRotationCleanup(
     [Function(nameof(RunMapRotationCleanup))]
     public async Task RunMapRotationCleanup([TimerTrigger("0 0 * * * *")] TimerInfo? myTimer)
     {
-        await ScheduledJobTelemetry.ExecuteWithTelemetry(
-            telemetryClient,
+        await jobTelemetry.ExecuteAsync(
             nameof(RunMapRotationCleanup),
             async () =>
             {
@@ -68,6 +70,12 @@ public class MapRotationCleanup(
                 logger.LogInformation(
                     "Deleted removed assignment {AssignmentId} (unassigned at {UnassignedAt})",
                     assignment.MapRotationServerAssignmentId, assignment.UnassignedAt);
+
+                auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentCleaned", AuditAction.Delete)
+                    .WithService("MapRotationCleanup")
+                    .WithTarget(assignment.MapRotationServerAssignmentId.ToString(), "MapRotationAssignment")
+                    .WithSource("MapRotationCleanup")
+                    .Build());
             }
             catch (Exception ex)
             {

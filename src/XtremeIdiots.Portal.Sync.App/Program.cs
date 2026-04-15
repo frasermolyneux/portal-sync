@@ -12,6 +12,7 @@ using Microsoft.Identity.Web;
 
 using MX.Api.Client.Extensions;
 using MX.InvisionCommunity.Api.Client;
+using MX.Observability.ApplicationInsights.Extensions;
 using XtremeIdiots.Portal.Forums.Integration.Extensions;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
@@ -80,7 +81,7 @@ var host = new HostBuilder()
         services.AddSingleton<ITelemetryInitializer, TelemetryInitializer>();
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
-        services.AddApplicationInsightsTelemetryProcessor<DependencyFilterTelemetryProcessor>();
+        services.AddObservability();
 
         services.AddRepositoryApiClient(options => options
             .WithBaseUrl(configuration["RepositoryApi:BaseUrl"] ?? throw new InvalidOperationException("RepositoryApi:BaseUrl configuration is required"))

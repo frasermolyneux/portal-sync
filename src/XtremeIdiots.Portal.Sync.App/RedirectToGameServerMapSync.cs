@@ -1,11 +1,10 @@
-using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
-using XtremeIdiots.Portal.Sync.App.Telemetry;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
@@ -13,7 +12,7 @@ public class RedirectToGameServerMapSync(
     ILogger<RedirectToGameServerMapSync> logger,
     IRepositoryApiClient repositoryApiClient,
     IServersApiClient serversApiClient,
-    TelemetryClient telemetryClient)
+    IJobTelemetry jobTelemetry)
 {
     [Function(nameof(RunRedirectToGameServerMapSyncManual))]
     public async Task RunRedirectToGameServerMapSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
@@ -24,8 +23,7 @@ public class RedirectToGameServerMapSync(
     [Function(nameof(RunRedirectToGameServerMapSync))]
     public async Task RunRedirectToGameServerMapSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
     {
-        await ScheduledJobTelemetry.ExecuteWithTelemetry(
-            telemetryClient,
+        await jobTelemetry.ExecuteAsync(
             nameof(RunRedirectToGameServerMapSync),
             async () =>
             {
