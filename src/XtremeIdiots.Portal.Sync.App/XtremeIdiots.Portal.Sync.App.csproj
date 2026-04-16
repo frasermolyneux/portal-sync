@@ -30,7 +30,7 @@
 	  <PackageReference Include="MX.Api.Abstractions" Version="2.3.31" />
 	  <PackageReference Include="MX.Api.Client" Version="2.3.31" />
 	  <PackageReference Include="MX.InvisionCommunity.Api.Client" Version="1.0.18" />
-	  <PackageReference Include="MX.Observability.ApplicationInsights" Version="1.0.3" />
+	  <PackageReference Include="MX.Observability.ApplicationInsights" Version="1.0.4" />
 	  <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="2.1.201" />
 	  <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="2.1.201" />
     <PackageReference Include="Microsoft.Identity.Web" Version="4.3.0" />
@@ -50,4 +50,5 @@
     </None>
   </ItemGroup>
 </Project>
+
 
