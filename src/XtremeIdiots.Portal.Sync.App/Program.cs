@@ -12,7 +12,7 @@ using Microsoft.Identity.Web;
 
 using MX.Api.Client.Extensions;
 using MX.InvisionCommunity.Api.Client;
-using MX.Observability.ApplicationInsights.Extensions;
+using MX.Observability.ApplicationInsights.WorkerService;
 using XtremeIdiots.Portal.Forums.Integration.Extensions;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
