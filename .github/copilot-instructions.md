@@ -1,5 +1,7 @@
 # Copilot Instructions for portal-sync
 
+> Shared conventions: see [`.github-copilot/.github/instructions/terraform.instructions.md`](../../.github-copilot/.github/instructions/terraform.instructions.md) for the standard Terraform layout, providers, remote-state pattern, validation commands, and CI/CD workflows.
+
 ## Project Overview
 
 This repository contains **portal-sync**, an Azure Functions (v4, isolated worker) application that synchronizes XtremeIdiots portal data with external game telemetry, forum, and platform services. It runs scheduled and on-demand sync pipelines for ban files, map images, map redirects, and user profile forum data.
