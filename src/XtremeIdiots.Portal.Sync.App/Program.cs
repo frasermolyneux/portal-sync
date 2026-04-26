@@ -18,7 +18,6 @@ using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App;
 using XtremeIdiots.Portal.Sync.App.Extensions;
-using XtremeIdiots.Portal.Sync.App.Helpers;
 using XtremeIdiots.Portal.Sync.App.Redirect;
 using XtremeIdiots.Portal.Sync.App.Configuration;
 
@@ -115,8 +114,6 @@ var host = new HostBuilder()
             options.StorageBlobEndpoint = configuration["map_images_storage_blob_endpoint"]; // optional
             options.ContainerName = configuration["map_images_container_name"]; // optional
         });
-
-        services.AddSingleton<IFtpHelper, FtpHelper>();
 
         services.AddMemoryCache();
 
