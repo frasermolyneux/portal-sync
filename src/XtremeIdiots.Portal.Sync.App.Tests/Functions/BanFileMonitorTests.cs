@@ -19,6 +19,20 @@ public class BanFileMonitorTests
         _jobTelemetryMock
             .Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<Func<Task>>(), It.IsAny<Dictionary<string, string>?>()))
             .Returns<string, Func<Task>, Dictionary<string, string>?>((_, action, _) => action());
+
+        // Default: any RegenerateBanFileForGame call returns a "skipped, empty" result
+        // so the function trigger has something to audit without exercising the full
+        // blob-write path.
+        _banFilesRepositoryMock
+            .Setup(x => x.RegenerateBanFileForGame(It.IsAny<GameType>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GameType gt, CancellationToken _) => new BanFileRegenerationResult
+            {
+                GameType = gt,
+                Skipped = true,
+                ActiveBanSetHash = "EMPTY",
+                BanSyncLineCount = 0,
+                DurationMs = 1
+            });
     }
 
     private BanFileMonitor CreateSut() => new(
@@ -72,7 +86,7 @@ public class BanFileMonitorTests
         await sut.GenerateLatestBansFile(null);
 
         _banFilesRepositoryMock.Verify(
-            x => x.RegenerateBanFileForGame(It.IsAny<GameType>()),
+            x => x.RegenerateBanFileForGame(It.IsAny<GameType>(), It.IsAny<CancellationToken>()),
             Times.Exactly(3));
     }
 }

@@ -31,8 +31,8 @@
 	  <PackageReference Include="MX.Api.Client" Version="2.3.31" />
 	  <PackageReference Include="MX.InvisionCommunity.Api.Client" Version="1.0.18" />
 	  <PackageReference Include="MX.Observability.ApplicationInsights.WorkerService" Version="1.1.1" />
-	  <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="2.1.201" />
-	  <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="2.1.201" />
+	  <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="2.1.214" />
+	  <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="2.1.214" />
     <PackageReference Include="Microsoft.Identity.Web" Version="4.3.0" />
     <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="2.1.142" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.16.3" />
