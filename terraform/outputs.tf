@@ -25,13 +25,3 @@ output "api_management_resource_group_name" {
 output "api_management_product_id" {
   value = azurerm_api_management_product.api_product.product_id
 }
-
-output "ban_files_storage" {
-  description = "Storage account hosting the regenerated central ban files (consumed by portal-server-agent for outbound FTP push to game servers)."
-  value = {
-    id             = azurerm_storage_account.app_data_storage.id
-    name           = azurerm_storage_account.app_data_storage.name
-    blob_endpoint  = azurerm_storage_account.app_data_storage.primary_blob_endpoint
-    container_name = azurerm_storage_container.ban_files_container.name
-  }
-}

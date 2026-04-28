@@ -47,7 +47,7 @@ resource "azurerm_linux_function_app" "function_app" {
 
     "ApplicationInsightsAgent_EXTENSION_VERSION" = "~3"
 
-    "appdata_storage_blob_endpoint" = azurerm_storage_account.app_data_storage.primary_blob_endpoint
+    "appdata_storage_blob_endpoint" = data.terraform_remote_state.portal_core.outputs.ban_files_storage.blob_endpoint
 
     // https://learn.microsoft.com/en-us/azure/azure-monitor/profiler/profiler-azure-functions#app-settings-for-enabling-profiler
     "APPINSIGHTS_PROFILERFEATURE_VERSION"  = "1.0.0"
