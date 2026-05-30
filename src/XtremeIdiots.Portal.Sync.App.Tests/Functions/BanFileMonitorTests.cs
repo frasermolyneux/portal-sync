@@ -87,6 +87,6 @@ public class BanFileMonitorTests
 
         _banFilesRepositoryMock.Verify(
             x => x.RegenerateBanFileForGame(It.IsAny<GameType>(), It.IsAny<CancellationToken>()),
-            Times.Exactly(3));
+            Times.Exactly(4));
     }
 }

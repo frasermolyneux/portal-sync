@@ -50,7 +50,21 @@ public class BanFilesRepository(
         await Task.WhenAll(existingStatusTask, activeBansTask).ConfigureAwait(false);
 
         var existingStatus = await existingStatusTask.ConfigureAwait(false);
-        var activeBans = await activeBansTask.ConfigureAwait(false);
+        var fetchedBans = await activeBansTask.ConfigureAwait(false);
+
+        // Drop sentinel records up-front so hash, line count, and writes all stay in
+        // sync. <see cref="IsSentinelBan"/> filters records with no usable playerid
+        // (cod4x sentinel <c>0</c>) or the <c>BOT-Client</c> pseudo-player that some
+        // game-server plugins surface for non-human entities.
+        var sentinelCount = fetchedBans.Count(IsSentinelBan);
+        var activeBans = sentinelCount == 0
+            ? (IReadOnlyList<AdminActionDto>)fetchedBans
+            : fetchedBans.Where(a => !IsSentinelBan(a)).ToList();
+
+        if (sentinelCount > 0)
+            _logger.LogWarning(
+                "Dropped {SentinelCount} sentinel ban record(s) for {GameType} (guid missing/'0' or username='BOT-Client') before regeneration.",
+                sentinelCount, gameType);
 
         var activeBanSetHash = ComputeActiveBanSetHash(activeBans);
         var banSyncLineCount = activeBans.Count;
@@ -99,7 +113,14 @@ public class BanFilesRepository(
 
         // Full regeneration path: build the combined blob (external seed + DB bans),
         // upload it, count lines, and write CentralBanFileStatus.
-        var externalInfo = await GetExternalBanFileInfoAsync(containerClient, gameType, cancellationToken).ConfigureAwait(false);
+        //
+        // CoD4x uses the cod4x simplebanlist v2 wire format which is incompatible with
+        // the legacy <c>{game}-external.txt</c> seed — skip the seed lookup entirely and
+        // synthesise an empty ExternalBanFileInfo so the rest of the pipeline (combined
+        // stream, line counter, status DTO) stays a single code path.
+        var externalInfo = UsesSimplebanlistV2(gameType)
+            ? new ExternalBanFileInfo { Content = new MemoryStream(), LineCount = 0, LastModifiedUtc = null }
+            : await GetExternalBanFileInfoAsync(containerClient, gameType, cancellationToken).ConfigureAwait(false);
 
         await using var combinedStream = new MemoryStream();
         externalInfo.Content.Seek(0, SeekOrigin.Begin);
@@ -117,7 +138,7 @@ public class BanFilesRepository(
         await using (var streamWriter = new StreamWriter(combinedStream, leaveOpen: true))
         {
             foreach (var adminActionDto in activeBans)
-                await streamWriter.WriteLineAsync($"{adminActionDto.Player?.Guid} [BANSYNC]-{adminActionDto.Player?.Username}").ConfigureAwait(false);
+                await streamWriter.WriteLineAsync(FormatBanLine(gameType, adminActionDto.Player?.Guid, adminActionDto.Player?.Username)).ConfigureAwait(false);
 
             await streamWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -202,6 +223,73 @@ public class BanFilesRepository(
         var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
 
         return await GetFileStreamAsync(containerClient, blobKey).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// True when the game type's central ban file uses the cod4x simplebanlist v2 wire
+    /// format (<c>banlist_v2.dat</c>) instead of the legacy <c>ban.txt</c> "GUID NAME" lines.
+    /// </summary>
+    public static bool UsesSimplebanlistV2(GameType gameType) => gameType == GameType.CallOfDuty4x;
+
+    /// <summary>
+    /// Format a single central-ban-file line for the given game type.
+    ///
+    /// Legacy format (CoD2, CoD4, CoD5, …): <c>{guid} [BANSYNC]-{username}</c> — consumed
+    /// by the agent's <c>BanFileWatcher.ParseBanLines</c> and skipped via the
+    /// <c>[BANSYNC]</c> sentinel so it never echoes back to the repository.
+    ///
+    /// CoD4x simplebanlist v2: <c>\playerid\{guid}\asteamid\0\rsn\[BANSYNC] {username}</c>.
+    /// We always set <c>asteamid\0</c> because the portal stores the 19-digit cod4x
+    /// playerid in <c>Player.Guid</c> and does not track a separate Steam64 today. The
+    /// cod4x server applies the ban by playerid alone — asteamid is informational. The
+    /// <c>[BANSYNC]</c> tag is embedded in the reason string so the agent's
+    /// <c>CountTags()</c> still classifies the line as a sync-pushed ban.
+    ///
+    /// Usernames are sanitised before interpolation: newlines are neutralised in both
+    /// formats (defends against multi-line injection through the <c>WriteLineAsync</c>
+    /// loop above), and backslashes are replaced with forward slashes in the cod4x
+    /// format (where <c>\</c> is the field separator — a raw backslash in the username
+    /// could otherwise inject a forged field).
+    /// </summary>
+    public static string FormatBanLine(GameType gameType, string? playerGuid, string? username)
+    {
+        var useV2 = UsesSimplebanlistV2(gameType);
+        var safeUsername = SanitiseUsernameForBanFile(username, useV2);
+
+        if (useV2)
+            return $"\\playerid\\{playerGuid}\\asteamid\\0\\rsn\\[BANSYNC] {safeUsername}";
+
+        return $"{playerGuid} [BANSYNC]-{safeUsername}";
+    }
+
+    private static string SanitiseUsernameForBanFile(string? username, bool useSimplebanlistV2)
+    {
+        var value = username ?? string.Empty;
+        if (useSimplebanlistV2)
+            value = value.Replace('\\', '/');
+        return value.Replace('\n', ' ').Replace('\r', ' ');
+    }
+
+    /// <summary>
+    /// True for ban records that should never reach the central ban file: missing or
+    /// blank guid, the cod4x sentinel <c>0</c> playerid (parser-emitted placeholder
+    /// for unauthenticated / not-yet-resolved players), or the <c>BOT-Client</c>
+    /// pseudo-username some plugins surface for AI players. Filtering up-front keeps
+    /// the active-ban hash, line counts, and uploaded blob in sync.
+    /// </summary>
+    internal static bool IsSentinelBan(AdminActionDto adminActionDto)
+        => IsSentinelBan(adminActionDto.Player?.Guid, adminActionDto.Player?.Username);
+
+    /// <summary>
+    /// Pure-function overload used by unit tests so the sentinel rule can be exercised
+    /// without constructing an <see cref="AdminActionDto"/>.
+    /// </summary>
+    public static bool IsSentinelBan(string? playerGuid, string? username)
+    {
+        if (string.IsNullOrWhiteSpace(playerGuid) || string.Equals(playerGuid, "0", StringComparison.Ordinal))
+            return true;
+
+        return string.Equals(username, "BOT-Client", StringComparison.Ordinal);
     }
 
     /// <summary>

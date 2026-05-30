@@ -37,7 +37,9 @@ public class BanFileMonitor(
             {
                 logger.LogDebug("Start GenerateLatestBansFile @ {Now:o}", DateTime.UtcNow);
 
-                GameType[] gameTypes = [GameType.CallOfDuty2, GameType.CallOfDuty4, GameType.CallOfDuty5];
+                // CoD4x emits the cod4x simplebanlist v2 format (banlist_v2.dat) instead of the
+                // legacy ban.txt — the format branch lives inside BanFilesRepository.
+                GameType[] gameTypes = [GameType.CallOfDuty2, GameType.CallOfDuty4, GameType.CallOfDuty5, GameType.CallOfDuty4x];
                 foreach (var gameType in gameTypes)
                 {
                     try
