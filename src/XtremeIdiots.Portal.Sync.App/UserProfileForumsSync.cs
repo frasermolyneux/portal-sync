@@ -218,12 +218,15 @@ public class UserProfileForumsSync(
             //COD4
             case "COD4 Head Admin":
                 claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.CallOfDuty4.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.HeadAdmin, GameType.CallOfDuty4x.ToString(), true));
                 break;
             case "COD4 Admin":
                 claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.CallOfDuty4.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.GameAdmin, GameType.CallOfDuty4x.ToString(), true));
                 break;
             case "COD4 Moderator":
                 claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.CallOfDuty4.ToString(), true));
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Moderator, GameType.CallOfDuty4x.ToString(), true));
                 break;
 
             //COD5

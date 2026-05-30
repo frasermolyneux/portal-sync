@@ -61,6 +61,7 @@ public class MapImageSync(
         {
             [GameType.CallOfDuty2] = "cod2",
             [GameType.CallOfDuty4] = "cod4",
+            [GameType.CallOfDuty4x] = "cod4",
             [GameType.CallOfDuty5] = "codww",
             [GameType.UnrealTournament2004] = "ut2k4",
             [GameType.Insurgency] = "ins"

@@ -33,7 +33,7 @@ public class RedirectToGameServerMapSync(
 
     private async Task ProcessGameServerMaps()
     {
-        GameType[] gameTypes = [GameType.CallOfDuty4];
+        GameType[] gameTypes = [GameType.CallOfDuty4, GameType.CallOfDuty4x];
         var gameServersApiResponse = await repositoryApiClient.GameServers.V1.GetGameServers(gameTypes, null, null, 0, 50, null).ConfigureAwait(false);
 
         if (!gameServersApiResponse.IsSuccess || gameServersApiResponse.Result?.Data?.Items is null)
