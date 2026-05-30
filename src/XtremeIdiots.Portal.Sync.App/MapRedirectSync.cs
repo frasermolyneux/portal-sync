@@ -63,7 +63,7 @@ public class MapRedirectSync(
     private async Task ProcessGameMapSync(GameType gameType, string gameKey)
     {
         logger.LogInformation("Starting map sync for game '{GameType}' with key '{GameKey}'", gameType, gameKey);
-        
+
         try
         {
             // Retrieve all of the maps from the redirect server
@@ -84,7 +84,7 @@ public class MapRedirectSync(
                 skipEntries += takeEntries;
             }
 
-            logger.LogInformation("Total maps retrieved from redirect for '{GameType}' is '{RedirectCount}' and repository is '{RepositoryCount}'", 
+            logger.LogInformation("Total maps retrieved from redirect for '{GameType}' is '{RedirectCount}' and repository is '{RepositoryCount}'",
                 gameType, mapRedirectEntries.Count, repositoryMaps.Count);
 
             // Compare the map entries in the redirect to those in the repository and generate a list of additions and changes.
@@ -120,7 +120,7 @@ public class MapRedirectSync(
                 }
             }
 
-            logger.LogInformation("Creating {CreateCount} new maps and updating {UpdateCount} existing maps", 
+            logger.LogInformation("Creating {CreateCount} new maps and updating {UpdateCount} existing maps",
                 mapDtosToCreate.Count, mapDtosToUpdate.Count);
 
             if (mapDtosToCreate.Count != 0)
@@ -152,7 +152,7 @@ public class MapRedirectSync(
                         .Build());
                 }
             }
-                
+
             logger.LogInformation("Completed map sync for game '{GameType}'", gameType);
         }
         catch (Exception ex)
