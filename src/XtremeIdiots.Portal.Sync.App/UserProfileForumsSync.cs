@@ -23,6 +23,9 @@ public class UserProfileForumsSync(
     IAuditLogger auditLogger)
 {
     private const int TakeEntries = 20;
+    private const long ClanMemberForumGroupId = 82;
+    private const string ClanMemberClaimType = "ClanMember";
+    private const string RegisteredUserClaimType = "RegisteredUser";
 
     [Function(nameof(RunUserProfileForumsSyncManual))]
     public async Task RunUserProfileForumsSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
@@ -177,6 +180,23 @@ public class UserProfileForumsSync(
             {
                 claims.AddRange(GetClaimsForGroup(userProfileId, group ?? new GroupDto()));
             }
+        }
+
+        var hasHigherRole = claims.Any(c => c.ClaimType == UserProfileClaimType.SeniorAdmin
+            || c.ClaimType == UserProfileClaimType.HeadAdmin
+            || c.ClaimType == UserProfileClaimType.GameAdmin
+            || c.ClaimType == UserProfileClaimType.Moderator);
+
+        if (!hasHigherRole)
+        {
+            var isClanMember = member.PrimaryGroup?.Id == ClanMemberForumGroupId
+                || (member.SecondaryGroups?.Any(g => g?.Id == ClanMemberForumGroupId) ?? false);
+
+            claims.Add(new CreateUserProfileClaimDto(
+                userProfileId,
+                isClanMember ? ClanMemberClaimType : RegisteredUserClaimType,
+                GameType.Unknown.ToString(),
+                true));
         }
 
         // Deduplicate claims in case the same group appears in both primary and secondary groups
