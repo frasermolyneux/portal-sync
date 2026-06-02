@@ -48,12 +48,12 @@ public static class MapRotationOrchestrators
             var mapProgress = mapNames.Select(m => new MapProgress(m, "Pending")).ToList();
             context.SetCustomStatus(new OrchestrationProgress("Sync", mapNames.Count, 0, mapProgress));
 
-            // AACP assignments share maps with the main rotation — skip FTP uploads
+            // AACP assignments share maps with the main rotation — skip file uploads
             var isAacpVariable = (details.ConfigVariableName ?? "").StartsWith("scr_aacp_maps_", StringComparison.OrdinalIgnoreCase);
             if (isAacpVariable)
             {
                 logger.LogInformation(
-                    "AACP assignment detected for {AssignmentId} — skipping FTP uploads for {MapCount} maps (maps assumed present via main rotation)",
+                    "AACP assignment detected for {AssignmentId} — skipping file uploads for {MapCount} maps (maps assumed present via main rotation)",
                     input.AssignmentId, mapNames.Count);
 
                 for (var i = 0; i < mapProgress.Count; i++)
@@ -77,7 +77,7 @@ public static class MapRotationOrchestrators
                 return;
             }
 
-            // Push each map sequentially to avoid FTP overload
+            // Push each map sequentially to avoid host overload
             var failures = new List<string>();
             for (var i = 0; i < mapNames.Count; i++)
             {
@@ -738,7 +738,7 @@ public static class MapRotationOrchestrators
             var mapProgress = mapNames.Select(m => new MapProgress(m, "Pending")).ToList();
             context.SetCustomStatus(new OrchestrationProgress("Verify", mapNames.Count, 0, mapProgress));
 
-            // Get maps currently loaded on server via FTP
+            // Get maps currently loaded on server host
             var loadedMaps = await context.CallActivityAsync<List<string>>(
                 nameof(MapRotationActivities.GetLoadedMapsFromServer),
                 new GetLoadedMapsInput(details.GameServerId));
