@@ -31,8 +31,9 @@ public class BanFilesRepository(
 
     public async Task<BanFileRegenerationResult> RegenerateBanFileForGame(GameType gameType, CancellationToken cancellationToken = default)
     {
-        var blobKey = $"{gameType}-bans.txt";
         var stopwatch = Stopwatch.StartNew();
+        var blobKey = BuildBlobKey(gameType);
+        var usesDualLaneCod4x = UsesSimplebanlistV2(gameType);
 
         _logger.LogInformation("Regenerating ban file for {GameType} using blob key {BlobKey}", gameType, blobKey);
 
@@ -51,6 +52,7 @@ public class BanFilesRepository(
 
         var existingStatus = await existingStatusTask.ConfigureAwait(false);
         var fetchedBans = await activeBansTask.ConfigureAwait(false);
+        ExternalLineCountSnapshot? externalLineCount = null;
 
         // Drop sentinel records up-front so hash, line count, and writes all stay in
         // sync. <see cref="IsSentinelBan"/> filters records with no usable playerid
@@ -69,12 +71,18 @@ public class BanFilesRepository(
         var activeBanSetHash = ComputeActiveBanSetHash(activeBans);
         var banSyncLineCount = activeBans.Count;
 
-        // Skip-if-unchanged short-circuit. Avoids re-uploading the full 4 MB blob to the
+        // Skip-if-unchanged short-circuit. Avoids re-uploading the full blob(s) to the
         // shared storage account every 10 minutes when no bans have changed — the
         // dominant cost downstream is each agent then re-pushing it to its game server.
+        var legacyStatusReady = !usesDualLaneCod4x
+            || (existingStatus is not null
+                && existingStatus.LegacyBlobETag is not null
+                && string.Equals(existingStatus.LegacyActiveBanSetHash, activeBanSetHash, StringComparison.Ordinal));
+
         if (existingStatus is not null
             && string.Equals(existingStatus.ActiveBanSetHash, activeBanSetHash, StringComparison.Ordinal)
-            && existingStatus.BlobETag is not null)
+            && existingStatus.BlobETag is not null
+            && legacyStatusReady)
         {
             stopwatch.Stop();
 
@@ -82,20 +90,35 @@ public class BanFilesRepository(
                 "Skipping regeneration for {GameType}: active ban set unchanged (hash {Hash}, {BanCount} bans). Last regenerated {LastRegen:o}.",
                 gameType, activeBanSetHash, banSyncLineCount, existingStatus.BlobLastRegeneratedUtc);
 
-            // Refresh the external-line count if its source blob changed, even on skip.
-            var externalLineCount = await RefreshExternalLineCountIfStaleAsync(
-                containerClient, gameType, existingStatus, cancellationToken).ConfigureAwait(false);
-
-            await UpsertStatusAsync(new UpsertCentralBanFileStatusDto(gameType)
+            if (usesDualLaneCod4x)
             {
-                // Hash unchanged, but caller still wants to see this attempt happened
-                // — clear any prior error and update ExternalLineCount if it moved.
-                ActiveBanSetHash = activeBanSetHash,
-                LastRegenerationError = string.Empty,
-                LastRegenerationDurationMs = (int)stopwatch.ElapsedMilliseconds,
-                ExternalLineCount = externalLineCount?.Count,
-                ExternalSourceLastModifiedUtc = externalLineCount?.LastModifiedUtc
-            }, cancellationToken).ConfigureAwait(false);
+                await UpsertStatusAsync(new UpsertCentralBanFileStatusDto(gameType)
+                {
+                    ActiveBanSetHash = activeBanSetHash,
+                    LastRegenerationError = string.Empty,
+                    LastRegenerationDurationMs = (int)stopwatch.ElapsedMilliseconds,
+                    LegacyActiveBanSetHash = activeBanSetHash,
+                    LegacyLastRegenerationError = string.Empty,
+                    LegacyLastRegenerationDurationMs = (int)stopwatch.ElapsedMilliseconds
+                }, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                // Refresh the external-line count if its source blob changed, even on skip.
+                externalLineCount = await RefreshExternalLineCountIfStaleAsync(
+                    containerClient, gameType, existingStatus, cancellationToken).ConfigureAwait(false);
+
+                await UpsertStatusAsync(new UpsertCentralBanFileStatusDto(gameType)
+                {
+                    // Hash unchanged, but caller still wants to see this attempt happened
+                    // — clear any prior error and update ExternalLineCount if it moved.
+                    ActiveBanSetHash = activeBanSetHash,
+                    LastRegenerationError = string.Empty,
+                    LastRegenerationDurationMs = (int)stopwatch.ElapsedMilliseconds,
+                    ExternalLineCount = externalLineCount?.Count,
+                    ExternalSourceLastModifiedUtc = externalLineCount?.LastModifiedUtc
+                }, cancellationToken).ConfigureAwait(false);
+            }
 
             return new BanFileRegenerationResult
             {
@@ -111,84 +134,94 @@ public class BanFilesRepository(
             };
         }
 
-        // Full regeneration path: build the combined blob (external seed + DB bans),
-        // upload it, count lines, and write CentralBanFileStatus.
-        //
-        // CoD4x uses the cod4x simplebanlist v2 wire format which is incompatible with
-        // the legacy <c>{game}-external.txt</c> seed — skip the seed lookup entirely and
-        // synthesise an empty ExternalBanFileInfo so the rest of the pipeline (combined
-        // stream, line counter, status DTO) stays a single code path.
-        var externalInfo = UsesSimplebanlistV2(gameType)
-            ? new ExternalBanFileInfo { Content = new MemoryStream(), LineCount = 0, LastModifiedUtc = null }
-            : await GetExternalBanFileInfoAsync(containerClient, gameType, cancellationToken).ConfigureAwait(false);
-
-        await using var combinedStream = new MemoryStream();
-        externalInfo.Content.Seek(0, SeekOrigin.Begin);
-        await externalInfo.Content.CopyToAsync(combinedStream, cancellationToken).ConfigureAwait(false);
-
-        // External seed may not end on a newline — guarantee one before appending DB bans.
-        if (combinedStream.Length > 0)
+        if (usesDualLaneCod4x)
         {
-            combinedStream.Seek(combinedStream.Length - 1, SeekOrigin.Begin);
-            var lastByte = (byte)combinedStream.ReadByte();
-            if (lastByte != (byte)'\n')
-                combinedStream.WriteByte((byte)'\n');
+            var nativeSnapshotTask = GenerateLaneSnapshotAsync(
+                gameType,
+                blobKey,
+                activeBans,
+                useSimplebanlistV2: true,
+                cancellationToken);
+            var legacySnapshotTask = GenerateLaneSnapshotAsync(
+                gameType,
+                BuildBlobKey(gameType, legacyLane: true),
+                activeBans,
+                useSimplebanlistV2: false,
+                cancellationToken);
+
+            await Task.WhenAll(nativeSnapshotTask, legacySnapshotTask).ConfigureAwait(false);
+
+            var nativeSnapshot = await nativeSnapshotTask.ConfigureAwait(false);
+            var legacySnapshot = await legacySnapshotTask.ConfigureAwait(false);
+
+            stopwatch.Stop();
+
+            _logger.LogInformation(
+                "Regenerated dual-lane ban files for {GameType}: {BanSyncCount} DB bans, native {NativeSizeBytes} bytes, legacy {LegacySizeBytes} bytes, {DurationMs} ms",
+                gameType, banSyncLineCount, nativeSnapshot.BlobSizeBytes, legacySnapshot.BlobSizeBytes, stopwatch.ElapsedMilliseconds);
+
+            await UpsertStatusAsync(new UpsertCentralBanFileStatusDto(gameType)
+            {
+                BlobLastRegeneratedUtc = nativeSnapshot.BlobLastRegeneratedUtc,
+                BlobETag = nativeSnapshot.BlobETag,
+                BlobSizeBytes = nativeSnapshot.BlobSizeBytes,
+                TotalLineCount = nativeSnapshot.TotalLineCount,
+                BanSyncLineCount = nativeSnapshot.BanSyncLineCount,
+                ExternalLineCount = nativeSnapshot.ExternalLineCount,
+                ExternalSourceLastModifiedUtc = nativeSnapshot.ExternalSourceLastModifiedUtc,
+                LastRegenerationDurationMs = nativeSnapshot.LastRegenerationDurationMs,
+                LastRegenerationError = string.Empty,
+                ActiveBanSetHash = activeBanSetHash,
+                LegacyBlobLastRegeneratedUtc = legacySnapshot.BlobLastRegeneratedUtc,
+                LegacyBlobETag = legacySnapshot.BlobETag,
+                LegacyBlobSizeBytes = legacySnapshot.BlobSizeBytes,
+                LegacyTotalLineCount = legacySnapshot.TotalLineCount,
+                LegacyBanSyncLineCount = legacySnapshot.BanSyncLineCount,
+                LegacyExternalLineCount = legacySnapshot.ExternalLineCount,
+                LegacyExternalSourceLastModifiedUtc = legacySnapshot.ExternalSourceLastModifiedUtc,
+                LegacyLastRegenerationDurationMs = legacySnapshot.LastRegenerationDurationMs,
+                LegacyLastRegenerationError = string.Empty,
+                LegacyActiveBanSetHash = activeBanSetHash
+            }, cancellationToken).ConfigureAwait(false);
+
+            return nativeSnapshot.ToResult(gameType, activeBanSetHash);
         }
 
-        await using (var streamWriter = new StreamWriter(combinedStream, leaveOpen: true))
-        {
-            foreach (var adminActionDto in activeBans)
-                await streamWriter.WriteLineAsync(FormatBanLine(gameType, adminActionDto.Player?.Guid, adminActionDto.Player?.Username)).ConfigureAwait(false);
-
-            await streamWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        var blobSizeBytes = combinedStream.Length;
-        combinedStream.Seek(0, SeekOrigin.Begin);
-        var totalLineCount = CountLines(combinedStream);
-        combinedStream.Seek(0, SeekOrigin.Begin);
-
-        var uploadResponse = await blobClient.UploadAsync(combinedStream, overwrite: true, cancellationToken).ConfigureAwait(false);
-        var blobEtag = uploadResponse.Value.ETag.ToString();
+        var externalInfo = await GetExternalBanFileInfoAsync(containerClient, gameType, cancellationToken).ConfigureAwait(false);
+        var snapshot = await GenerateLaneSnapshotAsync(
+            gameType,
+            blobKey,
+            activeBans,
+            useSimplebanlistV2: false,
+            cancellationToken,
+            externalInfo).ConfigureAwait(false);
 
         stopwatch.Stop();
 
         _logger.LogInformation(
             "Regenerated ban file for {GameType}: {BanSyncCount} DB bans, {ExternalCount} external lines, {TotalCount} total lines, {SizeBytes} bytes, {DurationMs} ms",
-            gameType, banSyncLineCount, externalInfo.LineCount, totalLineCount, blobSizeBytes, stopwatch.ElapsedMilliseconds);
+            gameType, banSyncLineCount, externalInfo.LineCount, snapshot.TotalLineCount, snapshot.BlobSizeBytes, stopwatch.ElapsedMilliseconds);
 
-        var nowUtc = DateTime.UtcNow;
         await UpsertStatusAsync(new UpsertCentralBanFileStatusDto(gameType)
         {
-            BlobLastRegeneratedUtc = nowUtc,
-            BlobETag = blobEtag,
-            BlobSizeBytes = blobSizeBytes,
-            TotalLineCount = totalLineCount,
-            BanSyncLineCount = banSyncLineCount,
+            BlobLastRegeneratedUtc = snapshot.BlobLastRegeneratedUtc,
+            BlobETag = snapshot.BlobETag,
+            BlobSizeBytes = snapshot.BlobSizeBytes,
+            TotalLineCount = snapshot.TotalLineCount,
+            BanSyncLineCount = snapshot.BanSyncLineCount,
             ExternalLineCount = externalInfo.LineCount,
             ExternalSourceLastModifiedUtc = externalInfo.LastModifiedUtc,
-            LastRegenerationDurationMs = (int)stopwatch.ElapsedMilliseconds,
+            LastRegenerationDurationMs = snapshot.LastRegenerationDurationMs,
             LastRegenerationError = string.Empty,
             ActiveBanSetHash = activeBanSetHash
         }, cancellationToken).ConfigureAwait(false);
 
-        return new BanFileRegenerationResult
-        {
-            GameType = gameType,
-            Skipped = false,
-            ActiveBanSetHash = activeBanSetHash,
-            BanSyncLineCount = banSyncLineCount,
-            TotalLineCount = totalLineCount,
-            ExternalLineCount = externalInfo.LineCount,
-            BlobSizeBytes = blobSizeBytes,
-            BlobETag = blobEtag,
-            DurationMs = (int)stopwatch.ElapsedMilliseconds
-        };
+        return snapshot.ToResult(gameType, activeBanSetHash);
     }
 
     public async Task<long> GetBanFileSizeForGame(GameType gameType)
     {
-        var blobKey = $"{gameType}-bans.txt";
+        var blobKey = BuildBlobKey(gameType);
 
         _logger.LogInformation("Retrieving ban file size for {GameType} using blob key {BlobKey}", gameType, blobKey);
 
@@ -212,7 +245,7 @@ public class BanFilesRepository(
 
     public async Task<Stream> GetBanFileForGame(GameType gameType)
     {
-        var blobKey = $"{gameType}-bans.txt";
+        var blobKey = BuildBlobKey(gameType);
 
         _logger.LogInformation("Retrieving ban file for {GameType} using blob key {BlobKey}", gameType, blobKey);
 
@@ -252,11 +285,13 @@ public class BanFilesRepository(
     /// could otherwise inject a forged field).
     /// </summary>
     public static string FormatBanLine(GameType gameType, string? playerGuid, string? username)
-    {
-        var useV2 = UsesSimplebanlistV2(gameType);
-        var safeUsername = SanitiseUsernameForBanFile(username, useV2);
+        => FormatBanLine(gameType, playerGuid, username, UsesSimplebanlistV2(gameType));
 
-        if (useV2)
+    public static string FormatBanLine(GameType gameType, string? playerGuid, string? username, bool useSimplebanlistV2)
+    {
+        var safeUsername = SanitiseUsernameForBanFile(username, useSimplebanlistV2);
+
+        if (useSimplebanlistV2)
             return $"\\playerid\\{playerGuid}\\asteamid\\0\\rsn\\[BANSYNC] {safeUsername}";
 
         return $"{playerGuid} [BANSYNC]-{safeUsername}";
@@ -349,6 +384,66 @@ public class BanFilesRepository(
         }
     }
 
+    private async Task<LaneRegenerationSnapshot> GenerateLaneSnapshotAsync(
+        GameType gameType,
+        string blobKey,
+        IReadOnlyList<AdminActionDto> activeBans,
+        bool useSimplebanlistV2,
+        CancellationToken ct,
+        ExternalBanFileInfo? externalInfo = null)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint!), new DefaultAzureCredential());
+        var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
+        var blobClient = containerClient.GetBlobClient(blobKey);
+
+        await using var combinedStream = new MemoryStream();
+
+        if (externalInfo is not null)
+        {
+            externalInfo.Content.Seek(0, SeekOrigin.Begin);
+            await externalInfo.Content.CopyToAsync(combinedStream, ct).ConfigureAwait(false);
+
+            if (combinedStream.Length > 0)
+            {
+                combinedStream.Seek(combinedStream.Length - 1, SeekOrigin.Begin);
+                var lastByte = (byte)combinedStream.ReadByte();
+                if (lastByte != (byte)'\n')
+                    combinedStream.WriteByte((byte)'\n');
+            }
+        }
+
+        await using (var streamWriter = new StreamWriter(combinedStream, leaveOpen: true))
+        {
+            foreach (var adminActionDto in activeBans)
+                await streamWriter.WriteLineAsync(FormatBanLine(gameType, adminActionDto.Player?.Guid, adminActionDto.Player?.Username, useSimplebanlistV2)).ConfigureAwait(false);
+
+            await streamWriter.FlushAsync(ct).ConfigureAwait(false);
+        }
+
+        var blobSizeBytes = combinedStream.Length;
+        combinedStream.Seek(0, SeekOrigin.Begin);
+        var totalLineCount = CountLines(combinedStream);
+        combinedStream.Seek(0, SeekOrigin.Begin);
+
+        var uploadResponse = await blobClient.UploadAsync(combinedStream, overwrite: true, cancellationToken: ct).ConfigureAwait(false);
+
+        stopwatch.Stop();
+
+        return new LaneRegenerationSnapshot
+        {
+            BlobLastRegeneratedUtc = DateTime.UtcNow,
+            BlobETag = uploadResponse.Value.ETag.ToString(),
+            BlobSizeBytes = blobSizeBytes,
+            TotalLineCount = totalLineCount,
+            BanSyncLineCount = activeBans.Count,
+            ExternalLineCount = externalInfo?.LineCount ?? 0,
+            ExternalSourceLastModifiedUtc = externalInfo?.LastModifiedUtc,
+            LastRegenerationDurationMs = (int)stopwatch.ElapsedMilliseconds
+        };
+    }
+
     /// <summary>
     /// Refreshes <c>ExternalLineCount</c> only when the source blob's <c>LastModified</c>
     /// has advanced since the last status row was written. Avoids re-reading the 3–4 MB
@@ -412,6 +507,11 @@ public class BanFilesRepository(
 
         return response.Result.Data;
     }
+
+    private static string BuildBlobKey(GameType gameType, bool legacyLane = false)
+        => legacyLane && gameType == GameType.CallOfDuty4x
+            ? $"{gameType}-legacy-bans.txt"
+            : $"{gameType}-bans.txt";
 
     private async Task UpsertStatusAsync(UpsertCentralBanFileStatusDto dto, CancellationToken ct)
     {
@@ -498,6 +598,31 @@ public class BanFilesRepository(
         } while (adminActionsApiResponse?.IsSuccess == true && adminActionsApiResponse.Result?.Data?.Items?.Any() is true);
 
         return adminActions;
+    }
+
+    private sealed record LaneRegenerationSnapshot
+    {
+        public required DateTime BlobLastRegeneratedUtc { get; init; }
+        public required string BlobETag { get; init; }
+        public required long BlobSizeBytes { get; init; }
+        public required int TotalLineCount { get; init; }
+        public required int BanSyncLineCount { get; init; }
+        public required int ExternalLineCount { get; init; }
+        public required DateTime? ExternalSourceLastModifiedUtc { get; init; }
+        public required int LastRegenerationDurationMs { get; init; }
+
+        public BanFileRegenerationResult ToResult(GameType gameType, string activeBanSetHash) => new()
+        {
+            GameType = gameType,
+            Skipped = false,
+            ActiveBanSetHash = activeBanSetHash,
+            BanSyncLineCount = BanSyncLineCount,
+            TotalLineCount = TotalLineCount,
+            ExternalLineCount = ExternalLineCount,
+            BlobSizeBytes = BlobSizeBytes,
+            BlobETag = BlobETag,
+            DurationMs = LastRegenerationDurationMs
+        };
     }
 
     /// <summary>
