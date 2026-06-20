@@ -58,10 +58,20 @@ jobs:
           APIM_NAME=$(terraform output -raw api_management_name 2>/dev/null) || true
           APIM_RG=$(terraform output -raw api_management_resource_group_name 2>/dev/null) || true
 
+          delete_api_if_present() {
+            local api_id="$1"
+            if az apim api show --resource-group "$APIM_RG" --service-name "$APIM_NAME" --api-id "$api_id" --only-show-errors >/dev/null 2>&1; then
+              echo "Deleting APIM API $api_id..."
+              az apim api delete --resource-group "$APIM_RG" --service-name "$APIM_NAME" --api-id "$api_id" --delete-revisions true -y --only-show-errors
+            else
+              echo "APIM API $api_id not found, skipping"
+            fi
+          }
+
           if [ -n "$APIM_NAME" ] && [ -n "$APIM_RG" ]; then
             echo "Deleting APIM APIs from $APIM_NAME in $APIM_RG..."
-            az apim api delete --resource-group "$APIM_RG" --service-name "$APIM_NAME" --api-id sync-api-v1 --delete-revisions true -y 2>/dev/null || true
-            az apim api delete --resource-group "$APIM_RG" --service-name "$APIM_NAME" --api-id sync-api-v1-1 --delete-revisions true -y 2>/dev/null || true
+            delete_api_if_present "sync-api-v1"
+            delete_api_if_present "sync-api-v1-1"
           else
             echo "Could not determine APIM details from Terraform outputs, skipping API cleanup"
           fi
