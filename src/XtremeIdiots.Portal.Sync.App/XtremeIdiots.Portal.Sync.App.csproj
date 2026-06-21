@@ -25,8 +25,8 @@
 	  <PackageReference Include="Microsoft.Azure.AppConfiguration.Functions.Worker" Version="8.5.0" />
 	  <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.9" />
 	  <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.9" />
-	  <PackageReference Include="MX.Api.Abstractions" Version="2.3.31" />
-	  <PackageReference Include="MX.Api.Client" Version="2.3.31" />
+	  <PackageReference Include="MX.Api.Abstractions" Version="2.3.53" />
+	  <PackageReference Include="MX.Api.Client" Version="2.3.53" />
 	  <PackageReference Include="MX.InvisionCommunity.Api.Client" Version="1.0.18" />
 	  <PackageReference Include="MX.Observability.ApplicationInsights.WorkerService" Version="1.1.1" />
     <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="2.1.274" />
