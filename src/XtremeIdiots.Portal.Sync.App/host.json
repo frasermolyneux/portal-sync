@@ -13,8 +13,7 @@
         },
         "applicationInsights": {
             "samplingSettings": {
-                "isEnabled": true,
-                "excludedTypes": "Exception"
+                "isEnabled": false
             }
         }
     }
