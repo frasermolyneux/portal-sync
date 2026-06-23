@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Moq;
 
@@ -20,7 +21,7 @@ public class HealthCheckTests
     }
 
     [Fact]
-    public async Task Run_WhenHealthy_ReturnsOkWithHealthyStatus()
+    public async Task RunReady_WhenHealthy_Returns200WithHealthyStatus()
     {
         var healthReport = new HealthReport(
             new Dictionary<string, HealthReportEntry>(),
@@ -31,16 +32,24 @@ public class HealthCheckTests
             .Setup(h => h.CheckHealthAsync(It.IsAny<Func<HealthCheckRegistration, bool>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(healthReport);
 
-        var sut = CreateSut();
-        var result = await sut.Run(null!, null!);
+        var context = new Mock<FunctionContext>();
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
 
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        Assert.Equal("Healthy", okResult.Value);
+        var sut = CreateSut();
+        var result = await sut.RunReady(null!, context.Object);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status200OK, objectResult.StatusCode);
+
+        var statusProperty = objectResult.Value?.GetType().GetProperty("status");
+        Assert.NotNull(statusProperty);
+        Assert.Equal("Healthy", statusProperty.GetValue(objectResult.Value));
+
         _healthCheckServiceMock.Verify(h => h.CheckHealthAsync(It.IsAny<Func<HealthCheckRegistration, bool>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Run_WhenDegraded_ReturnsOkWithDegradedStatus()
+    public async Task RunReady_WhenDegraded_Returns503WithDegradedStatus()
     {
         var healthReport = new HealthReport(
             new Dictionary<string, HealthReportEntry>(),
@@ -51,16 +60,24 @@ public class HealthCheckTests
             .Setup(h => h.CheckHealthAsync(It.IsAny<Func<HealthCheckRegistration, bool>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(healthReport);
 
-        var sut = CreateSut();
-        var result = await sut.Run(null!, null!);
+        var context = new Mock<FunctionContext>();
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
 
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        Assert.Equal("Degraded", okResult.Value);
+        var sut = CreateSut();
+        var result = await sut.RunReady(null!, context.Object);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
+
+        var statusProperty = objectResult.Value?.GetType().GetProperty("status");
+        Assert.NotNull(statusProperty);
+        Assert.Equal("Degraded", statusProperty.GetValue(objectResult.Value));
+
         _healthCheckServiceMock.Verify(h => h.CheckHealthAsync(It.IsAny<Func<HealthCheckRegistration, bool>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Run_WhenUnhealthy_ReturnsOkWithUnhealthyStatus()
+    public async Task RunReady_WhenUnhealthy_Returns503WithUnhealthyStatus()
     {
         var healthReport = new HealthReport(
             new Dictionary<string, HealthReportEntry>(),
@@ -71,11 +88,31 @@ public class HealthCheckTests
             .Setup(h => h.CheckHealthAsync(It.IsAny<Func<HealthCheckRegistration, bool>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(healthReport);
 
+        var context = new Mock<FunctionContext>();
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+
         var sut = CreateSut();
-        var result = await sut.Run(null!, null!);
+        var result = await sut.RunReady(null!, context.Object);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
+
+        var statusProperty = objectResult.Value?.GetType().GetProperty("status");
+        Assert.NotNull(statusProperty);
+        Assert.Equal("Unhealthy", statusProperty.GetValue(objectResult.Value));
+
+        _healthCheckServiceMock.Verify(h => h.CheckHealthAsync(It.IsAny<Func<HealthCheckRegistration, bool>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void RunLive_ReturnsHealthyStatus()
+    {
+        var sut = CreateSut();
+        var result = sut.RunLive(null!);
 
         var okResult = Assert.IsType<OkObjectResult>(result);
-        Assert.Equal("Unhealthy", okResult.Value);
-        _healthCheckServiceMock.Verify(h => h.CheckHealthAsync(It.IsAny<Func<HealthCheckRegistration, bool>>(), It.IsAny<CancellationToken>()), Times.Once);
+        var statusProperty = okResult.Value?.GetType().GetProperty("status");
+        Assert.NotNull(statusProperty);
+        Assert.Equal("Healthy", statusProperty.GetValue(okResult.Value));
     }
 }

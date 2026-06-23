@@ -208,13 +208,27 @@
         }
       }
     },
-    "/api/health": {
+    "/api/health/live": {
       "get": {
-        "operationId": "HealthCheck",
+        "operationId": "HealthCheckLive",
         "security": [],
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/health/ready": {
+      "get": {
+        "operationId": "HealthCheckReady",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "503": {
+            "description": "Service Unavailable"
           }
         }
       }
