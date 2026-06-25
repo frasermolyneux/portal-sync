@@ -2,45 +2,41 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "clean (functions)",
+      "label": "dotnet: clean",
       "command": "dotnet",
       "args": [
         "clean",
+        "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App.sln",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
       "type": "process",
-      "problemMatcher": "$msCompile",
-      "options": {
-        "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App"
-      }
+      "problemMatcher": "$msCompile"
     },
     {
-      "label": "build (functions)",
+      "label": "dotnet: build",
       "command": "dotnet",
       "args": [
         "build",
+        "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App.sln",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
       "type": "process",
-      "dependsOn": "clean (functions)",
+      "dependsOn": "dotnet: clean",
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "problemMatcher": "$msCompile",
-      "options": {
-        "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App"
-      }
+      "problemMatcher": "$msCompile"
     },
     {
-      "label": "test",
+      "label": "dotnet: test",
       "command": "dotnet",
       "type": "process",
       "args": [
         "test",
-        "${workspaceFolder}/src",
+        "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App.sln",
         "--filter",
         "FullyQualifiedName!~IntegrationTests",
         "/property:GenerateFullPaths=true",
@@ -53,41 +49,49 @@
       "problemMatcher": "$msCompile"
     },
     {
-      "label": "clean release (functions)",
+      "label": "dotnet: format",
+      "command": "dotnet",
+      "args": [
+        "format",
+        "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App.sln",
+        "--verify-no-changes"
+      ],
+      "type": "process",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: clean-release",
       "command": "dotnet",
       "args": [
         "clean",
         "--configuration",
         "Release",
+        "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App/XtremeIdiots.Portal.Sync.App.csproj",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
       "type": "process",
-      "problemMatcher": "$msCompile",
-      "options": {
-        "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App"
-      }
+      "problemMatcher": "$msCompile"
     },
     {
-      "label": "publish (functions)",
+      "label": "dotnet: publish",
       "command": "dotnet",
       "args": [
         "publish",
+        "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App/XtremeIdiots.Portal.Sync.App.csproj",
         "--configuration",
         "Release",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
       "type": "process",
-      "dependsOn": "clean release (functions)",
-      "problemMatcher": "$msCompile",
-      "options": {
-        "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App"
-      }
+      "dependsOn": "dotnet: clean-release",
+      "problemMatcher": "$msCompile"
     },
     {
+      "label": "func: host start",
       "type": "func",
-      "dependsOn": "build (functions)",
+      "dependsOn": "dotnet: build",
       "options": {
         "cwd": "${workspaceFolder}/src/XtremeIdiots.Portal.Sync.App/bin/Debug/net9.0"
       },

@@ -13,7 +13,7 @@ public class MapRedirectRepository(
     ILogger<MapRedirectRepository> logger) : IMapRedirectRepository
 {
     private const int MaxContentPreviewLength = 200;
-    
+
     private readonly IOptions<MapRedirectRepositoryOptions> _options = options ?? throw new ArgumentNullException(nameof(options));
     private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     private readonly ILogger<MapRedirectRepository> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -46,13 +46,13 @@ public class MapRedirectRepository(
             _logger.LogInformation("Received HTTP {StatusCode} response from map redirect API for game '{Game}'", statusCode, game);
 
             var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            
+
             // Log a preview of the response content for debugging
             _logger.LogDebug("Response content preview for game '{Game}': {ContentPreview}", game, TruncateForLogging(content));
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Map redirect API returned error status {StatusCode} for game '{Game}'. Response preview: {ErrorPreview}", 
+                _logger.LogError("Map redirect API returned error status {StatusCode} for game '{Game}'. Response preview: {ErrorPreview}",
                     statusCode, game, TruncateForLogging(content));
 
                 if (statusCode == 401 || statusCode == 403)
@@ -76,7 +76,7 @@ public class MapRedirectRepository(
             }
             catch (JsonException ex)
             {
-                _logger.LogError(ex, "Failed to deserialize JSON response from map redirect API for game '{Game}'. Response preview: {ContentPreview}", 
+                _logger.LogError(ex, "Failed to deserialize JSON response from map redirect API for game '{Game}'. Response preview: {ContentPreview}",
                     game, TruncateForLogging(content));
                 throw new ApplicationException($"Failed to parse JSON response from map redirect API for game '{game}'. This may indicate an invalid API key or server error.", ex);
             }

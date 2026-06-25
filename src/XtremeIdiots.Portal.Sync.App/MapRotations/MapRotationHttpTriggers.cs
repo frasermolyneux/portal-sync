@@ -239,7 +239,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         string gameType,
         string mapName)
     {
-        if (!Enum.TryParse<XtremeIdiots.Portal.Repository.Abstractions.Constants.V1.GameType>(gameType, true, out var parsedGameType))
+        if (!Enum.TryParse<Portal.Repository.Abstractions.Constants.V1.GameType>(gameType, true, out var parsedGameType))
         {
             var badGameTypeResponse = req.CreateResponse(HttpStatusCode.BadRequest);
             await badGameTypeResponse.WriteStringAsync($"Invalid game type: {gameType}").ConfigureAwait(false);
