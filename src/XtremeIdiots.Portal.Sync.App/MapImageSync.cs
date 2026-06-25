@@ -166,7 +166,10 @@ public class MapImageSync(
 
                 skip += TakeEntries;
                 mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null).ConfigureAwait(false);
-            } while (mapsResponseDto is not null && mapsResponseDto.IsSuccess && mapsResponseDto.Result is not null && mapsResponseDto.Result.Data is not null && mapsResponseDto.Result.Data.Items is not null && mapsResponseDto.Result.Data.Items.Any()) ;
+            } while (mapsResponseDto is not null && mapsResponseDto.IsSuccess && mapsResponseDto.Result is not null && mapsResponseDto.Result.Data is not null && mapsResponseDto.Result.Data.Items is not null && mapsResponseDto.Result.Data.Items.Any())
+            {
+                ;
+            }
         }
     }
 }

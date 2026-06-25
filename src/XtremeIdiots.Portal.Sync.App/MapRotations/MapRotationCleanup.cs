@@ -56,10 +56,14 @@ public class MapRotationCleanup(
         foreach (var assignment in assignmentsResult.Result.Data.Items)
         {
             if (assignment.DeploymentState != DeploymentState.Removed)
+            {
                 continue;
+            }
 
             if (assignment.UnassignedAt is null || assignment.UnassignedAt >= cutoff)
+            {
                 continue;
+            }
 
             try
             {

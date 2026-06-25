@@ -243,7 +243,9 @@ public static class MapRotationOrchestrators
             for (var i = 0; i < mapNames.Count; i++)
             {
                 if (mapProgress[i].Status == "Skipped")
+                {
                     continue;
+                }
 
                 var mapName = mapNames[i];
                 mapProgress[i] = mapProgress[i] with { Status = "InProgress" };
@@ -524,8 +526,16 @@ public static class MapRotationOrchestrators
             if (!configSuccess || !rconSuccess)
             {
                 var errors = new List<string>();
-                if (!configSuccess) errors.Add($"Config write failed: {configError}");
-                if (!rconSuccess) errors.Add($"RCON set failed: {rconError}");
+                if (!configSuccess)
+                {
+                    errors.Add($"Config write failed: {configError}");
+                }
+
+                if (!rconSuccess)
+                {
+                    errors.Add($"RCON set failed: {rconError}");
+                }
+
                 var errorMessage = string.Join("; ", errors);
 
                 await context.CallActivityAsync(
@@ -661,8 +671,16 @@ public static class MapRotationOrchestrators
             if (!configResult.Success || !rconResult.Success)
             {
                 var errors = new List<string>();
-                if (!configResult.Success) errors.Add($"Config write failed: {configResult.Error}");
-                if (!rconResult.Success) errors.Add($"RCON set failed: {rconResult.Error}");
+                if (!configResult.Success)
+                {
+                    errors.Add($"Config write failed: {configResult.Error}");
+                }
+
+                if (!rconResult.Success)
+                {
+                    errors.Add($"RCON set failed: {rconResult.Error}");
+                }
+
                 var errorMessage = string.Join("; ", errors);
 
                 await context.CallActivityAsync(
@@ -770,7 +788,9 @@ public static class MapRotationOrchestrators
                 };
 
                 if (!isPresent)
+                {
                     missing.Add(mapName);
+                }
 
                 context.SetCustomStatus(new OrchestrationProgress("Verify", mapNames.Count, i + 1, mapProgress));
             }

@@ -38,7 +38,9 @@ public class BanFilesRepository(
         _logger.LogInformation("Regenerating ban file for {GameType} using blob key {BlobKey}", gameType, blobKey);
 
         if (string.IsNullOrEmpty(_options.Value.StorageBlobEndpoint))
+        {
             throw new InvalidOperationException("StorageBlobEndpoint is null or empty");
+        }
 
         var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint), new DefaultAzureCredential());
         var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
@@ -64,9 +66,11 @@ public class BanFilesRepository(
             : fetchedBans.Where(a => !IsSentinelBan(a)).ToList();
 
         if (sentinelCount > 0)
+        {
             _logger.LogWarning(
                 "Dropped {SentinelCount} sentinel ban record(s) for {GameType} (guid missing/'0' or username='BOT-Client') before regeneration.",
                 sentinelCount, gameType);
+        }
 
         var activeBanSetHash = ComputeActiveBanSetHash(activeBans);
         var banSyncLineCount = activeBans.Count;
@@ -226,7 +230,9 @@ public class BanFilesRepository(
         _logger.LogInformation("Retrieving ban file size for {GameType} using blob key {BlobKey}", gameType, blobKey);
 
         if (string.IsNullOrEmpty(_options.Value.StorageBlobEndpoint))
+        {
             throw new InvalidOperationException("StorageBlobEndpoint is null or empty");
+        }
 
         var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint), new DefaultAzureCredential());
         var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
@@ -250,7 +256,9 @@ public class BanFilesRepository(
         _logger.LogInformation("Retrieving ban file for {GameType} using blob key {BlobKey}", gameType, blobKey);
 
         if (string.IsNullOrEmpty(_options.Value.StorageBlobEndpoint))
+        {
             throw new InvalidOperationException("StorageBlobEndpoint is null or empty");
+        }
 
         var blobServiceClient = new BlobServiceClient(new Uri(_options.Value.StorageBlobEndpoint), new DefaultAzureCredential());
         var containerClient = blobServiceClient.GetBlobContainerClient(_options.Value.ContainerName);
@@ -292,7 +300,9 @@ public class BanFilesRepository(
         var safeUsername = SanitiseUsernameForBanFile(username, useSimplebanlistV2);
 
         if (useSimplebanlistV2)
+        {
             return $"\\playerid\\{playerGuid}\\asteamid\\0\\rsn\\[BANSYNC] {safeUsername}";
+        }
 
         return $"{playerGuid} [BANSYNC]-{safeUsername}";
     }
@@ -301,7 +311,10 @@ public class BanFilesRepository(
     {
         var value = username ?? string.Empty;
         if (useSimplebanlistV2)
+        {
             value = value.Replace('\\', '/');
+        }
+
         return value.Replace('\n', ' ').Replace('\r', ' ');
     }
 
@@ -322,7 +335,9 @@ public class BanFilesRepository(
     public static bool IsSentinelBan(string? playerGuid, string? username)
     {
         if (string.IsNullOrWhiteSpace(playerGuid) || string.Equals(playerGuid, "0", StringComparison.Ordinal))
+        {
             return true;
+        }
 
         return string.Equals(username, "BOT-Client", StringComparison.Ordinal);
     }
@@ -410,14 +425,18 @@ public class BanFilesRepository(
                 combinedStream.Seek(combinedStream.Length - 1, SeekOrigin.Begin);
                 var lastByte = (byte)combinedStream.ReadByte();
                 if (lastByte != (byte)'\n')
+                {
                     combinedStream.WriteByte((byte)'\n');
+                }
             }
         }
 
         await using (var streamWriter = new StreamWriter(combinedStream, leaveOpen: true))
         {
             foreach (var adminActionDto in activeBans)
+            {
                 await streamWriter.WriteLineAsync(FormatBanLine(gameType, adminActionDto.Player?.Guid, adminActionDto.Player?.Username, useSimplebanlistV2)).ConfigureAwait(false);
+            }
 
             await streamWriter.FlushAsync(ct).ConfigureAwait(false);
         }
@@ -495,7 +514,9 @@ public class BanFilesRepository(
             .ConfigureAwait(false);
 
         if (response.IsNotFound)
+        {
             return null;
+        }
 
         if (!response.IsSuccess || response.Result?.Data is null)
         {
@@ -545,7 +566,10 @@ public class BanFilesRepository(
         var message = $"{ex.GetType().Name}: {ex.Message}";
         // Keep the recorded message bounded; SQL column is NVARCHAR(MAX) but admins
         // only need a short hint, full detail goes to App Insights via the LogError above.
-        if (message.Length > 1000) message = message[..1000];
+        if (message.Length > 1000)
+        {
+            message = message[..1000];
+        }
 
         await UpsertStatusAsync(new UpsertCentralBanFileStatusDto(gameType)
         {
@@ -656,7 +680,11 @@ public class BanFilesRepository(
                 }
             }
             // Count the trailing partial line (no terminating newline) if it has any content.
-            if (trailingHasContent) count++;
+            if (trailingHasContent)
+            {
+                count++;
+            }
+
             return count;
         }
         finally

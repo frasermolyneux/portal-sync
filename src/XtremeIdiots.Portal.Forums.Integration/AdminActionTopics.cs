@@ -45,7 +45,9 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
     public async Task UpdateTopicForAdminAction(int topicId, AdminActionType type, GameType gameType, Guid playerId, string username, DateTime created, string text, string? adminId)
     {
         if (topicId == 0)
+        {
             return;
+        }
 
         try
         {
@@ -94,7 +96,9 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
         };
 
         if (category is null)
+        {
             return defaultForumId;
+        }
 
         var gameKey = gameType switch
         {
@@ -104,7 +108,9 @@ public class AdminActionTopics(ILogger<AdminActionTopics> logger, IInvisionApiCl
 
         var configValue = configuration[$"XtremeIdiots:Forums:{category}:{gameKey}"];
         if (configValue is not null && int.TryParse(configValue, out var forumId))
+        {
             return forumId;
+        }
 
         // Fallback to hardcoded values from GameTypeExtensions
         return type switch

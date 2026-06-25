@@ -149,10 +149,10 @@ public class UserProfileForumsSyncTests
         var methodInfo = typeof(UserProfileForumsSync).GetMethod("GetClaimsForMember", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(methodInfo);
 
-        var claims = methodInfo!.Invoke(null, [userProfileId, member]) as List<CreateUserProfileClaimDto>;
+        var claims = methodInfo.Invoke(null, [userProfileId, member]) as List<CreateUserProfileClaimDto>;
         Assert.NotNull(claims);
 
-        return claims!;
+        return claims;
     }
 
     private static MemberDto CreateMemberDto(long memberId, GroupDto primaryGroup, List<GroupDto>? secondaryGroups = null)
@@ -179,6 +179,6 @@ public class UserProfileForumsSyncTests
         var property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         Assert.NotNull(property);
 
-        property!.SetValue(target, value);
+        property.SetValue(target, value);
     }
 }

@@ -133,9 +133,13 @@ public class BanFilesRepositoryFormatTests
         var isSentinel = BanFilesRepository.IsSentinelBan(guid, username);
 
         if (guid == "0")
+        {
             Assert.True(isSentinel);
+        }
         else
+        {
             Assert.False(isSentinel);
+        }
     }
 
     [Fact]

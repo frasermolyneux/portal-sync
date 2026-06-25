@@ -167,7 +167,11 @@ public class MapRotationActivitiesFormatTests
         {
             var mapName = $"mp_map{maps.Count + 1:D3}";
             var entry = $"map {mapName} ";
-            if (currentLength + entry.Length > 1024 + 1) break;
+            if (currentLength + entry.Length > 1024 + 1)
+            {
+                break;
+            }
+
             maps.Add(mapName);
             currentLength += entry.Length;
         }

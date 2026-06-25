@@ -36,7 +36,7 @@ dotnet_style_namespace_match_folder = true:warning
 # Defer broad style-only churn in existing code.
 dotnet_diagnostic.IDE0007.severity = suggestion
 dotnet_diagnostic.IDE0010.severity = suggestion
-dotnet_diagnostic.IDE0011.severity = suggestion
+dotnet_diagnostic.IDE0011.severity = warning
 dotnet_diagnostic.IDE0017.severity = suggestion
 dotnet_diagnostic.IDE0022.severity = suggestion
 dotnet_diagnostic.IDE0046.severity = suggestion
@@ -60,6 +60,7 @@ dotnet_diagnostic.CA1822.severity = suggestion
 dotnet_diagnostic.CA1859.severity = suggestion
 dotnet_diagnostic.CA2254.severity = suggestion
 dotnet_diagnostic.CA1848.severity = suggestion
+dotnet_diagnostic.CA1873.severity = suggestion # Logging call-site message formatting is widespread; defer mass refactor during analyzer standards rollout.
 dotnet_diagnostic.CA2201.severity = suggestion
 dotnet_diagnostic.CA1001.severity = suggestion
 dotnet_diagnostic.CA1720.severity = suggestion

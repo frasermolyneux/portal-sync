@@ -92,23 +92,31 @@ public class MapRotationActivities(
             .GetServerAssignments(null, input.GameServerId, null, 0, 100).ConfigureAwait(false);
 
         if (!assignmentsResult.IsSuccess || assignmentsResult.Result?.Data?.Items is null)
+        {
             throw new InvalidOperationException($"Failed to query server assignments for server {input.GameServerId}. Cannot safely determine shared maps.");
+        }
 
         var sharedMapNames = new List<string>();
 
         foreach (var assignment in assignmentsResult.Result.Data.Items)
         {
             if (assignment.MapRotationServerAssignmentId == input.ExcludeAssignmentId)
+            {
                 continue;
+            }
 
             if (assignment.DeploymentState == DeploymentState.Removed)
+            {
                 continue;
+            }
 
             var rotationResult = await repositoryApiClient.MapRotations.V1
                 .GetMapRotation(assignment.MapRotationId).ConfigureAwait(false);
 
             if (!rotationResult.IsSuccess || rotationResult.Result?.Data is null)
+            {
                 throw new InvalidOperationException($"Failed to get rotation {assignment.MapRotationId} for active assignment {assignment.MapRotationServerAssignmentId}. Cannot safely determine shared maps.");
+            }
 
             if (rotationResult.Result.Data.MapRotationMaps is not null)
             {
@@ -116,7 +124,9 @@ public class MapRotationActivities(
                 {
                     var mapResult = await repositoryApiClient.Maps.V1.GetMap(rotationMap.MapId).ConfigureAwait(false);
                     if (!mapResult.IsSuccess || mapResult.Result?.Data is null)
+                    {
                         throw new InvalidOperationException($"Failed to resolve map {rotationMap.MapId} in rotation {assignment.MapRotationId}. Cannot safely determine shared maps.");
+                    }
 
                     sharedMapNames.Add(mapResult.Result.Data.MapName);
                 }
@@ -167,7 +177,9 @@ public class MapRotationActivities(
             var result = await repositoryApiClient.MapRotations.V1.CreateAssignmentOperation(createDto).ConfigureAwait(false);
 
             if (!result.IsSuccess || result.Result?.Data is null)
+            {
                 throw new InvalidOperationException($"Failed to create operation for assignment {input.AssignmentId}");
+            }
 
             return result.Result.Data.MapRotationAssignmentOperationId;
         }
@@ -203,7 +215,9 @@ public class MapRotationActivities(
             .GetServerAssignment(input.AssignmentId).ConfigureAwait(false);
 
         if (!assignmentResult.IsSuccess || assignmentResult.Result?.Data is null)
+        {
             throw new InvalidOperationException($"Failed to get server assignment {input.AssignmentId}");
+        }
 
         var assignment = assignmentResult.Result.Data;
 
@@ -211,7 +225,9 @@ public class MapRotationActivities(
             .GetMapRotation(assignment.MapRotationId).ConfigureAwait(false);
 
         if (!rotationResult.IsSuccess || rotationResult.Result?.Data is null)
+        {
             throw new InvalidOperationException($"Failed to get map rotation {assignment.MapRotationId}");
+        }
 
         var rotation = rotationResult.Result.Data;
         var mapIds = rotation.MapRotationMaps?.Select(m => m.MapId).ToList() ?? [];
@@ -370,7 +386,9 @@ public class MapRotationActivities(
                 .ConfigureAwait(false);
 
             if (result.IsSuccess)
+            {
                 return new MapOperationResult(input.ConfigVariableName, true);
+            }
 
             var errorDetail = result.Result?.Errors?.FirstOrDefault()?.Message
                 ?? result.Result?.Errors?.FirstOrDefault()?.Code
@@ -403,7 +421,9 @@ public class MapRotationActivities(
                 .ConfigureAwait(false);
 
             if (result.IsSuccess)
+            {
                 return new MapOperationResult(input.DvarName, true);
+            }
 
             var errorDetail = result.Result?.Errors?.FirstOrDefault()?.Message
                 ?? result.Result?.Errors?.FirstOrDefault()?.Code

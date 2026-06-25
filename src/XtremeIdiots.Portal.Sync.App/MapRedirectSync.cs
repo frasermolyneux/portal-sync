@@ -79,7 +79,9 @@ public class MapRedirectSync(
             {
                 mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null, skipEntries, takeEntries, null).ConfigureAwait(false);
                 if (mapsCollectionBatch.IsSuccess && mapsCollectionBatch.Result?.Data?.Items is not null)
+                {
                     repositoryMaps.AddRange(mapsCollectionBatch.Result.Data.Items);
+                }
 
                 skipEntries += takeEntries;
             }
