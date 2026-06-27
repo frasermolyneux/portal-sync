@@ -2,8 +2,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
-using MX.Observability.ApplicationInsights.Auditing;
-using MX.Observability.ApplicationInsights.Auditing.Models;
 using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
@@ -14,13 +12,11 @@ namespace XtremeIdiots.Portal.Sync.App;
 public class BanFileMonitor(
     ILogger<BanFileMonitor> logger,
     IBanFilesRepository banFilesRepository,
-    IJobTelemetry jobTelemetry,
-    IAuditLogger auditLogger)
+    IJobTelemetry jobTelemetry)
 {
     private readonly ILogger<BanFileMonitor> logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IBanFilesRepository banFilesRepository = banFilesRepository ?? throw new ArgumentNullException(nameof(banFilesRepository));
     private readonly IJobTelemetry jobTelemetry = jobTelemetry ?? throw new ArgumentNullException(nameof(jobTelemetry));
-    private readonly IAuditLogger auditLogger = auditLogger ?? throw new ArgumentNullException(nameof(auditLogger));
 
     [Function(nameof(GenerateLatestBansFileManual))]
     public async Task GenerateLatestBansFileManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
@@ -44,20 +40,7 @@ public class BanFileMonitor(
                 {
                     try
                     {
-                        var result = await banFilesRepository.RegenerateBanFileForGame(gameType).ConfigureAwait(false);
-
-                        // Audit either Skipped or Generated so admins can correlate why the
-                        // central blob ETag did or did not advance for this cycle.
-                        var actionName = result.Skipped ? "BanFileRegenerationSkipped" : "BanFileGenerated";
-                        auditLogger.LogAudit(AuditEvent.SystemAction(actionName, AuditAction.Export)
-                            .WithService("BanFileMonitor")
-                            .WithProperty("GameType", gameType.ToString())
-                            .WithProperty("Skipped", result.Skipped.ToString())
-                            .WithProperty("ActiveBanSetHash", result.ActiveBanSetHash)
-                            .WithProperty("BanSyncLineCount", result.BanSyncLineCount.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                            .WithProperty("DurationMs", result.DurationMs.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                            .WithSource("BanFileMonitor")
-                            .Build());
+                        _ = await banFilesRepository.RegenerateBanFileForGame(gameType).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {

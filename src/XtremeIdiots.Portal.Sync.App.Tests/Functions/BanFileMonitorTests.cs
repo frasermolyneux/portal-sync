@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Moq;
-using MX.Observability.ApplicationInsights.Auditing;
 using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
@@ -12,7 +11,6 @@ public class BanFileMonitorTests
     private readonly Mock<ILogger<BanFileMonitor>> _loggerMock = new();
     private readonly Mock<IBanFilesRepository> _banFilesRepositoryMock = new();
     private readonly Mock<IJobTelemetry> _jobTelemetryMock = new();
-    private readonly Mock<IAuditLogger> _auditLoggerMock = new();
 
     public BanFileMonitorTests()
     {
@@ -21,8 +19,7 @@ public class BanFileMonitorTests
             .Returns<string, Func<Task>, Dictionary<string, string>?>((_, action, _) => action());
 
         // Default: any RegenerateBanFileForGame call returns a "skipped, empty" result
-        // so the function trigger has something to audit without exercising the full
-        // blob-write path.
+        // so the function trigger path is exercised without requiring blob writes.
         _banFilesRepositoryMock
             .Setup(x => x.RegenerateBanFileForGame(It.IsAny<GameType>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((GameType gt, CancellationToken _) => new BanFileRegenerationResult
@@ -38,8 +35,7 @@ public class BanFileMonitorTests
     private BanFileMonitor CreateSut() => new(
         _loggerMock.Object,
         _banFilesRepositoryMock.Object,
-        _jobTelemetryMock.Object,
-        _auditLoggerMock.Object);
+        _jobTelemetryMock.Object);
 
     [Fact]
     public void Constructor_WithValidDependencies_ShouldNotThrow()
@@ -54,8 +50,7 @@ public class BanFileMonitorTests
         Assert.Throws<ArgumentNullException>(() => new BanFileMonitor(
             null!,
             _banFilesRepositoryMock.Object,
-            _jobTelemetryMock.Object,
-            _auditLoggerMock.Object));
+            _jobTelemetryMock.Object));
     }
 
     [Fact]
@@ -64,8 +59,7 @@ public class BanFileMonitorTests
         Assert.Throws<ArgumentNullException>(() => new BanFileMonitor(
             _loggerMock.Object,
             null!,
-            _jobTelemetryMock.Object,
-            _auditLoggerMock.Object));
+            _jobTelemetryMock.Object));
     }
 
     [Fact]
@@ -74,8 +68,7 @@ public class BanFileMonitorTests
         Assert.Throws<ArgumentNullException>(() => new BanFileMonitor(
             _loggerMock.Object,
             _banFilesRepositoryMock.Object,
-            null!,
-            _auditLoggerMock.Object));
+            null!));
     }
 
     [Fact]

@@ -34,6 +34,7 @@ This repository contains **portal-sync**, an Azure Functions (v4, isolated worke
 - Use `ConfigureAwait(false)` on all async calls.
 - Follow the existing pattern of interfaces in `Interfaces/` and implementations in peer folders.
 - Configuration classes live in `Configuration/` and are bound via `IOptions<T>`. Some settings are read directly from `IConfiguration` (e.g., `MapRedirect:BaseUrl`, forum IDs).
+- Use `.github/instructions/auditing-balance.instructions.md` when adding, reviewing, or removing audit events.
 
 ## Terraform Conventions
 
