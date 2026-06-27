@@ -345,22 +345,91 @@ public static class MapRotationOrchestrators
             nameof(MapRotationActivities.RecordOperation),
             new RecordOperationInput(input.AssignmentId, AssignmentOperationType.Activate, instanceId));
 
+        var activationDeadline = context.CurrentUtcDateTime.Add(MapRotationOrchestrationPolicies.ActivationTimeout);
+
+        static bool HasTimedOut(TaskOrchestrationContext orchestrationContext, DateTime activationDeadlineUtc)
+        {
+            return orchestrationContext.CurrentUtcDateTime >= activationDeadlineUtc;
+        }
+
+        static string BuildTimeoutError(DateTime activationDeadlineUtc)
+        {
+            return $"Activation timed out after {(int)MapRotationOrchestrationPolicies.ActivationTimeout.TotalMinutes} minutes (deadline: {activationDeadlineUtc:O}).";
+        }
+
         try
         {
             // Update activation state to Activating
             await context.CallActivityAsync(
                 nameof(MapRotationActivities.UpdateAssignmentStatus),
-                new UpdateStatusInput(input.AssignmentId, ActivationState: ActivationState.Activating));
+                new UpdateStatusInput(input.AssignmentId, ActivationState: ActivationState.Activating),
+                MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+
+            if (HasTimedOut(context, activationDeadline))
+            {
+                var timeoutError = BuildTimeoutError(activationDeadline);
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        ActivationState: ActivationState.Failed,
+                        LastError: timeoutError,
+                        LastErrorAt: context.CurrentUtcDateTime));
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, timeoutError));
+
+                return;
+            }
 
             // Get rotation details
             var details = await context.CallActivityAsync<RotationDetails>(
                 nameof(MapRotationActivities.GetRotationDetails),
-                new GetRotationDetailsInput(input.AssignmentId));
+                new GetRotationDetailsInput(input.AssignmentId),
+                MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+
+            if (HasTimedOut(context, activationDeadline))
+            {
+                var timeoutError = BuildTimeoutError(activationDeadline);
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        ActivationState: ActivationState.Failed,
+                        LastError: timeoutError,
+                        LastErrorAt: context.CurrentUtcDateTime));
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, timeoutError));
+
+                return;
+            }
 
             // Resolve map IDs to names
             var mapNames = await context.CallActivityAsync<List<string>>(
                 nameof(MapRotationActivities.ResolveMapNames),
-                new ResolveMapNamesInput(details.MapIds));
+                new ResolveMapNamesInput(details.MapIds),
+                MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+
+            if (HasTimedOut(context, activationDeadline))
+            {
+                var timeoutError = BuildTimeoutError(activationDeadline);
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        ActivationState: ActivationState.Failed,
+                        LastError: timeoutError,
+                        LastErrorAt: context.CurrentUtcDateTime));
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, timeoutError));
+
+                return;
+            }
 
             if (mapNames.Count == 0)
             {
@@ -389,7 +458,26 @@ public static class MapRotationOrchestrators
 
             var rotationOutput = await context.CallActivityAsync<FormatRotationOutput>(
                 nameof(MapRotationActivities.FormatRotationString),
-                new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation"));
+                new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation"),
+                MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+
+            if (HasTimedOut(context, activationDeadline))
+            {
+                var timeoutError = BuildTimeoutError(activationDeadline);
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        ActivationState: ActivationState.Failed,
+                        LastError: timeoutError,
+                        LastErrorAt: context.CurrentUtcDateTime));
+
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, timeoutError));
+
+                return;
+            }
 
             steps[0] = steps[0] with { Status = "Completed" };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 1, steps));
@@ -410,12 +498,20 @@ public static class MapRotationOrchestrators
 
             for (var i = 0; i < rotationOutput.Parts.Count; i++)
             {
+                if (HasTimedOut(context, activationDeadline))
+                {
+                    configSuccess = false;
+                    configError = BuildTimeoutError(activationDeadline);
+                    break;
+                }
+
                 var part = rotationOutput.Parts[i];
                 // Only attach the managed comment block to the first (base) variable
                 var commentLines = i == 0 ? managedCommentLines : null;
                 var result = await context.CallActivityAsync<MapOperationResult>(
                     nameof(MapRotationActivities.WriteConfigVariable),
-                    new WriteConfigInput(details.GameServerId, details.ConfigFilePath ?? "", part.VariableName, part.Value, commentLines));
+                    new WriteConfigInput(details.GameServerId, details.ConfigFilePath ?? "", part.VariableName, part.Value, commentLines),
+                    MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
 
                 if (!result.Success)
                 {
@@ -465,9 +561,17 @@ public static class MapRotationOrchestrators
             string? rconError = null;
             foreach (var part in rotationOutput.Parts)
             {
+                if (HasTimedOut(context, activationDeadline))
+                {
+                    rconSuccess = false;
+                    rconError ??= BuildTimeoutError(activationDeadline);
+                    break;
+                }
+
                 var result = await context.CallActivityAsync<MapOperationResult>(
                     nameof(MapRotationActivities.SetRconDvar),
-                    new SetRconDvarInput(details.GameServerId, part.VariableName, part.Value));
+                    new SetRconDvarInput(details.GameServerId, part.VariableName, part.Value),
+                    MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
 
                 if (!result.Success)
                 {
@@ -489,10 +593,16 @@ public static class MapRotationOrchestrators
             var baseVar = details.ConfigVariableName ?? "sv_maprotation";
             foreach (var overflowVar in RotationVariableNaming.GetOverflowVariableNames(baseVar, usedVarNames))
             {
+                if (HasTimedOut(context, activationDeadline))
+                {
+                    break;
+                }
+
                 // Best-effort clear via RCON (config file clear may fail if var doesn't exist)
                 await context.CallActivityAsync<MapOperationResult>(
                     nameof(MapRotationActivities.SetRconDvar),
-                    new SetRconDvarInput(details.GameServerId, overflowVar, ""));
+                    new SetRconDvarInput(details.GameServerId, overflowVar, ""),
+                    MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
             }
 
             steps[3] = steps[3] with { Status = "Completed" };
@@ -508,7 +618,8 @@ public static class MapRotationOrchestrators
                 var gameMode = details.GameMode ?? "war";
                 var gametypeResult = await context.CallActivityAsync<MapOperationResult>(
                     nameof(MapRotationActivities.SetRconDvar),
-                    new SetRconDvarInput(details.GameServerId, "g_gametype", gameMode));
+                    new SetRconDvarInput(details.GameServerId, "g_gametype", gameMode),
+                    MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
 
                 steps[gametypeStepIdx] = gametypeResult.Success
                     ? steps[gametypeStepIdx] with { Status = "Completed" }

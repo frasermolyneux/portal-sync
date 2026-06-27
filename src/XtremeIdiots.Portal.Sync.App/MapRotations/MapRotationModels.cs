@@ -1,3 +1,4 @@
+using Microsoft.DurableTask;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 
 namespace XtremeIdiots.Portal.Sync.App.MapRotations;
@@ -9,6 +10,14 @@ public record ActivateOrchestrationInput(Guid AssignmentId);
 public record DeactivateOrchestrationInput(Guid AssignmentId);
 public record VerifyOrchestrationInput(Guid AssignmentId);
 public record PushMapOrchestrationInput(Guid GameServerId, string MapName, GameType GameType);
+
+public static class MapRotationOrchestrationPolicies
+{
+    public static readonly TaskOptions ActivationActivityRetryOptions =
+        TaskOptions.FromRetryPolicy(new RetryPolicy(maxNumberOfAttempts: 2, firstRetryInterval: TimeSpan.FromSeconds(10)));
+
+    public static readonly TimeSpan ActivationTimeout = TimeSpan.FromMinutes(5);
+}
 
 // Activity inputs
 public record SyncMapInput(Guid GameServerId, string MapName, GameType GameType);

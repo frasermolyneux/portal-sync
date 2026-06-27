@@ -60,15 +60,25 @@ public class MapRotationCleanup(
                 continue;
             }
 
-            if (assignment.UnassignedAt is null || assignment.UnassignedAt >= cutoff)
+            var retentionAnchor = assignment.UnassignedAt ?? assignment.UpdatedAt;
+            if (retentionAnchor >= cutoff)
             {
                 continue;
             }
 
             try
             {
-                await repositoryApiClient.MapRotations.V1
+                var deleteResult = await repositoryApiClient.MapRotations.V1
                     .DeleteServerAssignment(assignment.MapRotationServerAssignmentId).ConfigureAwait(false);
+
+                if (!deleteResult.IsSuccess)
+                {
+                    logger.LogWarning(
+                        "Skipping cleanup count/audit for assignment {AssignmentId} because delete failed: {StatusCode}",
+                        assignment.MapRotationServerAssignmentId,
+                        deleteResult.StatusCode);
+                    continue;
+                }
 
                 deletedCount++;
                 logger.LogInformation(
