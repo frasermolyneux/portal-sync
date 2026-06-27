@@ -5,6 +5,7 @@ using MX.Observability.ApplicationInsights.Auditing;
 using MX.Observability.ApplicationInsights.Auditing.Models;
 using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.MapRotations;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
 
 namespace XtremeIdiots.Portal.Sync.App.MapRotations;
@@ -51,10 +52,84 @@ public class MapRotationCleanup(
         }
 
         var cutoff = DateTime.UtcNow.AddHours(-48);
+        var removingStaleCutoff = DateTime.UtcNow.AddMinutes(-15);
+        var activeRemovingOperationGraceCutoff = DateTime.UtcNow.AddHours(-1);
         var deletedCount = 0;
+        var reconciledRemovingCount = 0;
 
         foreach (var assignment in assignmentsResult.Result.Data.Items)
         {
+            if (assignment.DeploymentState == DeploymentState.Removing)
+            {
+                if (assignment.UpdatedAt < removingStaleCutoff)
+                {
+                    try
+                    {
+                        var operationsResult = await repositoryApiClient.MapRotations.V1
+                            .GetAssignmentOperations(assignment.MapRotationServerAssignmentId, 0, 100)
+                            .ConfigureAwait(false);
+
+                        if (!operationsResult.IsSuccess || operationsResult.Result?.Data?.Items is null)
+                        {
+                            logger.LogWarning(
+                                "Skipping stale removing reconciliation for assignment {AssignmentId} because operations could not be retrieved: {StatusCode}",
+                                assignment.MapRotationServerAssignmentId,
+                                operationsResult.StatusCode);
+                            continue;
+                        }
+
+                        var hasRecentInProgressRemove = operationsResult.Result.Data.Items.Any(operation =>
+                            operation.OperationType == AssignmentOperationType.Remove
+                            && operation.Status == AssignmentOperationStatus.InProgress
+                            && operation.StartedAt >= activeRemovingOperationGraceCutoff);
+
+                        if (hasRecentInProgressRemove)
+                        {
+                            logger.LogInformation(
+                                "Skipping stale removing reconciliation for assignment {AssignmentId} because a recent in-progress Remove operation exists",
+                                assignment.MapRotationServerAssignmentId);
+                            continue;
+                        }
+
+                        var reconcileResult = await repositoryApiClient.MapRotations.V1
+                            .UpdateServerAssignment(new UpdateMapRotationServerAssignmentDto(assignment.MapRotationServerAssignmentId)
+                            {
+                                DeploymentState = DeploymentState.Removed,
+                                UnassignedAt = assignment.UnassignedAt ?? assignment.UpdatedAt,
+                                LastError = "",
+                                LastErrorAt = null
+                            })
+                            .ConfigureAwait(false);
+
+                        if (!reconcileResult.IsSuccess)
+                        {
+                            logger.LogWarning(
+                                "Failed to reconcile stale removing assignment {AssignmentId}. API returned {StatusCode}",
+                                assignment.MapRotationServerAssignmentId,
+                                reconcileResult.StatusCode);
+                            continue;
+                        }
+
+                        reconciledRemovingCount++;
+                        logger.LogInformation(
+                            "Reconciled stale removing assignment {AssignmentId} to Removed",
+                            assignment.MapRotationServerAssignmentId);
+
+                        auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentReconciled", AuditAction.Update)
+                            .WithService("MapRotationCleanup")
+                            .WithTarget(assignment.MapRotationServerAssignmentId.ToString(), "MapRotationAssignment")
+                            .WithSource("MapRotationCleanup")
+                            .Build());
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to reconcile stale removing assignment {AssignmentId}", assignment.MapRotationServerAssignmentId);
+                    }
+                }
+
+                continue;
+            }
+
             if (assignment.DeploymentState != DeploymentState.Removed)
             {
                 continue;
@@ -97,6 +172,9 @@ public class MapRotationCleanup(
             }
         }
 
-        logger.LogInformation("Map rotation cleanup completed, deleted {Count} assignments", deletedCount);
+        logger.LogInformation(
+            "Map rotation cleanup completed, reconciled {ReconciledCount} stale removing assignments and deleted {DeletedCount} removed assignments",
+            reconciledRemovingCount,
+            deletedCount);
     }
 }

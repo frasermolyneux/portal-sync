@@ -318,16 +318,38 @@ public static class MapRotationOrchestrators
         {
             logger.LogError(ex, "RemoveMapRotation orchestration failed for assignment {AssignmentId}", input.AssignmentId);
 
-            await context.CallActivityAsync(
-                nameof(MapRotationActivities.UpdateAssignmentStatus),
-                new UpdateStatusInput(input.AssignmentId,
-                    DeploymentState: DeploymentState.Failed,
-                    LastError: ex.Message,
-                    LastErrorAt: context.CurrentUtcDateTime));
+            try
+            {
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        DeploymentState: DeploymentState.Failed,
+                        LastError: ex.Message,
+                        LastErrorAt: context.CurrentUtcDateTime));
+            }
+            catch (Exception statusUpdateEx)
+            {
+                logger.LogWarning(
+                    statusUpdateEx,
+                    "Failed to persist failed deployment state for assignment {AssignmentId} during remove failure handling",
+                    input.AssignmentId);
+            }
 
-            await context.CallActivityAsync(
-                nameof(MapRotationActivities.CompleteOperation),
-                new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message));
+            try
+            {
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.CompleteOperation),
+                    new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, ex.Message));
+            }
+            catch (Exception completeOperationEx)
+            {
+                logger.LogError(
+                    completeOperationEx,
+                    "Failed to complete remove operation {OperationId} for assignment {AssignmentId} during failure handling",
+                    operationId,
+                    input.AssignmentId);
+                throw;
+            }
         }
     }
 

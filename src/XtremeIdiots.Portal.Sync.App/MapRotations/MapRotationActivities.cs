@@ -153,7 +153,13 @@ public class MapRotationActivities(
                 UnassignedAt = input.UnassignedAt
             };
 
-            await repositoryApiClient.MapRotations.V1.UpdateServerAssignment(updateDto).ConfigureAwait(false);
+            var result = await repositoryApiClient.MapRotations.V1.UpdateServerAssignment(updateDto).ConfigureAwait(false);
+            if (!result.IsSuccess)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to update assignment {input.AssignmentId} status. API returned {(int)result.StatusCode} ({result.StatusCode}).");
+            }
+
             logger.LogInformation("Updated assignment {AssignmentId} status", input.AssignmentId);
         }
         catch (Exception ex)
@@ -196,8 +202,15 @@ public class MapRotationActivities(
     {
         try
         {
-            await repositoryApiClient.MapRotations.V1.UpdateAssignmentOperation(
+            var result = await repositoryApiClient.MapRotations.V1.UpdateAssignmentOperation(
                 input.OperationId, input.Status, input.Error).ConfigureAwait(false);
+
+            if (!result.IsSuccess)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to complete operation {input.OperationId}. API returned {(int)result.StatusCode} ({result.StatusCode}).");
+            }
+
             logger.LogInformation("Completed operation {OperationId} with status {Status}", input.OperationId, input.Status);
         }
         catch (Exception ex)
