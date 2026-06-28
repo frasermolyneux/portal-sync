@@ -1,5 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -220,12 +222,16 @@ public class BanFilesRepository(
     /// by the agent's <c>BanFileWatcher.ParseBanLines</c> and skipped via the
     /// <c>[BANSYNC]</c> sentinel so it never echoes back to the repository.
     ///
-    /// CoD4x simplebanlist v2: <c>\playerid\{guid}\asteamid\0\rsn\[BANSYNC] {username}</c>.
+    /// CoD4x simplebanlist v2: <c>\netadr\{ip}\rsn\[BANSYNC]\nick\{username}\asteamid\0\playerid\{guid}\</c>
+    /// when a valid IPv4 address is available, otherwise
+    /// <c>\rsn\[BANSYNC]\nick\{username}\asteamid\0\playerid\{guid}\</c>.
+    ///
     /// We always set <c>asteamid\0</c> because the portal stores the 19-digit cod4x
     /// playerid in <c>Player.Guid</c> and does not track a separate Steam64 today. The
-    /// cod4x server applies the ban by playerid alone — asteamid is informational. The
-    /// <c>[BANSYNC]</c> tag is embedded in the reason string so the agent's
-    /// <c>CountTags()</c> still classifies the line as a sync-pushed ban.
+    /// cod4x server applies the ban by playerid alone — asteamid is informational.
+    ///
+    /// The reason is fixed to <c>[BANSYNC]</c> (no portal admin-action text transfer)
+    /// so the agent's <c>CountTags()</c> still classifies the line as sync-pushed.
     ///
     /// Usernames are sanitised before interpolation: newlines are neutralised in both
     /// formats (defends against multi-line injection through the <c>WriteLineAsync</c>
@@ -234,15 +240,23 @@ public class BanFilesRepository(
     /// could otherwise inject a forged field).
     /// </summary>
     public static string FormatBanLine(GameType gameType, string? playerGuid, string? username)
-        => FormatBanLine(gameType, playerGuid, username, UsesSimplebanlistV2(gameType));
+        => FormatBanLine(gameType, playerGuid, username, ipAddress: null, UsesSimplebanlistV2(gameType));
 
     public static string FormatBanLine(GameType gameType, string? playerGuid, string? username, bool useSimplebanlistV2)
+        => FormatBanLine(gameType, playerGuid, username, ipAddress: null, useSimplebanlistV2);
+
+    public static string FormatBanLine(GameType gameType, string? playerGuid, string? username, string? ipAddress, bool useSimplebanlistV2)
     {
         var safeUsername = SanitiseUsernameForBanFile(username, useSimplebanlistV2);
 
         if (useSimplebanlistV2)
         {
-            return $"\\playerid\\{playerGuid}\\asteamid\\0\\rsn\\[BANSYNC] {safeUsername}";
+            var safeNetAddress = SanitiseNetAddressForBanFile(ipAddress);
+            var netAddressPrefix = safeNetAddress is null
+                ? string.Empty
+                : $"\\netadr\\{safeNetAddress}";
+
+            return $"{netAddressPrefix}\\rsn\\[BANSYNC]\\nick\\{safeUsername}\\asteamid\\0\\playerid\\{playerGuid}\\";
         }
 
         return $"{playerGuid} [BANSYNC]-{safeUsername}";
@@ -257,6 +271,22 @@ public class BanFilesRepository(
         }
 
         return value.Replace('\n', ' ').Replace('\r', ' ');
+    }
+
+    private static string? SanitiseNetAddressForBanFile(string? ipAddress)
+    {
+        if (string.IsNullOrWhiteSpace(ipAddress))
+        {
+            return null;
+        }
+
+        var trimmed = ipAddress.Trim();
+        if (!IPAddress.TryParse(trimmed, out var parsed) || parsed.AddressFamily != AddressFamily.InterNetwork)
+        {
+            return null;
+        }
+
+        return parsed.ToString();
     }
 
     /// <summary>
@@ -376,7 +406,13 @@ public class BanFilesRepository(
         {
             foreach (var adminActionDto in activeBans)
             {
-                await streamWriter.WriteLineAsync(FormatBanLine(gameType, adminActionDto.Player?.Guid, adminActionDto.Player?.Username, useSimplebanlistV2)).ConfigureAwait(false);
+                await streamWriter.WriteLineAsync(
+                    FormatBanLine(
+                        gameType,
+                        adminActionDto.Player?.Guid,
+                        adminActionDto.Player?.Username,
+                        adminActionDto.Player?.IpAddress,
+                        useSimplebanlistV2)).ConfigureAwait(false);
             }
 
             await streamWriter.FlushAsync(ct).ConfigureAwait(false);

@@ -34,12 +34,12 @@ public class BanFilesRepositoryFormatTests
     }
 
     [Fact]
-    public void FormatBanLine_Cod4x_EmitsSimplebanlistV2WithBansyncReason()
+    public void FormatBanLine_Cod4x_EmitsSimplebanlistV2WithStaticReasonAndNick()
     {
         // 19-digit cod4x playerid (Steam64-shape) — what the parser stores in Player.Guid.
         var line = BanFilesRepository.FormatBanLine(GameType.CallOfDuty4x, "1234567890123456789", "PlayerOne");
 
-        Assert.Equal(@"\playerid\1234567890123456789\asteamid\0\rsn\[BANSYNC] PlayerOne", line);
+        Assert.Equal(@"\rsn\[BANSYNC]\nick\PlayerOne\asteamid\0\playerid\1234567890123456789\", line);
     }
 
     [Fact]
@@ -50,19 +50,24 @@ public class BanFilesRepositoryFormatTests
         var line = BanFilesRepository.FormatBanLine(GameType.CallOfDuty4x, "76561197960287930", "AnotherPlayer");
 
         Assert.Contains(@"\asteamid\0\", line, StringComparison.Ordinal);
-        Assert.StartsWith(@"\playerid\76561197960287930\", line, StringComparison.Ordinal);
-        Assert.EndsWith(@"\rsn\[BANSYNC] AnotherPlayer", line, StringComparison.Ordinal);
+        Assert.Contains(@"\nick\AnotherPlayer\", line, StringComparison.Ordinal);
+        Assert.EndsWith(@"\playerid\76561197960287930\", line, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void FormatBanLine_Cod4x_EmbedsBansyncTagInsideReasonSoCountTagsStillWorks()
+    public void FormatBanLine_Cod4x_UsesBansyncOnlyReasonAndDoesNotTransferPortalReasonText()
     {
-        // The agent's CountTags() classifies a line as sync-pushed when it Contains
-        // "[BANSYNC]". Putting the tag inside the reason field keeps that working
-        // without any agent-side changes.
-        var line = BanFilesRepository.FormatBanLine(GameType.CallOfDuty4x, "1234567890123456789", "x");
+        var line = BanFilesRepository.FormatBanLine(
+            GameType.CallOfDuty4x,
+            "1234567890123456789",
+            "x",
+            "109.155.86.88",
+            useSimplebanlistV2: true);
 
+        Assert.Contains(@"\rsn\[BANSYNC]\", line, StringComparison.Ordinal);
         Assert.Contains("[BANSYNC]", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("admin has given no reason", line, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("[BANSYNC] x", line, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -76,9 +81,37 @@ public class BanFilesRepositoryFormatTests
             @"attacker\rsn\Innocent");
 
         Assert.Equal(
-            @"\playerid\1234567890123456789\asteamid\0\rsn\[BANSYNC] attacker/rsn/Innocent",
+            @"\rsn\[BANSYNC]\nick\attacker/rsn/Innocent\asteamid\0\playerid\1234567890123456789\",
             line);
         Assert.DoesNotContain(@"attacker\rsn", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatBanLine_Cod4x_IncludesNetAdrWhenValidIPv4Provided()
+    {
+        var line = BanFilesRepository.FormatBanLine(
+            GameType.CallOfDuty4x,
+            "1234567890123456789",
+            "PlayerOne",
+            "109.155.86.88",
+            useSimplebanlistV2: true);
+
+        Assert.StartsWith(@"\netadr\109.155.86.88\", line, StringComparison.Ordinal);
+        Assert.Contains(@"\rsn\[BANSYNC]\nick\PlayerOne\", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatBanLine_Cod4x_OmitsNetAdrWhenIpAddressInvalid()
+    {
+        var line = BanFilesRepository.FormatBanLine(
+            GameType.CallOfDuty4x,
+            "1234567890123456789",
+            "PlayerOne",
+            "not-an-ip",
+            useSimplebanlistV2: true);
+
+        Assert.DoesNotContain(@"\netadr\", line, StringComparison.Ordinal);
+        Assert.StartsWith(@"\rsn\[BANSYNC]\", line, StringComparison.Ordinal);
     }
 
     [Theory]
