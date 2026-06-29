@@ -41,7 +41,7 @@ public record FormatRotationOutput(List<RotationStringPart> Parts);
 public record RotationStringPart(string VariableName, string Value);
 public record ResolveMapNamesInput(List<Guid> MapIds);
 public record WriteConfigInput(Guid GameServerId, string ConfigFilePath, string ConfigVariableName, string Value, string[]? CommentLines = null);
-public record SetRconDvarInput(Guid GameServerId, string DvarName, string Value);
+public record SetRconDvarInput(Guid GameServerId, GameType GameType, string DvarName, string Value);
 
 public static class RotationVariableNaming
 {

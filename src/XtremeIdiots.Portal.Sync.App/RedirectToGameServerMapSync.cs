@@ -48,14 +48,7 @@ public class RedirectToGameServerMapSync(
             {
                 try
                 {
-                    var getServerMapsResult = await serversApiClient.Rcon.V1.GetServerMaps(gameServerDto.GameServerId).ConfigureAwait(false);
                     var getLoadedServerMapsFronHostResult = await serversApiClient.Maps.V1.GetLoadedServerMapsFromHost(gameServerDto.GameServerId).ConfigureAwait(false);
-
-                    if (!getServerMapsResult.IsSuccess || getServerMapsResult.Result?.Data?.Items is null)
-                    {
-                        logger.LogError("Failed to retrieve rcon maps for game server");
-                        continue;
-                    }
 
                     if (!getLoadedServerMapsFronHostResult.IsSuccess || getLoadedServerMapsFronHostResult.Result?.Data?.Items is null)
                     {
@@ -63,18 +56,10 @@ public class RedirectToGameServerMapSync(
                         continue;
                     }
 
-                    foreach (var map in getServerMapsResult.Result.Data.Items)
-                    {
-                        if (!getLoadedServerMapsFronHostResult.Result.Data.Items.Any(x => x.Name == map.MapName))
-                        {
-                            logger.LogInformation($"Pushing map '{map.MapName}' to game server '{gameServerDto.Title}'");
-                            //await serversApiClient.Maps.PushServerMap(gameServerDto.GameServerId, map.Name);
-                        }
-                        else
-                        {
-                            logger.LogInformation($"Map '{map.MapName}' already exists on game server '{gameServerDto.Title}'");
-                        }
-                    }
+                    logger.LogInformation(
+                        "Loaded {LoadedMapCount} maps from host for game server '{GameServerTitle}'",
+                        getLoadedServerMapsFronHostResult.Result.Data.Items.Count(),
+                        gameServerDto.Title);
                 }
                 catch (Exception ex)
                 {

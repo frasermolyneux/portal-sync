@@ -429,6 +429,8 @@ public static class MapRotationOrchestrators
                 return;
             }
 
+            var supportsRconDvar = details.GameType == GameType.CallOfDuty4x;
+
             // Resolve map IDs to names
             var mapNames = await context.CallActivityAsync<List<string>>(
                 nameof(MapRotationActivities.ResolveMapNames),
@@ -581,30 +583,40 @@ public static class MapRotationOrchestrators
 
             var rconSuccess = true;
             string? rconError = null;
-            foreach (var part in rotationOutput.Parts)
+
+            if (supportsRconDvar)
             {
-                if (HasTimedOut(context, activationDeadline))
+                foreach (var part in rotationOutput.Parts)
                 {
-                    rconSuccess = false;
-                    rconError ??= BuildTimeoutError(activationDeadline);
-                    break;
-                }
+                    if (HasTimedOut(context, activationDeadline))
+                    {
+                        rconSuccess = false;
+                        rconError ??= BuildTimeoutError(activationDeadline);
+                        break;
+                    }
 
-                var result = await context.CallActivityAsync<MapOperationResult>(
-                    nameof(MapRotationActivities.SetRconDvar),
-                    new SetRconDvarInput(details.GameServerId, part.VariableName, part.Value),
-                    MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+                    var result = await context.CallActivityAsync<MapOperationResult>(
+                        nameof(MapRotationActivities.SetRconDvar),
+                        new SetRconDvarInput(details.GameServerId, details.GameType, part.VariableName, part.Value),
+                        MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
 
-                if (!result.Success)
-                {
-                    rconSuccess = false;
-                    rconError ??= result.Error;
+                    if (!result.Success)
+                    {
+                        rconSuccess = false;
+                        rconError ??= result.Error;
+                    }
                 }
             }
+            else
+            {
+                rconError = $"RCON dvar updates are not supported for game type '{details.GameType}'.";
+            }
 
-            steps[2] = rconSuccess
-                ? steps[2] with { Status = "Completed" }
-                : steps[2] with { Status = "Failed", Error = rconError };
+            steps[2] = supportsRconDvar
+                ? (rconSuccess
+                    ? steps[2] with { Status = "Completed" }
+                    : steps[2] with { Status = "Failed", Error = rconError })
+                : steps[2] with { Status = "Skipped", Error = rconError };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 3, steps));
 
             // Clear old overflow variables that are no longer needed (best-effort)
@@ -613,45 +625,58 @@ public static class MapRotationOrchestrators
 
             var usedVarNames = rotationOutput.Parts.Select(p => p.VariableName).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var baseVar = details.ConfigVariableName ?? "sv_maprotation";
-            foreach (var overflowVar in RotationVariableNaming.GetOverflowVariableNames(baseVar, usedVarNames))
+            if (supportsRconDvar)
             {
-                if (HasTimedOut(context, activationDeadline))
+                foreach (var overflowVar in RotationVariableNaming.GetOverflowVariableNames(baseVar, usedVarNames))
                 {
-                    break;
-                }
+                    if (HasTimedOut(context, activationDeadline))
+                    {
+                        break;
+                    }
 
-                // Best-effort clear via RCON (config file clear may fail if var doesn't exist)
-                await context.CallActivityAsync<MapOperationResult>(
-                    nameof(MapRotationActivities.SetRconDvar),
-                    new SetRconDvarInput(details.GameServerId, overflowVar, ""),
-                    MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+                    // Best-effort clear via RCON (config file clear may fail if var doesn't exist)
+                    await context.CallActivityAsync<MapOperationResult>(
+                        nameof(MapRotationActivities.SetRconDvar),
+                        new SetRconDvarInput(details.GameServerId, details.GameType, overflowVar, ""),
+                        MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+                }
             }
 
-            steps[3] = steps[3] with { Status = "Completed" };
+            steps[3] = supportsRconDvar
+                ? steps[3] with { Status = "Completed" }
+                : steps[3] with { Status = "Skipped", Error = rconError };
             context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 4, steps));
 
             // Set g_gametype via RCON (best-effort, non-blocking for non-AACP variables)
             if (!isAacpVariable && configSuccess && rconSuccess)
             {
                 var gametypeStepIdx = steps.Count - 1;
-                steps[gametypeStepIdx] = steps[gametypeStepIdx] with { Status = "InProgress" };
-                context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 4, steps));
-
-                var gameMode = details.GameMode ?? "war";
-                var gametypeResult = await context.CallActivityAsync<MapOperationResult>(
-                    nameof(MapRotationActivities.SetRconDvar),
-                    new SetRconDvarInput(details.GameServerId, "g_gametype", gameMode),
-                    MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
-
-                steps[gametypeStepIdx] = gametypeResult.Success
-                    ? steps[gametypeStepIdx] with { Status = "Completed" }
-                    : steps[gametypeStepIdx] with { Status = "Failed", Error = gametypeResult.Error };
-                context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, totalSteps, steps));
-
-                if (!gametypeResult.Success)
+                if (!supportsRconDvar)
                 {
-                    logger.LogWarning("Failed to set g_gametype to {GameMode} for assignment {AssignmentId}: {Error}",
-                        gameMode, input.AssignmentId, gametypeResult.Error);
+                    steps[gametypeStepIdx] = steps[gametypeStepIdx] with { Status = "Skipped", Error = rconError };
+                    context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, totalSteps, steps));
+                }
+                else
+                {
+                    steps[gametypeStepIdx] = steps[gametypeStepIdx] with { Status = "InProgress" };
+                    context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, 4, steps));
+
+                    var gameMode = details.GameMode ?? "war";
+                    var gametypeResult = await context.CallActivityAsync<MapOperationResult>(
+                        nameof(MapRotationActivities.SetRconDvar),
+                        new SetRconDvarInput(details.GameServerId, details.GameType, "g_gametype", gameMode),
+                        MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+
+                    steps[gametypeStepIdx] = gametypeResult.Success
+                        ? steps[gametypeStepIdx] with { Status = "Completed" }
+                        : steps[gametypeStepIdx] with { Status = "Failed", Error = gametypeResult.Error };
+                    context.SetCustomStatus(new OrchestrationProgress("Activate", totalSteps, totalSteps, steps));
+
+                    if (!gametypeResult.Success)
+                    {
+                        logger.LogWarning("Failed to set g_gametype to {GameMode} for assignment {AssignmentId}: {Error}",
+                            gameMode, input.AssignmentId, gametypeResult.Error);
+                    }
                 }
             }
 
@@ -741,6 +766,9 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.GetRotationDetails),
                 new GetRotationDetailsInput(input.AssignmentId));
 
+            var supportsRconDvar = details.GameType == GameType.CallOfDuty4x;
+            var unsupportedRconError = $"RCON dvar updates are not supported for game type '{details.GameType}'.";
+
             // Initialize step progress tracking
             var steps = new List<MapProgress>
             {
@@ -772,16 +800,26 @@ public static class MapRotationOrchestrators
             steps[1] = steps[1] with { Status = "InProgress" };
             context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 1, steps));
 
-            var rconResult = await context.CallActivityAsync<MapOperationResult>(
-                nameof(MapRotationActivities.SetRconDvar),
-                new SetRconDvarInput(
-                    details.GameServerId,
-                    details.ConfigVariableName ?? "sv_maprotation",
-                    ""));
+            MapOperationResult rconResult;
+            if (supportsRconDvar)
+            {
+                rconResult = await context.CallActivityAsync<MapOperationResult>(
+                    nameof(MapRotationActivities.SetRconDvar),
+                    new SetRconDvarInput(
+                        details.GameServerId,
+                        details.GameType,
+                        details.ConfigVariableName ?? "sv_maprotation",
+                        ""));
 
-            steps[1] = rconResult.Success
-                ? steps[1] with { Status = "Completed" }
-                : steps[1] with { Status = "Failed", Error = rconResult.Error };
+                steps[1] = rconResult.Success
+                    ? steps[1] with { Status = "Completed" }
+                    : steps[1] with { Status = "Failed", Error = rconResult.Error };
+            }
+            else
+            {
+                rconResult = new MapOperationResult(details.ConfigVariableName ?? "sv_maprotation", true, SkipReason: unsupportedRconError);
+                steps[1] = steps[1] with { Status = "Skipped", Error = unsupportedRconError };
+            }
             context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 2, steps));
 
             // Clear overflow variables via RCON (best-effort)
@@ -790,14 +828,19 @@ public static class MapRotationOrchestrators
 
             var baseVar = details.ConfigVariableName ?? "sv_maprotation";
             var emptySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var overflowVar in RotationVariableNaming.GetOverflowVariableNames(baseVar, emptySet))
+            if (supportsRconDvar)
             {
-                await context.CallActivityAsync<MapOperationResult>(
-                    nameof(MapRotationActivities.SetRconDvar),
-                    new SetRconDvarInput(details.GameServerId, overflowVar, ""));
+                foreach (var overflowVar in RotationVariableNaming.GetOverflowVariableNames(baseVar, emptySet))
+                {
+                    await context.CallActivityAsync<MapOperationResult>(
+                        nameof(MapRotationActivities.SetRconDvar),
+                        new SetRconDvarInput(details.GameServerId, details.GameType, overflowVar, ""));
+                }
             }
 
-            steps[2] = steps[2] with { Status = "Completed" };
+            steps[2] = supportsRconDvar
+                ? steps[2] with { Status = "Completed" }
+                : steps[2] with { Status = "Skipped", Error = unsupportedRconError };
             context.SetCustomStatus(new OrchestrationProgress("Deactivate", 3, 3, steps));
 
             // Both must succeed for deactivation to be considered complete

@@ -5,7 +5,6 @@ using Moq;
 using MX.Api.Abstractions;
 using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Maps;
-using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.GameServers;
@@ -112,10 +111,6 @@ public class RedirectToGameServerMapSyncTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(apiResult);
 
-        Mock.Get(_serversApiClientMock.Object.Rcon.V1)
-            .Setup(x => x.GetServerMaps(It.IsAny<Guid>()))
-            .ReturnsAsync(new ApiResult<RconMapCollectionDto>(System.Net.HttpStatusCode.InternalServerError));
-
         Mock.Get(_serversApiClientMock.Object.Maps.V1)
             .Setup(x => x.GetLoadedServerMapsFromHost(It.IsAny<Guid>()))
             .ReturnsAsync(new ApiResult<ServerMapsCollectionDto>(System.Net.HttpStatusCode.InternalServerError));
@@ -124,10 +119,6 @@ public class RedirectToGameServerMapSyncTests
 
         await sut.RunRedirectToGameServerMapSync(null);
 
-        Mock.Get(_serversApiClientMock.Object.Rcon.V1)
-            .Verify(x => x.GetServerMaps(ftpServerId), Times.Once);
-        Mock.Get(_serversApiClientMock.Object.Rcon.V1)
-            .Verify(x => x.GetServerMaps(sftpServerId), Times.Once);
         Mock.Get(_serversApiClientMock.Object.Maps.V1)
             .Verify(x => x.GetLoadedServerMapsFromHost(ftpServerId), Times.Once);
         Mock.Get(_serversApiClientMock.Object.Maps.V1)

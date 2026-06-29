@@ -1,6 +1,7 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MX.Api.Abstractions;
+using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.MapRotations;
@@ -429,9 +430,29 @@ public class MapRotationActivities(
             logger.LogInformation("Setting RCON dvar {DvarName} on server {GameServerId}",
                 input.DvarName, input.GameServerId);
 
-            var result = await serversApiClient.Rcon.V1
-                .SetDvar(input.GameServerId, input.DvarName, input.Value)
-                .ConfigureAwait(false);
+            ApiResult<string> result;
+
+            switch (input.GameType)
+            {
+                case GameType.CallOfDuty4x:
+                    result = await serversApiClient.CoD4xRcon.V1
+                        .Set(input.GameServerId, new CoD4xSetDvarRequestDto
+                        {
+                            DvarName = input.DvarName,
+                            Value = input.Value
+                        })
+                        .ConfigureAwait(false);
+                    break;
+
+                default:
+                    var unsupportedError = $"RCON dvar updates are not supported for game type '{input.GameType}'.";
+                    logger.LogWarning(
+                        "Skipping RCON dvar update {DvarName} on server {GameServerId}: {UnsupportedError}",
+                        input.DvarName,
+                        input.GameServerId,
+                        unsupportedError);
+                    return new MapOperationResult(input.DvarName, false, unsupportedError);
+            }
 
             if (result.IsSuccess)
             {
