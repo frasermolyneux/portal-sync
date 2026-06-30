@@ -429,7 +429,7 @@ public static class MapRotationOrchestrators
                 return;
             }
 
-            var supportsRconDvar = details.GameType == GameType.CallOfDuty4x;
+            var supportsRconDvar = MapRotationRconCapabilities.SupportsSetDvar(details.GameType);
 
             // Resolve map IDs to names
             var mapNames = await context.CallActivityAsync<List<string>>(
@@ -766,7 +766,7 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.GetRotationDetails),
                 new GetRotationDetailsInput(input.AssignmentId));
 
-            var supportsRconDvar = details.GameType == GameType.CallOfDuty4x;
+            var supportsRconDvar = MapRotationRconCapabilities.SupportsSetDvar(details.GameType);
             var unsupportedRconError = $"RCON dvar updates are not supported for game type '{details.GameType}'.";
 
             // Initialize step progress tracking

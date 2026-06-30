@@ -43,6 +43,15 @@ public record ResolveMapNamesInput(List<Guid> MapIds);
 public record WriteConfigInput(Guid GameServerId, string ConfigFilePath, string ConfigVariableName, string Value, string[]? CommentLines = null);
 public record SetRconDvarInput(Guid GameServerId, GameType GameType, string DvarName, string Value);
 
+public static class MapRotationRconCapabilities
+{
+    public static bool SupportsSetDvar(GameType gameType)
+        => gameType is GameType.CallOfDuty2
+            or GameType.CallOfDuty4
+            or GameType.CallOfDuty5
+            or GameType.CallOfDuty4x;
+}
+
 public static class RotationVariableNaming
 {
     /// <summary>

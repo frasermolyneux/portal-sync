@@ -32,7 +32,7 @@
     <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="4.0.1" />
     <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="4.0.1" />
     <PackageReference Include="Microsoft.Identity.Web" Version="4.11.0" />
-    <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="2.1.233" />
+    <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="3.0.1" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.17.0" />
   </ItemGroup>
   <ItemGroup>

@@ -434,6 +434,36 @@ public class MapRotationActivities(
 
             switch (input.GameType)
             {
+                case GameType.CallOfDuty2:
+                    result = await serversApiClient.Cod2Rcon.V1
+                        .Set(input.GameServerId, new SetDvarRequest
+                        {
+                            DvarName = input.DvarName,
+                            Value = input.Value
+                        })
+                        .ConfigureAwait(false);
+                    break;
+
+                case GameType.CallOfDuty4:
+                    result = await serversApiClient.Cod4Rcon.V1
+                        .Set(input.GameServerId, new SetDvarRequest
+                        {
+                            DvarName = input.DvarName,
+                            Value = input.Value
+                        })
+                        .ConfigureAwait(false);
+                    break;
+
+                case GameType.CallOfDuty5:
+                    result = await serversApiClient.Cod5Rcon.V1
+                        .Set(input.GameServerId, new SetDvarRequest
+                        {
+                            DvarName = input.DvarName,
+                            Value = input.Value
+                        })
+                        .ConfigureAwait(false);
+                    break;
+
                 case GameType.CallOfDuty4x:
                     result = await serversApiClient.CoD4xRcon.V1
                         .Set(input.GameServerId, new CoD4xSetDvarRequestDto

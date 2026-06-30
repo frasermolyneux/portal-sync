@@ -68,6 +68,31 @@ public class MapRotationActivitiesTransportTests
     }
 
     [Fact]
+    public async Task SetRconDvar_WhenGameTypeIsCallOfDuty2_UsesCod2SetEndpoint()
+    {
+        var serverId = Guid.NewGuid();
+
+        Mock.Get(_serversApiClientMock.Object.Cod2Rcon.V1)
+            .Setup(x => x.Set(
+                serverId,
+                It.IsAny<SetDvarRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<string>(
+                System.Net.HttpStatusCode.OK,
+                new ApiResponse<string>("ok")));
+
+        var result = await _sut.SetRconDvar(new SetRconDvarInput(serverId, GameType.CallOfDuty2, "sv_hostname", "XI Server"));
+
+        Assert.True(result.Success);
+
+        Mock.Get(_serversApiClientMock.Object.Cod2Rcon.V1)
+            .Verify(x => x.Set(
+                serverId,
+                It.Is<SetDvarRequest>(r => r.DvarName == "sv_hostname" && r.Value == "XI Server"),
+                It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task SetRconDvar_WhenGameTypeIsCallOfDuty4x_UsesCoD4xSetEndpoint()
     {
         var serverId = Guid.NewGuid();
@@ -93,14 +118,88 @@ public class MapRotationActivitiesTransportTests
     }
 
     [Fact]
-    public async Task SetRconDvar_WhenGameTypeIsNotCallOfDuty4x_ReturnsFailureWithoutCallingCoD4xEndpoint()
+    public async Task SetRconDvar_WhenGameTypeIsCallOfDuty4_UsesCod4SetEndpoint()
     {
         var serverId = Guid.NewGuid();
 
+        Mock.Get(_serversApiClientMock.Object.Cod4Rcon.V1)
+            .Setup(x => x.Set(
+                serverId,
+                It.IsAny<SetDvarRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<string>(
+                System.Net.HttpStatusCode.OK,
+                new ApiResponse<string>("ok")));
+
         var result = await _sut.SetRconDvar(new SetRconDvarInput(serverId, GameType.CallOfDuty4, "sv_hostname", "XI Server"));
+
+        Assert.True(result.Success);
+
+        Mock.Get(_serversApiClientMock.Object.Cod4Rcon.V1)
+            .Verify(x => x.Set(
+                serverId,
+                It.Is<SetDvarRequest>(r => r.DvarName == "sv_hostname" && r.Value == "XI Server"),
+                It.IsAny<CancellationToken>()), Times.Once);
+
+        Mock.Get(_serversApiClientMock.Object.CoD4xRcon.V1)
+            .Verify(x => x.Set(
+                It.IsAny<Guid>(),
+                It.IsAny<CoD4xSetDvarRequestDto>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SetRconDvar_WhenGameTypeIsCallOfDuty5_UsesCod5SetEndpoint()
+    {
+        var serverId = Guid.NewGuid();
+
+        Mock.Get(_serversApiClientMock.Object.Cod5Rcon.V1)
+            .Setup(x => x.Set(
+                serverId,
+                It.IsAny<SetDvarRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<string>(
+                System.Net.HttpStatusCode.OK,
+                new ApiResponse<string>("ok")));
+
+        var result = await _sut.SetRconDvar(new SetRconDvarInput(serverId, GameType.CallOfDuty5, "sv_hostname", "XI Server"));
+
+        Assert.True(result.Success);
+
+        Mock.Get(_serversApiClientMock.Object.Cod5Rcon.V1)
+            .Verify(x => x.Set(
+                serverId,
+                It.Is<SetDvarRequest>(r => r.DvarName == "sv_hostname" && r.Value == "XI Server"),
+                It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetRconDvar_WhenGameTypeIsUnsupported_ReturnsFailureWithoutCallingAnySetEndpoint()
+    {
+        var serverId = Guid.NewGuid();
+
+        var result = await _sut.SetRconDvar(new SetRconDvarInput(serverId, GameType.Insurgency, "sv_hostname", "XI Server"));
 
         Assert.False(result.Success);
         Assert.Contains("not supported", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        Mock.Get(_serversApiClientMock.Object.Cod2Rcon.V1)
+            .Verify(x => x.Set(
+                It.IsAny<Guid>(),
+                It.IsAny<SetDvarRequest>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+
+        Mock.Get(_serversApiClientMock.Object.Cod4Rcon.V1)
+            .Verify(x => x.Set(
+                It.IsAny<Guid>(),
+                It.IsAny<SetDvarRequest>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+
+        Mock.Get(_serversApiClientMock.Object.Cod5Rcon.V1)
+            .Verify(x => x.Set(
+                It.IsAny<Guid>(),
+                It.IsAny<SetDvarRequest>(),
+                It.IsAny<CancellationToken>()), Times.Never);
 
         Mock.Get(_serversApiClientMock.Object.CoD4xRcon.V1)
             .Verify(x => x.Set(
