@@ -1,4 +1,4 @@
-﻿namespace XtremeIdiots.Portal.Sync.App.Redirect;
+namespace XtremeIdiots.Portal.Sync.App.Redirect;
 
 public class MapRedirectRepositoryOptions
 {

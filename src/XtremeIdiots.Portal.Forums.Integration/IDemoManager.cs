@@ -1,4 +1,4 @@
-﻿using XtremeIdiots.Portal.Forums.Integration.Models;
+using XtremeIdiots.Portal.Forums.Integration.Models;
 
 namespace XtremeIdiots.Portal.Forums.Integration;
 

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 
 using XtremeIdiots.Portal.Sync.App.Configuration;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
