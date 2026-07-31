@@ -1,4 +1,4 @@
-﻿namespace XtremeIdiots.Portal.Sync.App.Models;
+namespace XtremeIdiots.Portal.Sync.App.Models;
 
 public class MapRedirectEntry
 {

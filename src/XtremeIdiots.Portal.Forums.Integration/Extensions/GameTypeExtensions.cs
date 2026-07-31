@@ -1,4 +1,4 @@
-﻿using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 
 namespace XtremeIdiots.Portal.Forums.Integration.Extensions;
 

@@ -1,4 +1,4 @@
-﻿namespace XtremeIdiots.Portal.Forums.Integration.Models;
+namespace XtremeIdiots.Portal.Forums.Integration.Models;
 
 public class DemoManagerClientDto
 {

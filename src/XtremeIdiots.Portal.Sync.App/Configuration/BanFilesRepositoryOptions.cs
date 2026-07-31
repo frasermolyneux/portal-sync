@@ -1,4 +1,4 @@
-﻿namespace XtremeIdiots.Portal.Sync.App.Configuration;
+namespace XtremeIdiots.Portal.Sync.App.Configuration;
 
 public class BanFilesRepositoryOptions
 {
