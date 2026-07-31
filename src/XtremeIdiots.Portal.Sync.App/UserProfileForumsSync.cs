@@ -182,7 +182,8 @@ public class UserProfileForumsSync(
             }
         }
 
-        var hasHigherRole = claims.Any(c => c.ClaimType == UserProfileClaimType.SeniorAdmin
+        var hasHigherRole = claims.Any(c => c.ClaimType == UserProfileClaimType.Webmaster
+            || c.ClaimType == UserProfileClaimType.SeniorAdmin
             || c.ClaimType == UserProfileClaimType.HeadAdmin
             || c.ClaimType == UserProfileClaimType.GameAdmin
             || c.ClaimType == UserProfileClaimType.Moderator);
@@ -219,6 +220,11 @@ public class UserProfileForumsSync(
         var groupName = group.Name.Replace("+", "").Trim();
         switch (groupName)
         {
+            // Webmaster (mirrors Senior Admin permissions)
+            case "Webmaster":
+                claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.Webmaster, GameType.Unknown.ToString(), true));
+                break;
+
             // Senior Admin
             case "Senior Admin":
                 claims.Add(new CreateUserProfileClaimDto(userProfileId, UserProfileClaimType.SeniorAdmin, GameType.Unknown.ToString(), true));

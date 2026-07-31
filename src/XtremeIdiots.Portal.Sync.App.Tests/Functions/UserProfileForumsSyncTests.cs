@@ -144,6 +144,22 @@ public class UserProfileForumsSyncTests
         Assert.DoesNotContain(claims, c => c.ClaimType == RegisteredUserClaimType);
     }
 
+    [Fact]
+    public void GetClaimsForMember_WhenMemberInWebmasterGroup_AddsWebmasterClaimAndNoLowerRoleFallback()
+    {
+        var userProfileId = Guid.NewGuid();
+        var member = CreateMemberDto(
+            321,
+            CreateGroupDto(117, "Webmaster"),
+            [CreateGroupDto(82, "Members")]);
+
+        var claims = InvokeGetClaimsForMember(userProfileId, member);
+
+        Assert.Contains(claims, c => c.ClaimType == UserProfileClaimType.Webmaster && c.ClaimValue == GameType.Unknown.ToString());
+        Assert.DoesNotContain(claims, c => c.ClaimType == ClanMemberClaimType);
+        Assert.DoesNotContain(claims, c => c.ClaimType == RegisteredUserClaimType);
+    }
+
     private static List<CreateUserProfileClaimDto> InvokeGetClaimsForMember(Guid userProfileId, MemberDto member)
     {
         var methodInfo = typeof(UserProfileForumsSync).GetMethod("GetClaimsForMember", BindingFlags.NonPublic | BindingFlags.Static);
