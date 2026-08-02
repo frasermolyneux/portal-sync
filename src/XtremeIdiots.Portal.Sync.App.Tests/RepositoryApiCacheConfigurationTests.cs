@@ -1,12 +1,9 @@
 using System.Linq;
-using System.Threading.Tasks;
 
-using MX.Api.Abstractions;
 using MX.Api.Client.Configuration;
 using MX.Caching.Abstractions;
 
 using XtremeIdiots.Portal.Repository.Abstractions.Interfaces.V1;
-using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Sync.App.Extensions;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests;

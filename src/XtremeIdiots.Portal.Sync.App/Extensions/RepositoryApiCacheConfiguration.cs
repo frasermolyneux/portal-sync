@@ -36,14 +36,14 @@ internal static class RepositoryApiCacheConfiguration
 
         Expression<Func<IMapsApi, Task<ApiResult<CollectionModel<MapDto>>>>> getMapsListExpression =
             api => api.GetMaps(
-                null,
-                null,
-                null,
-                null,
-                0,
-                0,
-                null,
-                default);
+                null, // gameType
+                null, // mapNames
+                null, // filter
+                null, // filterString
+                0,    // skipEntries
+                0,    // takeEntries
+                null, // order
+                default); // cancellationToken
 
         cache.NotCached(getMapsListExpression);
     }
