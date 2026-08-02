@@ -89,10 +89,7 @@ var host = new HostBuilder()
 
         services.AddRepositoryApiClient(options => options
             .WithBaseUrl(configuration["RepositoryApi:BaseUrl"] ?? throw new InvalidOperationException("RepositoryApi:BaseUrl configuration is required"))
-            .WithEntraIdAuthentication(configuration["RepositoryApi:ApplicationAudience"] ?? throw new InvalidOperationException("RepositoryApi:ApplicationAudience configuration is required"))
-            .WithCaching(true)
-            .WithCachePartition("portal-sync")
-            .WithCaching(RepositoryApiCacheConfiguration.ConfigureCachePolicies));
+            .WithEntraIdAuthentication(configuration["RepositoryApi:ApplicationAudience"] ?? throw new InvalidOperationException("RepositoryApi:ApplicationAudience configuration is required")));
 
         services.AddServersApiClient(options =>
         {
