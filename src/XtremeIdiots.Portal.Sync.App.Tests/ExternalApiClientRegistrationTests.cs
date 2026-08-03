@@ -22,10 +22,12 @@ namespace XtremeIdiots.Portal.Sync.App.Tests;
 /// method declared by ... or one of its inherited interfaces" — raised inside the per-sub-client
 /// options callback executed by <c>Add*ApiClient</c> during DI configuration. That crashed the
 /// Functions worker before host startup. This test mirrors the Invision + Servers client
-/// registrations from <c>Program.cs</c> exactly, builds a fully validated <see cref="ServiceProvider"/>,
-/// and resolves every typed sub-client consumed by portal-sync. Any future regression in either
-/// library's DI options callback — including a reintroduction of the cross-sub-API expression
-/// fan-out — will fail these tests before merge.
+/// registrations from <c>Program.cs</c> exactly, builds a <see cref="ServiceProvider"/> with both
+/// <see cref="ServiceProviderOptions.ValidateOnBuild"/> and <see cref="ServiceProviderOptions.ValidateScopes"/>
+/// enabled (so every registered service is realised at build time and every scoped-from-singleton
+/// mistake surfaces), and resolves every typed sub-client consumed by portal-sync. Any future
+/// regression in either library's DI options callback — including a reintroduction of the
+/// cross-sub-API expression fan-out — will fail these tests before merge.
 ///
 /// The Invision registration mirrors the caching decision documented in the PR: only
 /// <see cref="ICoreApi.GetMember"/> and <see cref="IDownloadsApi.GetDownloadFile"/> are consumed by
@@ -73,7 +75,6 @@ public class ExternalApiClientRegistrationTests
 
         Assert.NotNull(subClient);
     }
-
     [Fact]
     public void AddServersApiClient_ProductionShape_DoesNotThrowDuringRegistration()
     {
@@ -124,7 +125,11 @@ public class ExternalApiClientRegistrationTests
             .WithCachePartition("portal-sync")
             .WithCaching(cache => cache.UseLibraryDefaults()));
 
-        return services.BuildServiceProvider(validateScopes: true);
+        return services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true,
+        });
     }
 
     private static ServiceProvider BuildServersServiceProvider()
@@ -139,6 +144,10 @@ public class ExternalApiClientRegistrationTests
             .WithBaseUrl("https://servers.invalid")
             .WithEntraIdAuthentication("api://servers.invalid"));
 
-        return services.BuildServiceProvider(validateScopes: true);
+        return services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true,
+        });
     }
 }
