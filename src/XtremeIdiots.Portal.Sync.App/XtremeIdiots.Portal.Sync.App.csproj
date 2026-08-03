@@ -25,12 +25,12 @@
 	  <PackageReference Include="Microsoft.Azure.AppConfiguration.Functions.Worker" Version="8.6.0" />
 	  <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.10" />
 	  <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.10" />
-    <PackageReference Include="MX.Api.Abstractions" Version="2.3.76" />
-    <PackageReference Include="MX.Api.Client" Version="2.3.76" />
+    <PackageReference Include="MX.Api.Abstractions" Version="2.3.77" />
+    <PackageReference Include="MX.Api.Client" Version="2.3.77" />
 	  <PackageReference Include="MX.InvisionCommunity.Api.Client" Version="1.0.61" />
     <PackageReference Include="MX.Observability.ApplicationInsights.WorkerService" Version="1.1.28" />
-    <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="4.2.21" />
-    <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="4.2.21" />
+    <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="4.2.22" />
+    <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="4.2.22" />
     <PackageReference Include="Microsoft.Identity.Web" Version="4.14.2" />
     <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="4.1.9" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.18.0" />
