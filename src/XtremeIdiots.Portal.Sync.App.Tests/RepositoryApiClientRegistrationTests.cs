@@ -22,13 +22,15 @@ namespace XtremeIdiots.Portal.Sync.App.Tests;
 ///
 /// PR #833 hotfixed by removing all consumer caching. Repository client 4.2.22 + MX.Api.Client
 /// 2.3.77 fix the root cause by scoping every cache-policy expression to its matching typed
-/// sub-API via <c>SharedCacheConfiguration</c>. These tests mirror the exact production
-/// registration shape from <c>Program.cs</c> — including the re-enabled
+/// sub-API via <c>SharedCacheConfiguration</c>. These tests mirror the Repository API client
+/// registration chain from <c>Program.cs</c> exactly — including the re-enabled
 /// <see cref="RepositoryApiCacheConfiguration"/> cache-policy chain — and resolve
 /// <see cref="IRepositoryApiClient"/> plus every typed sub-client portal-sync consumes from a
-/// fully built <see cref="ServiceProvider"/>. Any future regression that reintroduces a
-/// cross-sub-API expression, or otherwise breaks the DI options callback, will fail these tests
-/// before merge.
+/// fully built <see cref="ServiceProvider"/>. Unrelated host wiring (Functions host builder,
+/// App Configuration, Application Insights, other API clients) is intentionally out of scope:
+/// the guarded failure mode is entirely inside <c>AddRepositoryApiClient</c>'s per-sub-client
+/// options callback. Any future regression that reintroduces a cross-sub-API expression, or
+/// otherwise breaks that DI options callback, will fail these tests before merge.
 /// </summary>
 public class RepositoryApiClientRegistrationTests
 {
@@ -77,10 +79,11 @@ public class RepositoryApiClientRegistrationTests
         var services = new ServiceCollection();
         services.AddLogging();
 
-        // Mirror the production registration shape from Program.cs exactly: BaseUrl + Entra ID
-        // authentication + the re-enabled consumer cache-policy chain from
-        // RepositoryApiCacheConfiguration. See class-level remarks for why the full production
-        // shape (including caching) is under test here.
+        // Mirror the Repository API client registration chain from Program.cs exactly: BaseUrl
+        // + Entra ID authentication + the re-enabled consumer cache-policy chain from
+        // RepositoryApiCacheConfiguration. The surrounding host wiring (App Configuration,
+        // Application Insights, other API clients, etc.) is intentionally out of scope — see
+        // class-level remarks for why.
         services.AddRepositoryApiClient(options => options
             .WithBaseUrl("https://repository.invalid")
             .WithEntraIdAuthentication("api://repository.invalid")
