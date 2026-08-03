@@ -46,7 +46,10 @@ public class ExternalApiClientRegistrationTests
     {
         // The PR #832 regression exception was raised inside the options-configuration callback
         // that Add*ApiClient invokes per sub-client. Registration + provider build must not throw.
-        var exception = Record.Exception(BuildInvisionServiceProvider);
+        var exception = Record.Exception(() =>
+        {
+            using var provider = BuildInvisionServiceProvider();
+        });
 
         Assert.Null(exception);
     }
@@ -75,10 +78,14 @@ public class ExternalApiClientRegistrationTests
 
         Assert.NotNull(subClient);
     }
+
     [Fact]
     public void AddServersApiClient_ProductionShape_DoesNotThrowDuringRegistration()
     {
-        var exception = Record.Exception(BuildServersServiceProvider);
+        var exception = Record.Exception(() =>
+        {
+            using var provider = BuildServersServiceProvider();
+        });
 
         Assert.Null(exception);
     }
@@ -117,8 +124,9 @@ public class ExternalApiClientRegistrationTests
         services.AddLogging();
 
         // Mirror Program.cs exactly: BaseUrl + API key authentication + cache partition
-        // + UseLibraryDefaults(). Only GetCoreHello / GetMember / GetDownloadFile are cached by
-        // MX.InvisionCommunity.Api.Client 1.0.63 defaults; IForumsApi is entirely uncached.
+        // + UseLibraryDefaults(). The exact set of methods covered by UseLibraryDefaults() is
+        // owned by the MX.InvisionCommunity.Api.Client package; see the PR body for the decision
+        // rationale on why enabling defaults is safe for portal-sync's read paths.
         services.AddInvisionApiClient(options => options
             .WithBaseUrl("https://forums.invalid")
             .WithApiKeyAuthentication("test-api-key", "key", ApiKeyLocation.QueryParameter)
