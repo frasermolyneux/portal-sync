@@ -24,10 +24,11 @@ namespace XtremeIdiots.Portal.Sync.App.Tests;
 /// Functions worker before host startup. This test mirrors the Invision + Servers client
 /// registrations from <c>Program.cs</c> exactly, builds a <see cref="ServiceProvider"/> with both
 /// <see cref="ServiceProviderOptions.ValidateOnBuild"/> and <see cref="ServiceProviderOptions.ValidateScopes"/>
-/// enabled (so every registered service is realised at build time and every scoped-from-singleton
-/// mistake surfaces), and resolves every typed sub-client consumed by portal-sync. Any future
-/// regression in either library's DI options callback — including a reintroduction of the
-/// cross-sub-API expression fan-out — will fail these tests before merge.
+/// enabled (so unresolvable registrations fail at provider-build time and scoped-from-singleton
+/// mistakes surface), and additionally resolves the composite client plus every typed sub-client
+/// portal-sync consumes so the DI options callback that raised the PR #832 exception is actually
+/// exercised end-to-end. Any future regression in either library's DI options callback — including
+/// a reintroduction of the cross-sub-API expression fan-out — will fail these tests before merge.
 ///
 /// The Invision registration mirrors the caching decision documented in the PR: only
 /// <see cref="ICoreApi.GetMember"/> and <see cref="IDownloadsApi.GetDownloadFile"/> are consumed by
