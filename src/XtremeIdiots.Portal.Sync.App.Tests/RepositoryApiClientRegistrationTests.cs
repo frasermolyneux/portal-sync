@@ -4,6 +4,7 @@ using MX.Api.Client.Extensions;
 
 using XtremeIdiots.Portal.Repository.Abstractions.Interfaces.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Extensions;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests;
 
@@ -19,10 +20,15 @@ namespace XtremeIdiots.Portal.Sync.App.Tests;
 /// XtremeIdiots.Portal.Repository.Abstractions.Interfaces.V1.IAdminActionsApi or one of its
 /// inherited interfaces." The Functions worker exited before host startup.
 ///
-/// These tests mirror the exact production registration shape (BaseUrl + Entra ID only, no
-/// consumer-side caching) and resolve <see cref="IRepositoryApiClient"/> plus representative
-/// typed sub-clients from a fully built <see cref="ServiceProvider"/>. Reintroducing a broken
-/// <c>WithCaching</c> expression will cause these tests to fail before merge.
+/// PR #833 hotfixed by removing all consumer caching. Repository client 4.2.22 + MX.Api.Client
+/// 2.3.77 fix the root cause by scoping every cache-policy expression to its matching typed
+/// sub-API via <c>SharedCacheConfiguration</c>. These tests mirror the exact production
+/// registration shape from <c>Program.cs</c> — including the re-enabled
+/// <see cref="RepositoryApiCacheConfiguration"/> cache-policy chain — and resolve
+/// <see cref="IRepositoryApiClient"/> plus every typed sub-client portal-sync consumes from a
+/// fully built <see cref="ServiceProvider"/>. Any future regression that reintroduces a
+/// cross-sub-API expression, or otherwise breaks the DI options callback, will fail these tests
+/// before merge.
 /// </summary>
 public class RepositoryApiClientRegistrationTests
 {
@@ -53,6 +59,9 @@ public class RepositoryApiClientRegistrationTests
     [InlineData(typeof(IGameServersApi))]
     [InlineData(typeof(IUserProfileApi))]
     [InlineData(typeof(IBanFileMonitorsApi))]
+    [InlineData(typeof(IMapRotationsApi))]
+    [InlineData(typeof(ICentralBanFileStatusApi))]
+    [InlineData(typeof(IDataMaintenanceApi))]
     public void AddRepositoryApiClient_ProductionShape_ResolvesTypedSubClient(Type subClientType)
     {
         using var provider = BuildProductionServiceProvider();
@@ -69,10 +78,15 @@ public class RepositoryApiClientRegistrationTests
         services.AddLogging();
 
         // Mirror the production registration shape from Program.cs exactly: BaseUrl + Entra ID
-        // authentication only. Do not add consumer-side caching here — see class-level remarks.
+        // authentication + the re-enabled consumer cache-policy chain from
+        // RepositoryApiCacheConfiguration. See class-level remarks for why the full production
+        // shape (including caching) is under test here.
         services.AddRepositoryApiClient(options => options
             .WithBaseUrl("https://repository.invalid")
-            .WithEntraIdAuthentication("api://repository.invalid"));
+            .WithEntraIdAuthentication("api://repository.invalid")
+            .WithCaching(true)
+            .WithCachePartition("portal-sync")
+            .WithCaching(RepositoryApiCacheConfiguration.ConfigureCachePolicies));
 
         return services.BuildServiceProvider(validateScopes: true);
     }
