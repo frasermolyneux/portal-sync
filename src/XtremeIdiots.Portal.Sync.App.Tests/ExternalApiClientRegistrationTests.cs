@@ -30,15 +30,17 @@ namespace XtremeIdiots.Portal.Sync.App.Tests;
 /// exercised end-to-end. Any future regression in either library's DI options callback — including
 /// a reintroduction of the cross-sub-API expression fan-out — will fail these tests before merge.
 ///
-/// The Invision registration mirrors the caching decision documented in the PR: only
-/// <see cref="ICoreApi.GetMember"/> and <see cref="IDownloadsApi.GetDownloadFile"/> are consumed by
-/// portal-sync (via <c>UserProfileForumsSync</c> and <c>DemoManager</c> respectively), both are
-/// pure reads whose writes land against a different backing store (the Repository API for user
-/// profile updates; no writes at all for downloads), and <see cref="IForumsApi"/> — which handles
-/// the sync write path via <c>PostTopic</c>/<c>UpdateTopic</c> — is uncached by
-/// <c>UseLibraryDefaults()</c>. Turning on library defaults is therefore safe. The Servers client
-/// ships no cache defaults; the bump to <c>4.1.14</c> is purely for version currency and crash
-/// safety.
+/// The Invision registration mirrors the caching decision documented in the PR: the only
+/// <em>cacheable-by-default read</em> methods portal-sync consumes are
+/// <see cref="ICoreApi.GetMember"/> (via <c>UserProfileForumsSync</c>) and
+/// <see cref="IDownloadsApi.GetDownloadFile"/> (via <c>DemoManager</c>) — both are pure reads
+/// whose corresponding writes land against a different backing store (the Repository API for
+/// user profile updates; no writes at all for downloads). The forum-write path used by
+/// <c>AdminActionTopics</c> goes through <see cref="IForumsApi.PostTopic"/> /
+/// <see cref="IForumsApi.UpdateTopic"/>, which are uncached under
+/// <c>UseLibraryDefaults()</c> and so are unaffected. Turning on library defaults is therefore
+/// safe. The Servers client ships no cache defaults; the bump to <c>4.1.14</c> is purely for
+/// version currency and crash safety.
 /// </summary>
 public class ExternalApiClientRegistrationTests
 {
