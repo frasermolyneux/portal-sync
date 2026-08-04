@@ -108,7 +108,9 @@ var host = new HostBuilder()
 
         services.AddInvisionApiClient(options => options
             .WithBaseUrl(configuration["XtremeIdiots:Forums:BaseUrl"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:BaseUrl configuration is required"))
-            .WithApiKeyAuthentication(configuration["XtremeIdiots:Forums:ApiKey"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:ApiKey configuration is required"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter));
+            .WithApiKeyAuthentication(configuration["XtremeIdiots:Forums:ApiKey"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:ApiKey configuration is required"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter)
+            .WithCachePartition("portal-sync")
+            .WithCaching(cache => cache.UseLibraryDefaults()));
 
         services.AddAdminActionTopics();
 

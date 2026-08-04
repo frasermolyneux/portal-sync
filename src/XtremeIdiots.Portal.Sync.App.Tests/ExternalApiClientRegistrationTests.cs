@@ -1,0 +1,164 @@
+using Microsoft.Extensions.DependencyInjection;
+
+using MX.Api.Client.Configuration;
+using MX.Api.Client.Extensions;
+
+using MX.InvisionCommunity.Api.Abstractions;
+using MX.InvisionCommunity.Api.Abstractions.Interfaces;
+using MX.InvisionCommunity.Api.Client;
+
+using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Interfaces.V1;
+using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
+
+namespace XtremeIdiots.Portal.Sync.App.Tests;
+
+/// <summary>
+/// Guards the Invision and Servers API client DI registrations used by <c>Program.cs</c> against
+/// the same class of startup-crash regression that took portal-sync down under
+/// <c>Repository.Api.Client.V1 4.2.21</c> (PR #832 → hotfix PR #833 → rolled forward under PR #834
+/// on <c>MX.Api.Client 2.3.77</c>'s <see cref="SharedCacheConfiguration"/>).
+///
+/// The exact failure mode was an <see cref="ArgumentException"/> — "The expression must invoke a
+/// method declared by ... or one of its inherited interfaces" — raised inside the per-sub-client
+/// options callback executed by <c>Add*ApiClient</c> during DI configuration. That crashed the
+/// Functions worker before host startup. This test mirrors the Invision + Servers client
+/// registrations from <c>Program.cs</c> exactly, builds a <see cref="ServiceProvider"/> with both
+/// <see cref="ServiceProviderOptions.ValidateOnBuild"/> and <see cref="ServiceProviderOptions.ValidateScopes"/>
+/// enabled (so unresolvable registrations fail at provider-build time and scoped-from-singleton
+/// mistakes surface), and additionally resolves the composite client plus every typed sub-client
+/// portal-sync consumes so the DI options callback that raised the PR #832 exception is actually
+/// exercised end-to-end. Any future regression in either library's DI options callback — including
+/// a reintroduction of the cross-sub-API expression fan-out — will fail these tests before merge.
+///
+/// The Invision registration mirrors the caching decision documented in the PR: the only
+/// <em>cacheable-by-default read</em> methods portal-sync consumes are
+/// <see cref="ICoreApi.GetMember"/> (via <c>UserProfileForumsSync</c>) and
+/// <see cref="IDownloadsApi.GetDownloadFile"/> (via <c>DemoManager</c>) — both are pure reads
+/// whose corresponding writes land against a different backing store (the Repository API for
+/// user profile updates; no writes at all for downloads). The forum-write path used by
+/// <c>AdminActionTopics</c> goes through <see cref="IForumsApi.PostTopic"/> /
+/// <see cref="IForumsApi.UpdateTopic"/>, which are uncached under
+/// <c>UseLibraryDefaults()</c> and so are unaffected. Turning on library defaults is therefore
+/// safe. The Servers client ships no cache defaults; the bump to <c>4.1.14</c> is purely for
+/// version currency and crash safety.
+/// </summary>
+public class ExternalApiClientRegistrationTests
+{
+    [Fact]
+    public void AddInvisionApiClient_ProductionShape_DoesNotThrowDuringRegistration()
+    {
+        // The PR #832 regression exception was raised inside the options-configuration callback
+        // that Add*ApiClient invokes per sub-client. Registration + provider build must not throw.
+        var exception = Record.Exception(() =>
+        {
+            using var provider = BuildInvisionServiceProvider();
+        });
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void AddInvisionApiClient_ProductionShape_ResolvesInvisionApiClient()
+    {
+        using var provider = BuildInvisionServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var client = scope.ServiceProvider.GetRequiredService<IInvisionApiClient>();
+
+        Assert.NotNull(client);
+    }
+
+    [Theory]
+    [InlineData(typeof(ICoreApi))]
+    [InlineData(typeof(IDownloadsApi))]
+    [InlineData(typeof(IForumsApi))]
+    public void AddInvisionApiClient_ProductionShape_ResolvesTypedSubClient(Type subClientType)
+    {
+        using var provider = BuildInvisionServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var subClient = scope.ServiceProvider.GetRequiredService(subClientType);
+
+        Assert.NotNull(subClient);
+    }
+
+    [Fact]
+    public void AddServersApiClient_ProductionShape_DoesNotThrowDuringRegistration()
+    {
+        var exception = Record.Exception(() =>
+        {
+            using var provider = BuildServersServiceProvider();
+        });
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void AddServersApiClient_ProductionShape_ResolvesServersApiClient()
+    {
+        using var provider = BuildServersServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var client = scope.ServiceProvider.GetRequiredService<IServersApiClient>();
+
+        Assert.NotNull(client);
+    }
+
+    [Theory]
+    [InlineData(typeof(IMapsApi))]
+    [InlineData(typeof(IConfigApi))]
+    [InlineData(typeof(ICod2RconApi))]
+    [InlineData(typeof(ICod4RconApi))]
+    [InlineData(typeof(ICoD4xRconApi))]
+    [InlineData(typeof(ICod5RconApi))]
+    public void AddServersApiClient_ProductionShape_ResolvesTypedSubClient(Type subClientType)
+    {
+        using var provider = BuildServersServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var subClient = scope.ServiceProvider.GetRequiredService(subClientType);
+
+        Assert.NotNull(subClient);
+    }
+
+    private static ServiceProvider BuildInvisionServiceProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Mirror Program.cs exactly: BaseUrl + API key authentication + cache partition
+        // + UseLibraryDefaults(). The exact set of methods covered by UseLibraryDefaults() is
+        // owned by the MX.InvisionCommunity.Api.Client package; see the PR body for the decision
+        // rationale on why enabling defaults is safe for portal-sync's read paths.
+        services.AddInvisionApiClient(options => options
+            .WithBaseUrl("https://forums.invalid")
+            .WithApiKeyAuthentication("test-api-key", "key", ApiKeyLocation.QueryParameter)
+            .WithCachePartition("portal-sync")
+            .WithCaching(cache => cache.UseLibraryDefaults()));
+
+        return services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true,
+        });
+    }
+
+    private static ServiceProvider BuildServersServiceProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Mirror Program.cs exactly: BaseUrl + Entra ID authentication. The Servers client ships
+        // no cache defaults, so no WithCaching() call is made — the bump to 4.1.14 gives us the
+        // crash-safe per-sub-client scoping without changing runtime behaviour.
+        services.AddServersApiClient(options => options
+            .WithBaseUrl("https://servers.invalid")
+            .WithEntraIdAuthentication("api://servers.invalid"));
+
+        return services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true,
+        });
+    }
+}
