@@ -1,6 +1,6 @@
 # portal-sync
 
-.NET 9 isolated Azure Functions application that synchronizes portal data with forum, game-server, map, and platform services through scheduled and manual jobs.
+.NET 10 isolated Azure Functions application that synchronizes portal data with forum, game-server, map, and platform services through scheduled and manual jobs.
 
 ## Ownership and paths
 
@@ -12,9 +12,9 @@
 ## Commands
 
 ```pwsh
-dotnet build src/XtremeIdiots.Portal.Sync.App.sln
+dotnet build src/XtremeIdiots.Portal.Sync.App.slnx
 dotnet test src --filter "FullyQualifiedName!~IntegrationTests"
-dotnet format src/XtremeIdiots.Portal.Sync.App.sln --verify-no-changes
+dotnet format src/XtremeIdiots.Portal.Sync.App.slnx --verify-no-changes
 terraform -chdir=terraform fmt -check -recursive
 terraform -chdir=terraform init -backend-config=backends/dev.backend.hcl
 terraform -chdir=terraform validate
