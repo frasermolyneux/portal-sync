@@ -1,33 +1,12 @@
 ---
-description: "Concise guidance on when to emit audit events versus metrics and logs in portal runtime code."
-applyTo: "src/**/*.cs"
+description: "Protect audit, job telemetry, and data-integrity semantics in synchronization jobs."
+applyTo: "src/XtremeIdiots.Portal.Sync.App/*Sync.cs,src/XtremeIdiots.Portal.Sync.App/*Monitor.cs,src/XtremeIdiots.Portal.Sync.App/MapRotations/*Cleanup.cs,src/XtremeIdiots.Portal.Sync.App.Tests/Functions/*SyncTests.cs,src/XtremeIdiots.Portal.Sync.App.Tests/Functions/*MonitorTests.cs,src/XtremeIdiots.Portal.Sync.App.Tests/Functions/*CleanupTests.cs"
 ---
 
-# Auditing Balance Guidance
+# Synchronization auditing
 
-Use audit events for high-value, externally meaningful actions. Prefer metrics and warning/error logs for high-frequency operational telemetry.
-
-## Emit audit events when
-
-- A persistent state change occurs (create, update, delete, import, moderation outcome).
-- A security, authorization, or privileged action occurs.
-- A user or service action has compliance or forensic value.
-- An externally consequential action succeeds or fails and needs a durable trail.
-
-## Avoid audit events when
-
-- The signal is a periodic heartbeat or status snapshot.
-- The signal is a repeated loop checkpoint or decision gate.
-- The signal is a high-frequency "sent", "matched", "skipped", or "received" operational event with no state change.
-- The same trend is better represented by metrics (counts, rates, durations) plus warning/error logs.
-
-## Exception and warning observability
-
-- Do not rely on custom audit events for failure visibility.
-- Keep exceptions and warning/error logs as the primary failure signal.
-- If removing low-value audit events, verify failure paths still emit exceptions and warning/error logs.
-
-## Change gate for new audit events
-
-- Before adding a new audit event, document why metrics or existing logs are insufficient.
-- Include expected event volume and retention value in the PR description.
+- Emit durable audits only after a persisted external or portal state change succeeds; scans, skips, retries, and failed attempts belong in job telemetry or logs.
+- Preserve `IJobTelemetry.ExecuteAsync()` around scheduled work so start, success, and failure lifecycle remains observable.
+- Retried or manually invoked jobs must not create misleading duplicate audit records.
+- For forum claims, audit only a changed system-generated claim set and never treat preserved manual claims as sync-owned.
+- Update the affected job tests when changing audit conditions, ordering, idempotency, or failure behavior.

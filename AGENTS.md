@@ -1,134 +1,40 @@
-# AGENTS.md — portal-sync
+# portal-sync
 
-Azure Functions app (v4, .NET 9 isolated worker) that synchronizes XtremeIdiots portal data with external game telemetry, forum, and platform services. Runs scheduled and on-demand pipelines for ban-file sync, map images, map redirects, and **user-profile forum data** (forum group → portal role-claim mapping).
+.NET 9 isolated Azure Functions application that synchronizes portal data with forum, game-server, map, and platform services through scheduled and manual jobs.
 
-This file is the brief for the **GitHub Copilot coding agent** (and any other agent that follows the [agents.md](https://agents.md) convention) when it runs in a cloud runner without the local VS Code multi-root workspace context.
+## Ownership and paths
 
-> If you are a human reading this in VS Code, prefer `.github/copilot-instructions.md` for project orientation. `AGENTS.md` is the agent execution brief.
+- `src/XtremeIdiots.Portal.Sync.App/`: triggers, synchronization jobs, configuration, repositories, and external API clients.
+- `src/XtremeIdiots.Portal.Forums.Integration/`: forum-specific integration behavior.
+- `src/XtremeIdiots.Portal.Sync.App.Tests/`: job, trigger, claim-mapping, idempotency, and failure-path tests.
+- `terraform/`: Function App, storage, Key Vault integration, APIM wiring, identities, and alerts.
 
----
-
-## Required reading (read these BEFORE doing any work)
-
-The `copilot-setup-steps.yml` workflow checks out `frasermolyneux/.github-copilot` at `./.github-copilot/` in the runner, so the paths below resolve.
-
-1. `.github/copilot-instructions.md` — repo-specific orientation, conventions, **forum-group → claim mapping rules**
-2. `.github-copilot/.github/instructions/personal.working-preferences.instructions.md`
-3. `.github-copilot/.github/copilot-instructions.md` — org-wide catalog
-4. Stack-specific files — see **Stack guardrails** below
-
----
-
-## Org conventions via MCP (when available)
-
-If a `frasermolyneux-copilot` MCP server is configured in your client (`~/.copilot/mcp-config.json`, VS Code user `mcp.json`, or an equivalent stdio MCP wire-up), **prefer its catalog tools** over your own assumptions when answering questions about org standards, branching, workflows, Terraform, .NET projects, Azure patterns, or shared library / platform consumption contracts. The catalog source-of-truth lives in `frasermolyneux/.github-copilot` — see `mcp-server/README.md` there for the tool contract.
-
-This is **complementary** to the file-load model: if `./.github-copilot/` is checked out in the runner (per `copilot-setup-steps.yml`), continue to read those files directly. If both are available, prefer MCP for freshness. If no MCP server is configured in your client, treat this section as a no-op and fall back to the file paths above.
-
----
-
-## Stack guardrails
-
-### Tenant facts (always-on)
-- `tenant.subscriptions`, `tenant.regions`, `tenant.identity`
-
-### Enforceable standards
-- `standards.oidc-and-secrets` — **no client secrets**
-- `standards.dotnet-project`
-- `standards.azure-naming`, `standards.azure-tagging`, `standards.terraform-style`
-- `standards.branching-and-prs`
-
-### Patterns
-- `patterns.api-client` — consumes Portal Repository + Servers Integration + GeoLocation + Invision clients
-- `patterns.nbgv-versioning`
-- `patterns.terraform-remote-state`
-
-### Platform consumption contracts
-- `platform.workloads`, `platform.monitoring`, `platform.hosting`
-
-### Shared
-- `shared.api-client-abstractions`
-- `shared.observability-appinsights` — `IJobTelemetry.ExecuteAsync()` wraps every scheduled job
-- `shared.invision-api-client` — typed forum API client
-
----
-
-## Build, test, format
+## Commands
 
 ```pwsh
 dotnet build src/XtremeIdiots.Portal.Sync.App.sln
 dotnet test src --filter "FullyQualifiedName!~IntegrationTests"
 dotnet format src/XtremeIdiots.Portal.Sync.App.sln --verify-no-changes
-
 terraform -chdir=terraform fmt -check -recursive
 terraform -chdir=terraform init -backend-config=backends/dev.backend.hcl
 terraform -chdir=terraform validate
-terraform -chdir=terraform plan -var-file=tfvars/dev.tfvars
 ```
 
----
+## Synchronization and job constraints
 
-## Do NOT
+- Scheduled jobs must run through `IJobTelemetry.ExecuteAsync()` and retain a corresponding HTTP trigger for controlled manual execution.
+- Preserve scheduling, pagination, retry/fail-fast, cancellation, and partial-failure semantics. Avoid duplicate side effects when a job is retried or manually re-run.
+- Forum synchronization regenerates system-owned identity and role claims from forum membership while preserving every claim where `SystemGenerated == false`. Merge and deduplicate before the atomic `SetUserProfileClaims` replacement.
+- `AdditionalPermission` claims are manually owned outside this service. Never generate, discard, or overwrite them. Forum group-to-role mapping changes require coordinated authorization-model changes.
+- Keep external forum, Repository API, Servers Integration API, GameTracker, redirect-service, FTP, and blob interactions behind their existing clients/repositories. Preserve anti-bot/non-image detection and cleanup behavior.
+- Durable audits represent successful persisted changes, not scans, skips, heartbeats, or failed attempts. Job telemetry and warning/error logs remain the operational failure signal.
+- Maintain timer/manual trigger parity and tests for lifecycle, idempotency, preservation, and failure behavior when changing a job.
 
-- ❌ Do not `git commit`, `git push`, force-push, rebase, or branch-mutate. Work on the assigned branch only.
-- ❌ Do not introduce client secrets / forum API keys in code. Settings come from App Configuration + Key Vault via managed identity.
-- ❌ Do not bypass `dotnet format`, `dotnet test`, `terraform fmt`, or `terraform validate`.
-- ❌ Do not wrap a new scheduled job without `IJobTelemetry.ExecuteAsync()` — observability is required.
-- ❌ Do not add a timer trigger without a paired HTTP trigger for manual execution.
-- ❌ **Do not overwrite manually-assigned `AdditionalPermission` claims during forum sync** — the sync flow preserves them by separating system-generated from manual claims and merging back. Read `UserProfileForumsSync` before changing claim-sync logic.
-- ❌ Do not generate `AdditionalPermission` claim types from portal-sync — those are manually assigned via the portal UI. This repo only emits the system claims listed in `.github/copilot-instructions.md`.
-- ❌ Do not add new forum group → role mappings without a corresponding change in the portal-web authorization model.
-- ❌ Do not modify `.github/workflows/`, `.github/dependabot.yml`, or `version.json` unless that is the explicit task.
+## Infrastructure and delivery
 
-- ❌ Do not pull context from sibling workspace folders. Only what is inside this repo and `./.github-copilot/` is in scope.
-- ❌ Do not assume tools/SDKs are installed beyond what `.github/workflows/copilot-setup-steps.yml` provisions. If you need more, add the step and explain why.
+- Configuration comes from App Configuration and Key Vault through managed identity; do not embed API keys, client secrets, or connection strings.
+- Terraform requires `>= 1.15.6`, AzureRM `~> 5.0.1`, and the `azurerm` backend. It consumes remote state from platform workloads, platform monitoring, portal environments, and portal core.
+- Backend files are under `terraform/backends/`; environment variables are under `terraform/tfvars/`. Preserve backend/state keys, remote-state contracts, provider behavior, Function App settings, identities, schedules, alerts, and APIM outputs.
+- Deployments use GitHub environments, OIDC, Terraform, Function App deployment, and APIM synchronization. `.terraform.lock.hcl` is intentionally untracked.
 
----
-
-## Opening the PR
-
-You MUST use `.github/PULL_REQUEST_TEMPLATE.md` as your PR body — do **not** write a freeform body. The org template is inherited from `frasermolyneux/.github` and GitHub pre-populates it when you open the PR. Concretely:
-
-1. Fill `## Summary` (one line) and `Closes #<issue>`.
-2. Tick the relevant `## Type of change` box.
-3. Paste the **actual command output** from your Build, Tests, and Format check runs into `## Validation evidence`. Show the real summary line, not "tests passed".
-4. Fill `## Risk and rollout` — blast radius, auto-deploy?, manual steps post-merge, rollback plan.
-5. Tick **every** box in `## Agent attestation`.
-6. Delete `## Consumer impact` only if no published contract (Abstractions / Client NuGet / Service Bus DTO / Terraform output) changed.
-
-Complete the `## Agent attestation` section before requesting review; reviewers use it as a readiness checklist.
-
----
-
-## Pre-PR checks (run before you open the PR)
-
-- [ ] `dotnet build` succeeds (clean)
-- [ ] `dotnet test --filter "FullyQualifiedName!~IntegrationTests"` passes
-- [ ] `dotnet format --verify-no-changes` passes
-- [ ] `terraform fmt -check -recursive` passes
-- [ ] `terraform validate` + `terraform plan -var-file=tfvars/dev.tfvars` succeed
-- [ ] Each new scheduled job uses `IJobTelemetry.ExecuteAsync()`
-- [ ] Each new timer trigger has a paired HTTP trigger
-- [ ] Claim-sync changes preserve manually-assigned `AdditionalPermission` claims
-- [ ] No new secrets / GUIDs / connection strings
-- [ ] PR body cites each acceptance criterion
-- [ ] Risk/rollout section filled in
-
-- [ ] `code-review` sub-agent run; High/Medium findings resolved or justified in the PR body
-
----
-
-## Escalation
-
-If you hit any of the conditions below, **open the PR as draft** and **apply the `needs-decision` label** instead of pushing forward to ready-for-review. Post a comment on the originating issue summarising what's blocking you and what decision is needed.
-
-Stop and escalate when:
-
-- The change would force-overwrite manually-assigned `AdditionalPermission` claims.
-- A new forum group → role mapping requires coordinated portal-web auth changes.
-- A `code-review` finding is **High** and cannot be resolved in-scope.
-- An external API contract (Invision, GameTracker, map redirect) has changed and the client needs versioning.
-
-
-
-
+Use the README and focused source tests for operational detail; keep this file centered on invariants that protect synchronized data and job behavior.
