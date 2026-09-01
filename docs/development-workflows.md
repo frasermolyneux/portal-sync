@@ -6,7 +6,7 @@ Target: Engineers working on portal-sync (function app). Covers branch strategy,
 
 ### Feature Development feature/*, bugfix/*, hotfix/*
 - **build-and-test.yml**: Runs on push to feature/bugfix/hotfix branches
-  - Build and test via `dotnet-func-ci` composite action targeting .NET 9
+  - Build and test via `dotnet-func-ci` composite action targeting .NET 10
   - No Terraform or deployments
   - Purpose: fast feedback on WIP changes
 
@@ -78,7 +78,7 @@ graph TD
 
 - Copilot branches (`copilot/*`) skip Terraform plans by default in **pr-verify.yml**
 - Add `run-dev-plan` label to enable the dev plan; add both `run-dev-plan` and `run-prd-plan` to run the prd plan
-- Setup requirements are defined in **copilot-setup-steps.yml** (checkout + .NET 9.0.x)
+- Setup requirements are defined in **copilot-setup-steps.yml** (checkout + .NET 10.0.x)
 
 ## Composite Actions (frasermolyneux/actions)
 
