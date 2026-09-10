@@ -122,7 +122,7 @@ public class MapRotationActivitiesTests
     }
 
     [Fact]
-    public async Task GetMapsWithoutFiles_ReturnsOnlyMapsWithNoFiles()
+    public async Task ResolveRotationMaps_ReportsWhetherEachMapHasFiles()
     {
         var withFilesId = Guid.NewGuid();
         var withoutFilesId = Guid.NewGuid();
@@ -132,14 +132,31 @@ public class MapRotationActivitiesTests
         SetupMap(withoutFilesId, "mp_without_files", []);
         SetupMap(nullFilesId, "mp_null_files", null);
 
-        var result = await CreateSut().GetMapsWithoutFiles(
-            new GetMapsWithoutFilesInput([withFilesId, withoutFilesId, nullFilesId]));
+        var result = await CreateSut().ResolveRotationMaps(
+            new ResolveRotationMapsInput([withFilesId, withoutFilesId, nullFilesId]));
 
-        Assert.Equal(["mp_without_files", "mp_null_files"], result);
+        Assert.Equal(
+        [
+            new RotationMapDetail("mp_with_files", true),
+            new RotationMapDetail("mp_without_files", false),
+            new RotationMapDetail("mp_null_files", false)
+        ], result);
     }
 
     [Fact]
-    public async Task GetMapsWithoutFiles_WhenMapCannotBeResolved_Throws()
+    public async Task ResolveRotationMaps_FetchesEachMapOnlyOnce()
+    {
+        var mapId = Guid.NewGuid();
+        SetupMap(mapId, "mp_custom", [new MapFileDto("mp_custom.iwd", "https://redirect.test/mp_custom.iwd")]);
+
+        await CreateSut().ResolveRotationMaps(new ResolveRotationMapsInput([mapId]));
+
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
+            .Verify(x => x.GetMap(mapId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ResolveRotationMaps_WhenMapCannotBeResolved_Throws()
     {
         var mapId = Guid.NewGuid();
 
@@ -148,6 +165,6 @@ public class MapRotationActivitiesTests
             .ReturnsAsync(new ApiResult<MapDto>(HttpStatusCode.NotFound, new ApiResponse<MapDto>()));
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => CreateSut().GetMapsWithoutFiles(new GetMapsWithoutFilesInput([mapId])));
+            () => CreateSut().ResolveRotationMaps(new ResolveRotationMapsInput([mapId])));
     }
 }

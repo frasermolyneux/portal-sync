@@ -47,17 +47,13 @@ public class MapRotationOrchestratorsTests
                 GameMode: "war",
                 MapIds: [mapId]));
 
-        contextMock.Setup(x => x.CallActivityAsync<List<string>>(
-                It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.ResolveMapNames)),
+        contextMock.Setup(x => x.CallActivityAsync<List<RotationMapDetail>>(
+                It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.ResolveRotationMaps)),
                 It.IsAny<object>(),
                 It.IsAny<TaskOptions>()))
-            .ReturnsAsync(mapNames);
-
-        contextMock.Setup(x => x.CallActivityAsync<List<string>>(
-                It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.GetMapsWithoutFiles)),
-                It.IsAny<object>(),
-                It.IsAny<TaskOptions>()))
-            .ReturnsAsync(mapsWithoutFiles);
+            .ReturnsAsync(mapNames
+                .Select(m => new RotationMapDetail(m, !mapsWithoutFiles.Contains(m, StringComparer.OrdinalIgnoreCase)))
+                .ToList());
 
         contextMock.Setup(x => x.CallActivityAsync<List<string>>(
                 It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.GetLoadedMapsFromServer)),
@@ -160,6 +156,30 @@ public class MapRotationOrchestratorsTests
         contextMock.Verify(x => x.CallActivityAsync<MapOperationResult>(
                 It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.SyncSingleMapToServer)),
                 It.Is<SyncMapInput>(i => i.Force),
+                It.IsAny<TaskOptions>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SyncMapRotationOrchestrator_ResolvesRotationMapsOnceForNamesAndFileAvailability()
+    {
+        var assignmentId = Guid.NewGuid();
+        var contextMock = CreateContext(
+            assignmentId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            mapNames: ["mp_custom"],
+            mapsWithoutFiles: [],
+            loadedMaps: []);
+
+        contextMock.Setup(x => x.GetInput<SyncOrchestrationInput>())
+            .Returns(new SyncOrchestrationInput(assignmentId));
+
+        await MapRotationOrchestrators.SyncMapRotationOrchestrator(contextMock.Object);
+
+        contextMock.Verify(x => x.CallActivityAsync<List<RotationMapDetail>>(
+                It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.ResolveRotationMaps)),
+                It.IsAny<object>(),
                 It.IsAny<TaskOptions>()),
             Times.Once);
     }

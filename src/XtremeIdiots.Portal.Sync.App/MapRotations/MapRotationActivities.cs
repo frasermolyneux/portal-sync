@@ -328,32 +328,36 @@ public class MapRotationActivities(
     }
 
     /// <summary>
-    /// Returns the names of maps that have no map files registered in the portal. Deploying such a map
-    /// leaves an empty map directory on the game server host, so they must be skipped and reported.
+    /// Resolves each rotation map once, returning its name and whether it has map files registered in
+    /// the portal. Deploying a map with no files leaves an empty map directory on the game server host,
+    /// so those maps must be skipped and reported.
     /// </summary>
-    [Function(nameof(GetMapsWithoutFiles))]
-    public async Task<List<string>> GetMapsWithoutFiles(
-        [ActivityTrigger] GetMapsWithoutFilesInput input)
+    [Function(nameof(ResolveRotationMaps))]
+    public async Task<List<RotationMapDetail>> ResolveRotationMaps(
+        [ActivityTrigger] ResolveRotationMapsInput input)
     {
-        var mapsWithoutFiles = new List<string>();
+        var rotationMaps = new List<RotationMapDetail>();
 
         foreach (var mapId in input.MapIds)
         {
             var mapResult = await repositoryApiClient.Maps.V1.GetMap(mapId).ConfigureAwait(false);
             if (!mapResult.IsSuccess || mapResult.Result?.Data is null)
             {
-                throw new InvalidOperationException($"Failed to resolve map {mapId}. Cannot determine whether map files are available.");
+                throw new InvalidOperationException($"Failed to resolve map {mapId}. All maps must be resolvable.");
             }
 
             var map = mapResult.Result.Data;
-            if (map.MapFiles is null || map.MapFiles.Count == 0)
+            var hasMapFiles = map.MapFiles is not null && map.MapFiles.Count > 0;
+
+            if (!hasMapFiles)
             {
                 logger.LogWarning("Map {MapName} ({MapId}) has no map files in the portal and cannot be deployed", map.MapName, mapId);
-                mapsWithoutFiles.Add(map.MapName);
             }
+
+            rotationMaps.Add(new RotationMapDetail(map.MapName, hasMapFiles));
         }
 
-        return mapsWithoutFiles;
+        return rotationMaps;
     }
 
     private const int MaxVariableLength = 1024;

@@ -34,10 +34,12 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.GetRotationDetails),
                 new GetRotationDetailsInput(input.AssignmentId));
 
-            // Resolve map IDs to names
-            var mapNames = await context.CallActivityAsync<List<string>>(
-                nameof(MapRotationActivities.ResolveMapNames),
-                new ResolveMapNamesInput(details.MapIds));
+            // Resolve map IDs to names, capturing whether each map has files available to deploy
+            var rotationMaps = await context.CallActivityAsync<List<RotationMapDetail>>(
+                nameof(MapRotationActivities.ResolveRotationMaps),
+                new ResolveRotationMapsInput(details.MapIds));
+
+            var mapNames = rotationMaps.Select(m => m.MapName).ToList();
 
             if (mapNames.Count == 0)
             {
@@ -78,11 +80,10 @@ public static class MapRotationOrchestrators
             }
 
             // Push each map sequentially to avoid host overload
-            var mapsWithoutFiles = await context.CallActivityAsync<List<string>>(
-                nameof(MapRotationActivities.GetMapsWithoutFiles),
-                new GetMapsWithoutFilesInput(details.MapIds));
-
-            var mapsWithoutFilesLookup = mapsWithoutFiles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var mapsWithoutFilesLookup = rotationMaps
+                .Where(m => !m.HasMapFiles)
+                .Select(m => m.MapName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var failures = new List<string>();
             for (var i = 0; i < mapNames.Count; i++)
@@ -940,10 +941,12 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.GetRotationDetails),
                 new GetRotationDetailsInput(input.AssignmentId));
 
-            // Resolve map IDs to names
-            var mapNames = await context.CallActivityAsync<List<string>>(
-                nameof(MapRotationActivities.ResolveMapNames),
-                new ResolveMapNamesInput(details.MapIds));
+            // Resolve map IDs to names, capturing whether each map has files available to deploy
+            var rotationMaps = await context.CallActivityAsync<List<RotationMapDetail>>(
+                nameof(MapRotationActivities.ResolveRotationMaps),
+                new ResolveRotationMapsInput(details.MapIds));
+
+            var mapNames = rotationMaps.Select(m => m.MapName).ToList();
 
             // Initialize progress
             var mapProgress = mapNames.Select(m => new MapProgress(m, "Pending")).ToList();
@@ -956,11 +959,10 @@ public static class MapRotationOrchestrators
 
             // Maps with no files in the portal cannot be deployed, and any directory present on the
             // host for them is empty — treat them as failed verification rather than deployed.
-            var mapsWithoutFiles = await context.CallActivityAsync<List<string>>(
-                nameof(MapRotationActivities.GetMapsWithoutFiles),
-                new GetMapsWithoutFilesInput(details.MapIds));
-
-            var mapsWithoutFilesLookup = mapsWithoutFiles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var mapsWithoutFilesLookup = rotationMaps
+                .Where(m => !m.HasMapFiles)
+                .Select(m => m.MapName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             // Check each map against loaded maps (skip built-in maps)
             var missing = new List<string>();

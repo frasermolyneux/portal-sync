@@ -52,7 +52,14 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
     /// </summary>
     internal static bool IsForceRequested(HttpRequestData req)
     {
-        var force = System.Web.HttpUtility.ParseQueryString(req.Url.Query)["force"];
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(req.Url.Query);
+
+        if (!query.TryGetValue("force", out var values))
+        {
+            return false;
+        }
+
+        var force = values.FirstOrDefault();
 
         return !string.IsNullOrWhiteSpace(force)
             && (bool.TryParse(force, out var parsed) ? parsed : force.Equals("1", StringComparison.Ordinal));

@@ -23,7 +23,6 @@ public static class MapRotationOrchestrationPolicies
 public record SyncMapInput(Guid GameServerId, string MapName, GameType GameType, bool Force = false);
 public record RemoveMapInput(Guid GameServerId, string MapName, GameType GameType);
 public record GetLoadedMapsInput(Guid GameServerId);
-public record GetMapsWithoutFilesInput(List<Guid> MapIds);
 public record GetSharedMapsInput(Guid GameServerId, Guid ExcludeAssignmentId);
 public record UpdateStatusInput(
     Guid AssignmentId,
@@ -41,6 +40,8 @@ public record FormatRotationInput(List<string> MapNames, string GameMode, string
 public record FormatRotationOutput(List<RotationStringPart> Parts);
 public record RotationStringPart(string VariableName, string Value);
 public record ResolveMapNamesInput(List<Guid> MapIds);
+public record ResolveRotationMapsInput(List<Guid> MapIds);
+public record RotationMapDetail(string MapName, bool HasMapFiles);
 public record WriteConfigInput(Guid GameServerId, string ConfigFilePath, string ConfigVariableName, string Value, string[]? CommentLines = null);
 public record SetRconDvarInput(Guid GameServerId, GameType GameType, string DvarName, string Value);
 
