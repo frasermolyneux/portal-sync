@@ -58,6 +58,12 @@ public class MapRotationOrchestratorsTransportTests
                 It.IsAny<TaskOptions>()))
             .ReturnsAsync(["custom_map_alpha"]);
 
+        contextMock.Setup(x => x.CallActivityAsync<List<string>>(
+                It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.GetMapsWithoutFiles)),
+                It.IsAny<object>(),
+                It.IsAny<TaskOptions>()))
+            .ReturnsAsync([]);
+
         contextMock.Setup(x => x.CallActivityAsync(
                 It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.CompleteOperation)),
                 It.IsAny<object>(),

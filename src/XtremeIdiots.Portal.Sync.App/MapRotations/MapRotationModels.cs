@@ -4,7 +4,7 @@ using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 namespace XtremeIdiots.Portal.Sync.App.MapRotations;
 
 // Orchestrator inputs
-public record SyncOrchestrationInput(Guid AssignmentId);
+public record SyncOrchestrationInput(Guid AssignmentId, bool Force = false);
 public record RemoveOrchestrationInput(Guid AssignmentId);
 public record ActivateOrchestrationInput(Guid AssignmentId);
 public record DeactivateOrchestrationInput(Guid AssignmentId);
@@ -20,9 +20,10 @@ public static class MapRotationOrchestrationPolicies
 }
 
 // Activity inputs
-public record SyncMapInput(Guid GameServerId, string MapName, GameType GameType);
+public record SyncMapInput(Guid GameServerId, string MapName, GameType GameType, bool Force = false);
 public record RemoveMapInput(Guid GameServerId, string MapName, GameType GameType);
 public record GetLoadedMapsInput(Guid GameServerId);
+public record GetMapsWithoutFilesInput(List<Guid> MapIds);
 public record GetSharedMapsInput(Guid GameServerId, Guid ExcludeAssignmentId);
 public record UpdateStatusInput(
     Guid AssignmentId,
@@ -111,6 +112,12 @@ public static class SkipReasons
     public const string BuiltInMap = "Built-in map";
     public const string NoMapFiles = "No map files available";
     public const string AacpSharedMaps = "AACP — maps shared with main rotation";
+}
+
+public static class VerificationFailureReasons
+{
+    public const string NotFoundOnServer = "Not found on server";
+    public const string NoMapFiles = "No map files available in the portal";
 }
 public record RotationDetails(
     Guid AssignmentId,

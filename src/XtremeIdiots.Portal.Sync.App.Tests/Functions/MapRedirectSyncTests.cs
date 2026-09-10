@@ -80,4 +80,146 @@ public class MapRedirectSyncTests
             x => x.GetMapEntriesForGame(It.IsAny<string>()),
             Times.AtLeastOnce);
     }
+
+    [Fact]
+    public async Task RunMapRedirectSync_WhenRedirectEntryHasNoPlayableFiles_DoesNotCreateMap()
+    {
+        SetupRedirectEntries(new MapRedirectEntry { MapName = "mp_empty", MapFiles = [] });
+        SetupRepositoryMaps();
+
+        var sut = CreateSut();
+        await sut.RunMapRedirectSync(null);
+
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1).Verify(
+            x => x.CreateMaps(It.IsAny<List<CreateMapDto>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RunMapRedirectSync_WhenRedirectEntryHasOnlyNonPlayableFiles_DoesNotCreateMap()
+    {
+        SetupRedirectEntries(new MapRedirectEntry { MapName = "mp_readme", MapFiles = ["readme.txt"] });
+        SetupRepositoryMaps();
+
+        var sut = CreateSut();
+        await sut.RunMapRedirectSync(null);
+
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1).Verify(
+            x => x.CreateMaps(It.IsAny<List<CreateMapDto>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RunMapRedirectSync_WhenRedirectEntryHasPlayableFiles_CreatesMap()
+    {
+        SetupRedirectEntries(new MapRedirectEntry { MapName = "mp_custom", MapFiles = ["mp_custom.iwd", "readme.txt"] });
+        SetupRepositoryMaps();
+
+        List<CreateMapDto>? created = null;
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
+            .Setup(x => x.CreateMaps(It.IsAny<List<CreateMapDto>>(), It.IsAny<CancellationToken>()))
+            .Callback<List<CreateMapDto>, CancellationToken>((maps, _) => created = maps)
+            .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
+
+        var sut = CreateSut();
+        await sut.RunMapRedirectSync(null);
+
+        var createdMap = Assert.Single(created!, m => m.MapName == "mp_custom");
+        var mapFile = Assert.Single(createdMap.MapFiles);
+        Assert.Equal("mp_custom.iwd", mapFile.FileName);
+    }
+
+    [Fact]
+    public async Task RunMapRedirectSync_WhenExistingMapFilesChangedWithSameCount_UpdatesMap()
+    {
+        var mapId = Guid.NewGuid();
+        SetupRedirectEntries(new MapRedirectEntry { MapName = "mp_custom", MapFiles = ["mp_custom_v2.iwd"] });
+        SetupRepositoryMaps(MapDtoFactory.Create(
+            mapId, GameType.CallOfDuty4, "mp_custom",
+            [new MapFileDto("mp_custom_v1.iwd", "https://redirect.test.com/old")]));
+
+        List<EditMapDto>? updated = null;
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
+            .Setup(x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), It.IsAny<CancellationToken>()))
+            .Callback<List<EditMapDto>, CancellationToken>((maps, _) => updated = maps)
+            .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
+
+        var sut = CreateSut();
+        await sut.RunMapRedirectSync(null);
+
+        var updatedMap = Assert.Single(updated!);
+        Assert.Equal(mapId, updatedMap.MapId);
+        Assert.Equal("mp_custom_v2.iwd", Assert.Single(updatedMap.MapFiles).FileName);
+    }
+
+    [Fact]
+    public async Task RunMapRedirectSync_WhenExistingMapFilesUnchanged_DoesNotUpdateMap()
+    {
+        SetupRedirectEntries(new MapRedirectEntry { MapName = "mp_custom", MapFiles = ["mp_custom.iwd"] });
+        SetupRepositoryMaps(MapDtoFactory.Create(
+            Guid.NewGuid(), GameType.CallOfDuty4, "mp_custom",
+            [new MapFileDto("mp_custom.iwd", "https://redirect.test.com/current")]));
+
+        var sut = CreateSut();
+        await sut.RunMapRedirectSync(null);
+
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1).Verify(
+            x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RunMapRedirectSync_WhenExistingMapHasNoPlayableFilesOnRedirect_DoesNotWipeMapFiles()
+    {
+        SetupRedirectEntries(new MapRedirectEntry { MapName = "mp_custom", MapFiles = [] });
+        SetupRepositoryMaps(MapDtoFactory.Create(
+            Guid.NewGuid(), GameType.CallOfDuty4, "mp_custom",
+            [new MapFileDto("mp_custom.iwd", "https://redirect.test.com/current")]));
+
+        var sut = CreateSut();
+        await sut.RunMapRedirectSync(null);
+
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1).Verify(
+            x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private void SetupRedirectEntries(params MapRedirectEntry[] entries)
+        => _mapRedirectRepositoryMock
+            .Setup(x => x.GetMapEntriesForGame(It.IsAny<string>()))
+            .ReturnsAsync(entries.ToList());
+
+    private void SetupRepositoryMaps(params MapDto[] maps)
+    {
+        var mapsApiMock = Mock.Get(_repositoryApiClientMock.Object.Maps.V1);
+
+        // The sync pages until an empty batch is returned; the first page carries all maps for the game
+        mapsApiMock
+            .Setup(x => x.GetMaps(
+                It.IsAny<GameType>(),
+                It.IsAny<string[]?>(),
+                It.IsAny<MapsFilter?>(),
+                It.IsAny<string?>(),
+                It.Is<int>(skip => skip > 0),
+                It.IsAny<int>(),
+                It.IsAny<MapsOrder?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapDto>>(
+                System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<MapDto>>(new CollectionModel<MapDto>(new List<MapDto>()))));
+
+        mapsApiMock
+            .Setup(x => x.GetMaps(
+                It.IsAny<GameType>(),
+                It.IsAny<string[]?>(),
+                It.IsAny<MapsFilter?>(),
+                It.IsAny<string?>(),
+                0,
+                It.IsAny<int>(),
+                It.IsAny<MapsOrder?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapDto>>(
+                System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<MapDto>>(new CollectionModel<MapDto>(maps.ToList()))));
+    }
 }

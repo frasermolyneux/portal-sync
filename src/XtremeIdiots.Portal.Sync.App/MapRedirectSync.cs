@@ -93,33 +93,57 @@ public class MapRedirectSync(
             List<CreateMapDto> mapDtosToCreate = [];
             List<EditMapDto> mapDtosToUpdate = [];
 
+            var skippedEmptyMaps = 0;
+
             foreach (var mapRedirectEntry in mapRedirectEntries)
             {
                 var repositoryMap = repositoryMaps.SingleOrDefault(m => m.GameType == gameType && m.MapName == mapRedirectEntry.MapName);
+
+                var mapFiles = mapRedirectEntry.MapFiles.Where(IsPlayableMapFile).ToList();
+
+                // A redirect folder with no playable map files cannot be deployed to a game server host.
+                // Creating or updating a map from it produces a file-less map that leaves an empty folder
+                // on the host when it is later synchronised, so skip it and surface it for investigation.
+                if (mapFiles.Count == 0)
+                {
+                    skippedEmptyMaps++;
+                    logger.LogWarning(
+                        "Skipping map '{MapName}' for game '{GameType}' because the redirect entry contains no playable map files",
+                        mapRedirectEntry.MapName, gameType);
+                    continue;
+                }
 
                 if (repositoryMap is null)
                 {
                     var mapDtoToCreate = new CreateMapDto(gameType, mapRedirectEntry.MapName)
                     {
-                        MapFiles = [..mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).Select(mf =>
-                            new MapFileDto(mf, $"{_mapRedirectBaseUrl}/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
+                        MapFiles = [..mapFiles.Select(mf =>
+                            new MapFileDto(mf, BuildMapFileUrl(gameKey, mapRedirectEntry.MapName, mf)))]
                     };
 
                     mapDtosToCreate.Add(mapDtoToCreate);
                 }
                 else
                 {
-                    var mapFiles = mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).ToList();
+                    var existingFileNames = repositoryMap.MapFiles
+                        .Select(mf => mf.FileName)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                    if (mapFiles.Count != repositoryMap.MapFiles.Count)
+                    if (!existingFileNames.SetEquals(mapFiles))
                     {
                         mapDtosToUpdate.Add(new EditMapDto(repositoryMap.MapId)
                         {
                             MapFiles = [..mapFiles.Select(mf =>
-                                new MapFileDto(mf, $"{_mapRedirectBaseUrl}/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
+                                new MapFileDto(mf, BuildMapFileUrl(gameKey, mapRedirectEntry.MapName, mf)))]
                         });
                     }
                 }
+            }
+
+            if (skippedEmptyMaps > 0)
+            {
+                logger.LogWarning("Skipped {SkippedCount} map(s) for '{GameType}' with no playable map files on the redirect",
+                    skippedEmptyMaps, gameType);
             }
 
             logger.LogInformation("Creating {CreateCount} new maps and updating {UpdateCount} existing maps",
@@ -163,4 +187,11 @@ public class MapRedirectSync(
             throw;
         }
     }
+
+    private static bool IsPlayableMapFile(string fileName)
+        => fileName.EndsWith(".iwd", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".ff", StringComparison.OrdinalIgnoreCase);
+
+    private string BuildMapFileUrl(string gameKey, string mapName, string fileName)
+        => $"{_mapRedirectBaseUrl}/redirect/{gameKey}/usermaps/{mapName}/{fileName}";
 }
