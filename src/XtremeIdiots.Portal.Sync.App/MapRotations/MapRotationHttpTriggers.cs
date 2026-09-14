@@ -20,6 +20,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         [DurableClient] DurableTaskClient client,
         Guid assignmentId)
     {
+        var force = IsForceRequested(req);
         var instanceId = $"maprot-sync-{assignmentId}";
 
         var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
@@ -38,11 +39,30 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
         await client.ScheduleNewOrchestrationInstanceAsync(
             nameof(MapRotationOrchestrators.SyncMapRotationOrchestrator),
-            new SyncOrchestrationInput(assignmentId),
+            new SyncOrchestrationInput(assignmentId, force),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
-        logger.LogInformation("Started SyncMapRotation orchestration {InstanceId} for assignment {AssignmentId}", instanceId, assignmentId);
+        logger.LogInformation("Started SyncMapRotation orchestration {InstanceId} for assignment {AssignmentId} (force: {Force})", instanceId, assignmentId, force);
         return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reads the optional <c>force</c> query string flag, which makes the sync remove each map from the
+    /// host before re-pushing it so incomplete or empty map directories are repaired.
+    /// </summary>
+    internal static bool IsForceRequested(HttpRequestData req)
+    {
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(req.Url.Query);
+
+        if (!query.TryGetValue("force", out var values))
+        {
+            return false;
+        }
+
+        var force = values.FirstOrDefault();
+
+        return !string.IsNullOrWhiteSpace(force)
+            && (bool.TryParse(force, out var parsed) ? parsed : force.Equals("1", StringComparison.Ordinal));
     }
 
     [Function(nameof(TriggerRemoveMapRotation))]

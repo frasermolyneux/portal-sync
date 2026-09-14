@@ -30,12 +30,28 @@ public class MapRotationActivities(
 
         try
         {
+            if (input.Force)
+            {
+                // Force re-sync removes any partially deployed or empty map folder on the host
+                // before pushing, so a previously failed deployment cannot be mistaken for a good one.
+                logger.LogInformation("Force re-sync requested for map {MapName} on server {GameServerId}; removing existing copy first",
+                    input.MapName, input.GameServerId);
+
+                var deleteResult = await serversApiClient.Maps.V1.DeleteServerMapFromHost(input.GameServerId, input.MapName).ConfigureAwait(false);
+                if (!deleteResult.IsSuccess)
+                {
+                    logger.LogWarning("Failed to remove existing copy of map {MapName} from server {GameServerId} before force re-sync: {StatusCode}",
+                        input.MapName, input.GameServerId, deleteResult.StatusCode);
+                }
+            }
+
             logger.LogInformation("Pushing map {MapName} to server {GameServerId}", input.MapName, input.GameServerId);
             var result = await serversApiClient.Maps.V1.PushServerMapToHost(input.GameServerId, input.MapName).ConfigureAwait(false);
 
             if (!result.IsSuccess && result.StatusCode == System.Net.HttpStatusCode.BadRequest)
             {
                 logger.LogWarning("Map {MapName} has no files available for server {GameServerId}", input.MapName, input.GameServerId);
+                await CleanUpFailedMapDeployment(input.GameServerId, input.MapName).ConfigureAwait(false);
                 return new MapOperationResult(input.MapName, true, SkipReason: SkipReasons.NoMapFiles);
             }
 
@@ -46,6 +62,32 @@ public class MapRotationActivities(
         {
             logger.LogError(ex, "Failed to push map {MapName} to server {GameServerId}", input.MapName, input.GameServerId);
             return new MapOperationResult(input.MapName, false, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Removes any map directory left behind on the host by a push that could not deliver map files,
+    /// so an empty map folder is not left in place for the game server to load.
+    /// </summary>
+    private async Task CleanUpFailedMapDeployment(Guid gameServerId, string mapName)
+    {
+        try
+        {
+            var cleanupResult = await serversApiClient.Maps.V1.DeleteServerMapFromHost(gameServerId, mapName).ConfigureAwait(false);
+
+            if (cleanupResult.IsSuccess)
+            {
+                logger.LogInformation("Cleaned up incomplete map directory for {MapName} on server {GameServerId}", mapName, gameServerId);
+            }
+            else
+            {
+                logger.LogWarning("Failed to clean up incomplete map directory for {MapName} on server {GameServerId}: {StatusCode}",
+                    mapName, gameServerId, cleanupResult.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to clean up incomplete map directory for {MapName} on server {GameServerId}", mapName, gameServerId);
         }
     }
 
@@ -283,6 +325,39 @@ public class MapRotationActivities(
         }
 
         return mapNames;
+    }
+
+    /// <summary>
+    /// Resolves each rotation map once, returning its name and whether it has map files registered in
+    /// the portal. Deploying a map with no files leaves an empty map directory on the game server host,
+    /// so those maps must be skipped and reported.
+    /// </summary>
+    [Function(nameof(ResolveRotationMaps))]
+    public async Task<List<RotationMapDetail>> ResolveRotationMaps(
+        [ActivityTrigger] ResolveRotationMapsInput input)
+    {
+        var rotationMaps = new List<RotationMapDetail>();
+
+        foreach (var mapId in input.MapIds)
+        {
+            var mapResult = await repositoryApiClient.Maps.V1.GetMap(mapId).ConfigureAwait(false);
+            if (!mapResult.IsSuccess || mapResult.Result?.Data is null)
+            {
+                throw new InvalidOperationException($"Failed to resolve map {mapId}. All maps must be resolvable.");
+            }
+
+            var map = mapResult.Result.Data;
+            var hasMapFiles = map.MapFiles is not null && map.MapFiles.Count > 0;
+
+            if (!hasMapFiles)
+            {
+                logger.LogWarning("Map {MapName} ({MapId}) has no map files in the portal and cannot be deployed", map.MapName, mapId);
+            }
+
+            rotationMaps.Add(new RotationMapDetail(map.MapName, hasMapFiles));
+        }
+
+        return rotationMaps;
     }
 
     private const int MaxVariableLength = 1024;

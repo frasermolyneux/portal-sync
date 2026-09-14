@@ -82,8 +82,9 @@ internal static class RepositoryApiCacheConfiguration
         cache.NotCached(getMapsListExpression);
 
         // Force single-map reads to bypass client-side caching as well. Even the callers that
-        // today only read (MapRotationActivities.ResolveMapNames) share the same in-process
-        // cache as the mutating map jobs; caching here would surface stale read-after-write.
+        // today only read (MapRotationActivities.ResolveMapNames / ResolveRotationMaps) share the
+        // same in-process cache as the mutating map jobs; caching here would surface stale
+        // read-after-write.
         Expression<Func<IMapsApi, Task<ApiResult<MapDto>>>> getMapExpression =
             api => api.GetMap(
                 Guid.Empty,

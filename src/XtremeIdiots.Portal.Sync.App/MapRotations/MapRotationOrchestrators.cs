@@ -34,10 +34,12 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.GetRotationDetails),
                 new GetRotationDetailsInput(input.AssignmentId));
 
-            // Resolve map IDs to names
-            var mapNames = await context.CallActivityAsync<List<string>>(
-                nameof(MapRotationActivities.ResolveMapNames),
-                new ResolveMapNamesInput(details.MapIds));
+            // Resolve map IDs to names, capturing whether each map has files available to deploy
+            var rotationMaps = await context.CallActivityAsync<List<RotationMapDetail>>(
+                nameof(MapRotationActivities.ResolveRotationMaps),
+                new ResolveRotationMapsInput(details.MapIds));
+
+            var mapNames = rotationMaps.Select(m => m.MapName).ToList();
 
             if (mapNames.Count == 0)
             {
@@ -78,10 +80,26 @@ public static class MapRotationOrchestrators
             }
 
             // Push each map sequentially to avoid host overload
+            var mapsWithoutFilesLookup = rotationMaps
+                .Where(m => !m.HasMapFiles)
+                .Select(m => m.MapName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             var failures = new List<string>();
             for (var i = 0; i < mapNames.Count; i++)
             {
                 var mapName = mapNames[i];
+
+                if (mapsWithoutFilesLookup.Contains(mapName) && !BuiltInMaps.IsBuiltIn(details.GameType, mapName))
+                {
+                    // Pushing a map with no files creates an empty map directory on the host, so skip it entirely
+                    logger.LogWarning("Skipping map {MapName} for assignment {AssignmentId} because it has no map files in the portal",
+                        mapName, input.AssignmentId);
+                    mapProgress[i] = mapProgress[i] with { Status = "Skipped", Error = SkipReasons.NoMapFiles };
+                    context.SetCustomStatus(new OrchestrationProgress("Sync", mapNames.Count, i + 1, mapProgress));
+                    continue;
+                }
+
                 mapProgress[i] = mapProgress[i] with { Status = "InProgress" };
                 context.SetCustomStatus(new OrchestrationProgress("Sync", mapNames.Count, i, mapProgress));
 
@@ -89,7 +107,7 @@ public static class MapRotationOrchestrators
                 {
                     var result = await context.CallActivityAsync<MapOperationResult>(
                         nameof(MapRotationActivities.SyncSingleMapToServer),
-                        new SyncMapInput(details.GameServerId, mapName, details.GameType));
+                        new SyncMapInput(details.GameServerId, mapName, details.GameType, input.Force));
 
                     if (result.SkipReason != null)
                     {
@@ -923,10 +941,12 @@ public static class MapRotationOrchestrators
                 nameof(MapRotationActivities.GetRotationDetails),
                 new GetRotationDetailsInput(input.AssignmentId));
 
-            // Resolve map IDs to names
-            var mapNames = await context.CallActivityAsync<List<string>>(
-                nameof(MapRotationActivities.ResolveMapNames),
-                new ResolveMapNamesInput(details.MapIds));
+            // Resolve map IDs to names, capturing whether each map has files available to deploy
+            var rotationMaps = await context.CallActivityAsync<List<RotationMapDetail>>(
+                nameof(MapRotationActivities.ResolveRotationMaps),
+                new ResolveRotationMapsInput(details.MapIds));
+
+            var mapNames = rotationMaps.Select(m => m.MapName).ToList();
 
             // Initialize progress
             var mapProgress = mapNames.Select(m => new MapProgress(m, "Pending")).ToList();
@@ -936,6 +956,13 @@ public static class MapRotationOrchestrators
             var loadedMaps = await context.CallActivityAsync<List<string>>(
                 nameof(MapRotationActivities.GetLoadedMapsFromServer),
                 new GetLoadedMapsInput(details.GameServerId));
+
+            // Maps with no files in the portal cannot be deployed, and any directory present on the
+            // host for them is empty — treat them as failed verification rather than deployed.
+            var mapsWithoutFilesLookup = rotationMaps
+                .Where(m => !m.HasMapFiles)
+                .Select(m => m.MapName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             // Check each map against loaded maps (skip built-in maps)
             var missing = new List<string>();
@@ -955,12 +982,25 @@ public static class MapRotationOrchestrators
                     continue;
                 }
 
+                if (mapsWithoutFilesLookup.Contains(mapName))
+                {
+                    mapProgress[i] = mapProgress[i] with
+                    {
+                        Status = "Failed",
+                        Error = VerificationFailureReasons.NoMapFiles
+                    };
+
+                    missing.Add(mapName);
+                    context.SetCustomStatus(new OrchestrationProgress("Verify", mapNames.Count, i + 1, mapProgress));
+                    continue;
+                }
+
                 var isPresent = loadedMaps.Any(m => string.Equals(m, mapName, StringComparison.OrdinalIgnoreCase));
 
                 mapProgress[i] = mapProgress[i] with
                 {
                     Status = isPresent ? "Completed" : "Failed",
-                    Error = isPresent ? null : "Not found on server"
+                    Error = isPresent ? null : VerificationFailureReasons.NotFoundOnServer
                 };
 
                 if (!isPresent)
@@ -976,11 +1016,31 @@ public static class MapRotationOrchestrators
                 var verifiedCount = mapNames.Count - mapProgress.Count(p => p.Status == "Skipped");
                 var errorMessage = $"Verification found {missing.Count}/{verifiedCount} maps missing from server: {string.Join(", ", missing)}";
 
+                // Surface the verification outcome on the assignment so the portal shows the problem
+                // and the user can trigger a force re-sync to repair it.
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        DeploymentState: DeploymentState.PartiallyDeployed,
+                        LastError: errorMessage,
+                        LastErrorAt: context.CurrentUtcDateTime));
+
                 await context.CallActivityAsync(
                     nameof(MapRotationActivities.CompleteOperation),
                     new CompleteOperationInput(operationId, AssignmentOperationStatus.Failed, errorMessage));
 
                 return;
+            }
+
+            if (details.DeploymentState == DeploymentState.PartiallyDeployed)
+            {
+                // A previously reported partial deployment has been repaired
+                await context.CallActivityAsync(
+                    nameof(MapRotationActivities.UpdateAssignmentStatus),
+                    new UpdateStatusInput(input.AssignmentId,
+                        DeploymentState: DeploymentState.Synced,
+                        LastError: "",
+                        LastErrorAt: null));
             }
 
             await context.CallActivityAsync(

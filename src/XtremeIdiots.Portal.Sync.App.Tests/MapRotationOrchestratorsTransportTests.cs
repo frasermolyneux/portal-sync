@@ -46,11 +46,11 @@ public class MapRotationOrchestratorsTransportTests
                 GameMode: "war",
                 MapIds: [Guid.NewGuid()]));
 
-        contextMock.Setup(x => x.CallActivityAsync<List<string>>(
-                It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.ResolveMapNames)),
+        contextMock.Setup(x => x.CallActivityAsync<List<RotationMapDetail>>(
+                It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.ResolveRotationMaps)),
                 It.IsAny<object>(),
                 It.IsAny<TaskOptions>()))
-            .ReturnsAsync(["custom_map_alpha"]);
+            .ReturnsAsync([new RotationMapDetail("custom_map_alpha", true)]);
 
         contextMock.Setup(x => x.CallActivityAsync<List<string>>(
                 It.Is<TaskName>(n => (string)n == nameof(MapRotationActivities.GetLoadedMapsFromServer)),
