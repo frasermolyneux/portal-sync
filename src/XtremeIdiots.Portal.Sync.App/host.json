@@ -9,7 +9,9 @@
     },
     "logging": {
         "logLevel": {
-            "Function.HealthCheck": "Warning"
+            "Function": "Warning",
+            "Function.HealthCheck": "Warning",
+            "Host.Results": "Error"
         },
         "applicationInsights": {
             "samplingSettings": {

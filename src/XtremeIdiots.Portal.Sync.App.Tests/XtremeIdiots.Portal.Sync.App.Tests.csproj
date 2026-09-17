@@ -20,4 +20,9 @@
   <ItemGroup>
     <ProjectReference Include="..\XtremeIdiots.Portal.Sync.App\XtremeIdiots.Portal.Sync.App.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\XtremeIdiots.Portal.Sync.App\host.json"
+          Link="Configuration\host.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

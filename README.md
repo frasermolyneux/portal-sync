@@ -12,6 +12,7 @@
 ## Documentation
 * [Development Workflows](/docs/development-workflows.md) - Branch strategy, CI/CD triggers, and deployment flows
 * [Scheduled Job Telemetry](/docs/SCHEDULED_JOB_TELEMETRY.md) - Telemetry and dashboard signals emitted by scheduled sync jobs.
+* [Function Telemetry](/docs/telemetry.md) - Separate Azure Functions host and isolated-worker telemetry controls.
 
 ## Overview
 Azure Functions app that synchronizes portal data with external game telemetry and platform services. Handles scheduled and on-demand sync pipelines, ensuring DTO contracts stay aligned with portal APIs and repository data. Integrates with Azure Storage and Application Insights for durable execution and observability. CI/CD uses OIDC-authenticated GitHub Actions and Terraform-provisioned App Service and supporting resources.
