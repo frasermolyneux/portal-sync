@@ -31,7 +31,7 @@ jobs:
             --state open \
             --limit 100 \
             --json author,mergeStateStatus,number \
-            --jq '.[] | select(.author.login == "app/dependabot" and .mergeStateStatus == "BEHIND") | .number' |
+            --jq '.[] | select((.author.login == "app/dependabot" or .author.login == "dependabot[bot]") and .mergeStateStatus == "BEHIND") | .number' |
           while read -r pr_number; do
             gh api \
               --method PUT \
@@ -44,16 +44,17 @@ jobs:
       issues: write
       pull-requests: write
     runs-on: ubuntu-latest
-    if: ${{ github.event.pull_request.draft == false }}
     outputs:
       is_dependabot: ${{ steps.evaluate.outputs.is_dependabot }}
       auto_merge_allowed: ${{ steps.evaluate.outputs.auto_merge_allowed }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
     steps:
       - name: Evaluate Dependabot policy
         id: evaluate
         uses: frasermolyneux/actions/dependabot-policy@dependabot-policy/v1.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
   dependabot:
     needs:
       - dependabot-policy
