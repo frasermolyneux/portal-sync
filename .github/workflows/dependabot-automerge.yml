@@ -4,26 +4,57 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "15 * * * *"
 
 permissions: {}
 
 jobs:
+  refresh-dependabot-branches:
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - name: Update stale Dependabot pull request branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --limit 100 \
+            --json author,mergeStateStatus,number \
+            --jq '.[] | select((.author.login == "app/dependabot" or .author.login == "dependabot[bot]") and .mergeStateStatus == "BEHIND") | .number' |
+          while read -r pr_number; do
+            gh api \
+              --method PUT \
+              "repos/$GITHUB_REPOSITORY/pulls/$pr_number/update-branch"
+          done
+
   dependabot-policy:
     permissions:
       contents: read
       issues: write
       pull-requests: write
     runs-on: ubuntu-latest
-    if: ${{ github.event.pull_request.draft == false }}
     outputs:
       is_dependabot: ${{ steps.evaluate.outputs.is_dependabot }}
       auto_merge_allowed: ${{ steps.evaluate.outputs.auto_merge_allowed }}
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
     steps:
       - name: Evaluate Dependabot policy
         id: evaluate
         uses: frasermolyneux/actions/dependabot-policy@dependabot-policy/v1.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
   dependabot:
     needs:
       - dependabot-policy
@@ -38,4 +69,3 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
