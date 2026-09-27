@@ -29,11 +29,11 @@
     <PackageReference Include="MX.Api.Client" Version="2.3.81" />
 	  <PackageReference Include="MX.InvisionCommunity.Api.Client" Version="1.0.66" />
     <PackageReference Include="MX.Observability.ApplicationInsights.WorkerService" Version="1.1.33" />
-    <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="4.2.37" />
-    <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="4.2.37" />
-    <PackageReference Include="Microsoft.Identity.Web" Version="4.14.2" />
-    <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="4.1.30" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.19.0" />
+    <PackageReference Include="XtremeIdiots.Portal.Repository.Api.Client.V1" Version="4.2.44" />
+    <PackageReference Include="XtremeIdiots.Portal.Repository.Abstractions.V1" Version="4.2.44" />
+    <PackageReference Include="Microsoft.Identity.Web" Version="4.15.0" />
+    <PackageReference Include="XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1" Version="4.1.32" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.19.1" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="XtremeIdiots.Portal.Sync.App.Tests" />
