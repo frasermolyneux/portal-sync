@@ -12,8 +12,9 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
-      - uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v2
+      - uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v2.1
         with:
+          test-reporting: "true"
           dotnet-project: "XtremeIdiots.Portal.Sync.App"
           dotnet-version: 10.0.x
           src-folder: "src"
