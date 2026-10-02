@@ -10,7 +10,7 @@ using XtremeIdiots.Portal.Repository.Api.Client.V1;
 
 namespace XtremeIdiots.Portal.Sync.App.MapRotations;
 
-public class MapRotationCleanup(
+public partial class MapRotationCleanup(
     ILogger<MapRotationCleanup> logger,
     IRepositoryApiClient repositoryApiClient,
     IJobTelemetry jobTelemetry,
@@ -40,14 +40,14 @@ public class MapRotationCleanup(
 
     private async Task ProcessCleanup()
     {
-        logger.LogInformation("Starting map rotation cleanup");
+        LogCleanupStarting(logger);
 
         var assignmentsResult = await repositoryApiClient.MapRotations.V1
             .GetServerAssignments(null, null, null, 0, 100).ConfigureAwait(false);
 
         if (!assignmentsResult.IsSuccess || assignmentsResult.Result?.Data?.Items is null)
         {
-            logger.LogWarning("Failed to retrieve server assignments for cleanup");
+            LogServerAssignmentsRetrievalFailed(logger);
             return;
         }
 
@@ -71,8 +71,8 @@ public class MapRotationCleanup(
 
                         if (!operationsResult.IsSuccess || operationsResult.Result?.Data?.Items is null)
                         {
-                            logger.LogWarning(
-                                "Skipping stale removing reconciliation for assignment {AssignmentId} because operations could not be retrieved: {StatusCode}",
+                            LogStaleRemovingOperationsRetrievalFailed(
+                                logger,
                                 assignment.MapRotationServerAssignmentId,
                                 operationsResult.StatusCode);
                             continue;
@@ -85,9 +85,7 @@ public class MapRotationCleanup(
 
                         if (hasRecentInProgressRemove)
                         {
-                            logger.LogInformation(
-                                "Skipping stale removing reconciliation for assignment {AssignmentId} because a recent in-progress Remove operation exists",
-                                assignment.MapRotationServerAssignmentId);
+                            LogRecentRemoveOperationFound(logger, assignment.MapRotationServerAssignmentId);
                             continue;
                         }
 
@@ -103,17 +101,15 @@ public class MapRotationCleanup(
 
                         if (!reconcileResult.IsSuccess)
                         {
-                            logger.LogWarning(
-                                "Failed to reconcile stale removing assignment {AssignmentId}. API returned {StatusCode}",
+                            LogStaleRemovingReconciliationFailed(
+                                logger,
                                 assignment.MapRotationServerAssignmentId,
                                 reconcileResult.StatusCode);
                             continue;
                         }
 
                         reconciledRemovingCount++;
-                        logger.LogInformation(
-                            "Reconciled stale removing assignment {AssignmentId} to Removed",
-                            assignment.MapRotationServerAssignmentId);
+                        LogStaleRemovingAssignmentReconciled(logger, assignment.MapRotationServerAssignmentId);
 
                         auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentReconciled", AuditAction.Update)
                             .WithService("MapRotationCleanup")
@@ -123,7 +119,10 @@ public class MapRotationCleanup(
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Failed to reconcile stale removing assignment {AssignmentId}", assignment.MapRotationServerAssignmentId);
+                        LogStaleRemovingAssignmentReconciliationException(
+                            logger,
+                            assignment.MapRotationServerAssignmentId,
+                            ex);
                     }
                 }
 
@@ -148,17 +147,15 @@ public class MapRotationCleanup(
 
                 if (!deleteResult.IsSuccess)
                 {
-                    logger.LogWarning(
-                        "Skipping cleanup count/audit for assignment {AssignmentId} because delete failed: {StatusCode}",
+                    LogRemovedAssignmentDeleteFailed(
+                        logger,
                         assignment.MapRotationServerAssignmentId,
                         deleteResult.StatusCode);
                     continue;
                 }
 
                 deletedCount++;
-                logger.LogInformation(
-                    "Deleted removed assignment {AssignmentId} (unassigned at {UnassignedAt})",
-                    assignment.MapRotationServerAssignmentId, assignment.UnassignedAt);
+                LogRemovedAssignmentDeleted(logger, assignment.MapRotationServerAssignmentId, assignment.UnassignedAt);
 
                 auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentCleaned", AuditAction.Delete)
                     .WithService("MapRotationCleanup")
@@ -168,13 +165,71 @@ public class MapRotationCleanup(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to delete assignment {AssignmentId}", assignment.MapRotationServerAssignmentId);
+                LogAssignmentDeleteException(logger, assignment.MapRotationServerAssignmentId, ex);
             }
         }
 
-        logger.LogInformation(
-            "Map rotation cleanup completed, reconciled {ReconciledCount} stale removing assignments and deleted {DeletedCount} removed assignments",
-            reconciledRemovingCount,
-            deletedCount);
+        LogCleanupCompleted(logger, reconciledRemovingCount, deletedCount);
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Starting map rotation cleanup")]
+    private static partial void LogCleanupStarting(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to retrieve server assignments for cleanup")]
+    private static partial void LogServerAssignmentsRetrievalFailed(ILogger logger);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Skipping stale removing reconciliation for assignment {AssignmentId} because operations could not be retrieved: {StatusCode}")]
+    private static partial void LogStaleRemovingOperationsRetrievalFailed(
+        ILogger logger,
+        Guid assignmentId,
+        System.Net.HttpStatusCode statusCode);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Skipping stale removing reconciliation for assignment {AssignmentId} because a recent in-progress Remove operation exists")]
+    private static partial void LogRecentRemoveOperationFound(ILogger logger, Guid assignmentId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Failed to reconcile stale removing assignment {AssignmentId}. API returned {StatusCode}")]
+    private static partial void LogStaleRemovingReconciliationFailed(
+        ILogger logger,
+        Guid assignmentId,
+        System.Net.HttpStatusCode statusCode);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Reconciled stale removing assignment {AssignmentId} to Removed")]
+    private static partial void LogStaleRemovingAssignmentReconciled(ILogger logger, Guid assignmentId);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Failed to reconcile stale removing assignment {AssignmentId}")]
+    private static partial void LogStaleRemovingAssignmentReconciliationException(
+        ILogger logger,
+        Guid assignmentId,
+        Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Skipping cleanup count/audit for assignment {AssignmentId} because delete failed: {StatusCode}")]
+    private static partial void LogRemovedAssignmentDeleteFailed(
+        ILogger logger,
+        Guid assignmentId,
+        System.Net.HttpStatusCode statusCode);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Deleted removed assignment {AssignmentId} (unassigned at {UnassignedAt})")]
+    private static partial void LogRemovedAssignmentDeleted(ILogger logger, Guid assignmentId, DateTime? unassignedAt);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to delete assignment {AssignmentId}")]
+    private static partial void LogAssignmentDeleteException(ILogger logger, Guid assignmentId, Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Map rotation cleanup completed, reconciled {ReconciledCount} stale removing assignments and deleted {DeletedCount} removed assignments")]
+    private static partial void LogCleanupCompleted(ILogger logger, int reconciledCount, int deletedCount);
 }
