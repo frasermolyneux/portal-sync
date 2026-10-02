@@ -147,4 +147,140 @@ public class MapRotationCleanupTests
         Mock.Get(repositoryApiClientMock.Object.MapRotations.V1)
             .Verify(x => x.UpdateServerAssignment(It.IsAny<UpdateMapRotationServerAssignmentDto>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Theory]
+    [InlineData(true, "success", false, true)]
+    [InlineData(true, "failure", false, true)]
+    [InlineData(true, "exception", false, true)]
+    [InlineData(true, "operations-failure", false, true)]
+    [InlineData(true, "recent", false, true)]
+    [InlineData(false, "success", true, true)]
+    [InlineData(false, "success", false, true)]
+    [InlineData(false, "failure", false, true)]
+    [InlineData(false, "exception", false, true)]
+    [InlineData(true, "success", false, false)]
+    [InlineData(false, "success", false, false)]
+    public async Task RunMapRotationCleanup_PreservesLoggingAndSideEffects(bool removing, string outcome, bool hasUnassignedAt, bool loggingEnabled)
+    {
+        var assignmentId = Guid.NewGuid();
+        var oldUpdatedAt = DateTime.UtcNow.AddDays(-3);
+        DateTime? unassignedAt = hasUnassignedAt ? oldUpdatedAt : null;
+        var exception = new InvalidOperationException("Repository unavailable");
+        var statusCode = outcome is "failure" or "operations-failure"
+            ? System.Net.HttpStatusCode.ServiceUnavailable : System.Net.HttpStatusCode.OK;
+        var assignments = new CollectionModel<MapRotationServerAssignmentDto>(
+        [
+            new(assignmentId, Guid.NewGuid(), Guid.NewGuid(), removing ? DeploymentState.Removing : DeploymentState.Removed,
+                ActivationState.Inactive, null, null, "server.cfg", "sv_maprotation", null, null,
+                oldUpdatedAt.AddHours(-1), oldUpdatedAt, unassignedAt)
+        ]);
+        var api = Mock.Get(repositoryApiClientMock.Object.MapRotations.V1);
+        api.Setup(x => x.GetServerAssignments(null, null, null, 0, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(System.Net.HttpStatusCode.OK, new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(assignments)));
+        var operations = new CollectionModel<MapRotationAssignmentOperationDto>(outcome == "recent"
+            ? [new(Guid.NewGuid(), assignmentId, AssignmentOperationType.Remove, AssignmentOperationStatus.InProgress,
+                "remove-instance", DateTime.UtcNow.AddMinutes(-10), null, null)] : []);
+        api.Setup(x => x.GetAssignmentOperations(assignmentId, 0, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapRotationAssignmentOperationDto>>(
+                outcome == "operations-failure" ? statusCode : System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<MapRotationAssignmentOperationDto>>(operations)));
+        api.Setup(x => x.UpdateServerAssignment(It.IsAny<UpdateMapRotationServerAssignmentDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(statusCode));
+        api.Setup(x => x.DeleteServerAssignment(assignmentId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(statusCode));
+        if (outcome == "exception")
+        {
+            api.Setup(x => x.UpdateServerAssignment(It.IsAny<UpdateMapRotationServerAssignmentDto>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(exception);
+            api.Setup(x => x.DeleteServerAssignment(assignmentId, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(exception);
+        }
+        var logger = new Mock<ILogger<MapRotationCleanup>>();
+        logger.Setup(x => x.IsEnabled(It.IsAny<LogLevel>())).Returns(loggingEnabled);
+        var sut = new MapRotationCleanup(logger.Object, repositoryApiClientMock.Object, jobTelemetryMock.Object, auditLoggerMock.Object);
+
+        await sut.RunMapRotationCleanup(null);
+
+        var succeeded = outcome == "success";
+        api.Verify(x => x.UpdateServerAssignment(It.Is<UpdateMapRotationServerAssignmentDto>(dto =>
+            dto.MapRotationServerAssignmentId == assignmentId && dto.DeploymentState == DeploymentState.Removed
+            && dto.UnassignedAt == oldUpdatedAt), It.IsAny<CancellationToken>()),
+            removing && outcome is not ("operations-failure" or "recent") ? Times.Once() : Times.Never());
+        api.Verify(x => x.DeleteServerAssignment(assignmentId, It.IsAny<CancellationToken>()), removing ? Times.Never() : Times.Once());
+        Assert.Equal(succeeded ? 1 : 0, auditLoggerMock.Invocations.Count);
+        jobTelemetryMock.Verify(x => x.ExecuteAsync(nameof(MapRotationCleanup.RunMapRotationCleanup),
+            It.IsAny<Func<Task>>(), It.IsAny<Dictionary<string, string>?>()), Times.Once);
+        if (!loggingEnabled)
+        {
+            Assert.DoesNotContain(logger.Invocations, invocation => invocation.Method.Name == "Log");
+            return;
+        }
+        AssertLog(logger, LogLevel.Information, "Starting map rotation cleanup", null);
+        var template = (removing, outcome) switch
+        {
+            (true, "success") => "Reconciled stale removing assignment {AssignmentId} to Removed",
+            (true, "failure") => "Failed to reconcile stale removing assignment {AssignmentId}. API returned {StatusCode}",
+            (true, "exception") => "Failed to reconcile stale removing assignment {AssignmentId}",
+            (true, "operations-failure") => "Skipping stale removing reconciliation for assignment {AssignmentId} because operations could not be retrieved: {StatusCode}",
+            (true, "recent") => "Skipping stale removing reconciliation for assignment {AssignmentId} because a recent in-progress Remove operation exists",
+            (false, "success") => "Deleted removed assignment {AssignmentId} (unassigned at {UnassignedAt})",
+            (false, "failure") => "Skipping cleanup count/audit for assignment {AssignmentId} because delete failed: {StatusCode}",
+            _ => "Failed to delete assignment {AssignmentId}"
+        };
+        var values = new List<(string, object?)> { ("AssignmentId", assignmentId) };
+        if (outcome is "failure" or "operations-failure")
+        {
+            values.Add(("StatusCode", statusCode));
+        }
+        if (!removing && succeeded)
+        {
+            values.Add(("UnassignedAt", unassignedAt));
+        }
+        var level = outcome == "exception" ? LogLevel.Error
+            : outcome is "failure" or "operations-failure" ? LogLevel.Warning : LogLevel.Information;
+        AssertLog(logger, level, template, outcome == "exception" ? exception : null, values.ToArray());
+        AssertLog(logger, LogLevel.Information,
+            "Map rotation cleanup completed, reconciled {ReconciledCount} stale removing assignments and deleted {DeletedCount} removed assignments",
+            null, ("ReconciledCount", removing && succeeded ? 1 : 0), ("DeletedCount", !removing && succeeded ? 1 : 0));
+        Assert.Equal(3, logger.Invocations.Count(invocation => invocation.Method.Name == "Log"));
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.ServiceUnavailable)]
+    [InlineData(System.Net.HttpStatusCode.OK)]
+    public async Task RunMapRotationCleanup_WhenAssignmentsUnavailable_LogsWarningAndStops(System.Net.HttpStatusCode statusCode)
+    {
+        Mock.Get(repositoryApiClientMock.Object.MapRotations.V1)
+            .Setup(x => x.GetServerAssignments(null, null, null, 0, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(statusCode));
+        var logger = new Mock<ILogger<MapRotationCleanup>>();
+        logger.Setup(x => x.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        var sut = new MapRotationCleanup(logger.Object, repositoryApiClientMock.Object, jobTelemetryMock.Object, auditLoggerMock.Object);
+
+        await sut.RunMapRotationCleanup(null);
+
+        AssertLog(logger, LogLevel.Information, "Starting map rotation cleanup", null);
+        AssertLog(logger, LogLevel.Warning, "Failed to retrieve server assignments for cleanup", null);
+        Assert.Equal(2, logger.Invocations.Count(invocation => invocation.Method.Name == "Log"));
+        Assert.Empty(auditLoggerMock.Invocations);
+        Mock.Get(repositoryApiClientMock.Object.MapRotations.V1)
+            .Verify(x => x.GetServerAssignments(null, null, null, 0, 100, It.IsAny<CancellationToken>()), Times.Once);
+        Mock.Get(repositoryApiClientMock.Object.MapRotations.V1).VerifyNoOtherCalls();
+    }
+
+    private static void AssertLog(Mock<ILogger<MapRotationCleanup>> logger, LogLevel level, string template,
+        Exception? exception, params (string Key, object? Value)[] values)
+    {
+        var invocation = Assert.Single(logger.Invocations, call => call.Method.Name == "Log"
+            && call.Arguments[2] is IEnumerable<KeyValuePair<string, object?>> entries && entries.Any(pair =>
+                pair.Key == "{OriginalFormat}" && Equals(pair.Value, template)));
+        Assert.Equal(level, invocation.Arguments[0]);
+        Assert.Same(exception, invocation.Arguments[3]);
+        var state = Assert.IsAssignableFrom<IEnumerable<KeyValuePair<string, object?>>>(invocation.Arguments[2]).ToDictionary();
+        Assert.Equal(values.Length + 1, state.Count);
+        foreach (var (key, value) in values)
+        {
+            Assert.Equal(value, state[key]);
+        }
+    }
 }
