@@ -61,115 +61,143 @@ public partial class MapRotationCleanup(
         {
             if (assignment.DeploymentState == DeploymentState.Removing)
             {
-                if (assignment.UpdatedAt < removingStaleCutoff)
+                if (await ReconcileStaleRemovingAssignment(
+                    assignment,
+                    removingStaleCutoff,
+                    activeRemovingOperationGraceCutoff).ConfigureAwait(false))
                 {
-                    try
-                    {
-                        var operationsResult = await repositoryApiClient.MapRotations.V1
-                            .GetAssignmentOperations(assignment.MapRotationServerAssignmentId, 0, 100)
-                            .ConfigureAwait(false);
-
-                        if (!operationsResult.IsSuccess || operationsResult.Result?.Data?.Items is null)
-                        {
-                            LogStaleRemovingOperationsRetrievalFailed(
-                                logger,
-                                assignment.MapRotationServerAssignmentId,
-                                operationsResult.StatusCode);
-                            continue;
-                        }
-
-                        var hasRecentInProgressRemove = operationsResult.Result.Data.Items.Any(operation =>
-                            operation.OperationType == AssignmentOperationType.Remove
-                            && operation.Status == AssignmentOperationStatus.InProgress
-                            && operation.StartedAt >= activeRemovingOperationGraceCutoff);
-
-                        if (hasRecentInProgressRemove)
-                        {
-                            LogRecentRemoveOperationFound(logger, assignment.MapRotationServerAssignmentId);
-                            continue;
-                        }
-
-                        var reconcileResult = await repositoryApiClient.MapRotations.V1
-                            .UpdateServerAssignment(new UpdateMapRotationServerAssignmentDto(assignment.MapRotationServerAssignmentId)
-                            {
-                                DeploymentState = DeploymentState.Removed,
-                                UnassignedAt = assignment.UnassignedAt ?? assignment.UpdatedAt,
-                                LastError = "",
-                                LastErrorAt = null
-                            })
-                            .ConfigureAwait(false);
-
-                        if (!reconcileResult.IsSuccess)
-                        {
-                            LogStaleRemovingReconciliationFailed(
-                                logger,
-                                assignment.MapRotationServerAssignmentId,
-                                reconcileResult.StatusCode);
-                            continue;
-                        }
-
-                        reconciledRemovingCount++;
-                        LogStaleRemovingAssignmentReconciled(logger, assignment.MapRotationServerAssignmentId);
-
-                        auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentReconciled", AuditAction.Update)
-                            .WithService("MapRotationCleanup")
-                            .WithTarget(assignment.MapRotationServerAssignmentId.ToString(), "MapRotationAssignment")
-                            .WithSource("MapRotationCleanup")
-                            .Build());
-                    }
-                    catch (Exception ex)
-                    {
-                        LogStaleRemovingAssignmentReconciliationException(
-                            logger,
-                            assignment.MapRotationServerAssignmentId,
-                            ex);
-                    }
+                    reconciledRemovingCount++;
                 }
 
                 continue;
             }
 
-            if (assignment.DeploymentState != DeploymentState.Removed)
+            if (assignment.DeploymentState == DeploymentState.Removed
+                && await DeleteRemovedAssignment(assignment, cutoff).ConfigureAwait(false))
             {
-                continue;
-            }
-
-            var retentionAnchor = assignment.UnassignedAt ?? assignment.UpdatedAt;
-            if (retentionAnchor >= cutoff)
-            {
-                continue;
-            }
-
-            try
-            {
-                var deleteResult = await repositoryApiClient.MapRotations.V1
-                    .DeleteServerAssignment(assignment.MapRotationServerAssignmentId).ConfigureAwait(false);
-
-                if (!deleteResult.IsSuccess)
-                {
-                    LogRemovedAssignmentDeleteFailed(
-                        logger,
-                        assignment.MapRotationServerAssignmentId,
-                        deleteResult.StatusCode);
-                    continue;
-                }
-
                 deletedCount++;
-                LogRemovedAssignmentDeleted(logger, assignment.MapRotationServerAssignmentId, assignment.UnassignedAt);
-
-                auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentCleaned", AuditAction.Delete)
-                    .WithService("MapRotationCleanup")
-                    .WithTarget(assignment.MapRotationServerAssignmentId.ToString(), "MapRotationAssignment")
-                    .WithSource("MapRotationCleanup")
-                    .Build());
-            }
-            catch (Exception ex)
-            {
-                LogAssignmentDeleteException(logger, assignment.MapRotationServerAssignmentId, ex);
             }
         }
 
         LogCleanupCompleted(logger, reconciledRemovingCount, deletedCount);
+    }
+
+    private async Task<bool> ReconcileStaleRemovingAssignment(
+        MapRotationServerAssignmentDto assignment,
+        DateTime removingStaleCutoff,
+        DateTime activeRemovingOperationGraceCutoff)
+    {
+        if (assignment.UpdatedAt >= removingStaleCutoff)
+        {
+            return false;
+        }
+
+        var persisted = false;
+        try
+        {
+            var operationsResult = await repositoryApiClient.MapRotations.V1
+                .GetAssignmentOperations(assignment.MapRotationServerAssignmentId, 0, 100)
+                .ConfigureAwait(false);
+
+            if (!operationsResult.IsSuccess || operationsResult.Result?.Data?.Items is null)
+            {
+                LogStaleRemovingOperationsRetrievalFailed(
+                    logger,
+                    assignment.MapRotationServerAssignmentId,
+                    operationsResult.StatusCode);
+                return false;
+            }
+
+            var hasRecentInProgressRemove = operationsResult.Result.Data.Items.Any(operation =>
+                operation.OperationType == AssignmentOperationType.Remove
+                && operation.Status == AssignmentOperationStatus.InProgress
+                && operation.StartedAt >= activeRemovingOperationGraceCutoff);
+
+            if (hasRecentInProgressRemove)
+            {
+                LogRecentRemoveOperationFound(logger, assignment.MapRotationServerAssignmentId);
+                return false;
+            }
+
+            var reconcileResult = await repositoryApiClient.MapRotations.V1
+                .UpdateServerAssignment(new UpdateMapRotationServerAssignmentDto(assignment.MapRotationServerAssignmentId)
+                {
+                    DeploymentState = DeploymentState.Removed,
+                    UnassignedAt = assignment.UnassignedAt ?? assignment.UpdatedAt,
+                    LastError = "",
+                    LastErrorAt = null
+                })
+                .ConfigureAwait(false);
+
+            if (!reconcileResult.IsSuccess)
+            {
+                LogStaleRemovingReconciliationFailed(
+                    logger,
+                    assignment.MapRotationServerAssignmentId,
+                    reconcileResult.StatusCode);
+                return false;
+            }
+
+            persisted = true;
+            LogStaleRemovingAssignmentReconciled(logger, assignment.MapRotationServerAssignmentId);
+
+            auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentReconciled", AuditAction.Update)
+                .WithService("MapRotationCleanup")
+                .WithTarget(assignment.MapRotationServerAssignmentId.ToString(), "MapRotationAssignment")
+                .WithSource("MapRotationCleanup")
+                .Build());
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LogStaleRemovingAssignmentReconciliationException(
+                logger,
+                assignment.MapRotationServerAssignmentId,
+                ex);
+            return persisted;
+        }
+    }
+
+    private async Task<bool> DeleteRemovedAssignment(MapRotationServerAssignmentDto assignment, DateTime cutoff)
+    {
+        var retentionAnchor = assignment.UnassignedAt ?? assignment.UpdatedAt;
+        if (retentionAnchor >= cutoff)
+        {
+            return false;
+        }
+
+        var persisted = false;
+        try
+        {
+            var deleteResult = await repositoryApiClient.MapRotations.V1
+                .DeleteServerAssignment(assignment.MapRotationServerAssignmentId).ConfigureAwait(false);
+
+            if (!deleteResult.IsSuccess)
+            {
+                LogRemovedAssignmentDeleteFailed(
+                    logger,
+                    assignment.MapRotationServerAssignmentId,
+                    deleteResult.StatusCode);
+                return false;
+            }
+
+            persisted = true;
+            LogRemovedAssignmentDeleted(logger, assignment.MapRotationServerAssignmentId, assignment.UnassignedAt);
+
+            auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentCleaned", AuditAction.Delete)
+                .WithService("MapRotationCleanup")
+                .WithTarget(assignment.MapRotationServerAssignmentId.ToString(), "MapRotationAssignment")
+                .WithSource("MapRotationCleanup")
+                .Build());
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LogAssignmentDeleteException(logger, assignment.MapRotationServerAssignmentId, ex);
+            return persisted;
+        }
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Starting map rotation cleanup")]
