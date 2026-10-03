@@ -154,6 +154,8 @@ public class MapRotationCleanupTests
     [InlineData(true, "exception", false, true)]
     [InlineData(true, "operations-failure", false, true)]
     [InlineData(true, "recent", false, true)]
+    [InlineData(true, "other-recent", false, true)]
+    [InlineData(true, "old-in-progress", false, true)]
     [InlineData(false, "success", true, true)]
     [InlineData(false, "success", false, true)]
     [InlineData(false, "failure", false, true)]
@@ -177,9 +179,11 @@ public class MapRotationCleanupTests
         var api = Mock.Get(repositoryApiClientMock.Object.MapRotations.V1);
         api.Setup(x => x.GetServerAssignments(null, null, null, 0, 100, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(System.Net.HttpStatusCode.OK, new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(assignments)));
-        var operations = new CollectionModel<MapRotationAssignmentOperationDto>(outcome == "recent"
-            ? [new(Guid.NewGuid(), assignmentId, AssignmentOperationType.Remove, AssignmentOperationStatus.InProgress,
-                "remove-instance", DateTime.UtcNow.AddMinutes(-10), null, null)] : []);
+        var operations = new CollectionModel<MapRotationAssignmentOperationDto>(outcome is "recent" or "other-recent" or "old-in-progress"
+            ? [new(Guid.NewGuid(), assignmentId,
+                outcome == "other-recent" ? AssignmentOperationType.Sync : AssignmentOperationType.Remove,
+                AssignmentOperationStatus.InProgress, "remove-instance",
+                DateTime.UtcNow.AddMinutes(outcome == "old-in-progress" ? -120 : -10), null, null)] : []);
         api.Setup(x => x.GetAssignmentOperations(assignmentId, 0, 100, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult<CollectionModel<MapRotationAssignmentOperationDto>>(
                 outcome == "operations-failure" ? statusCode : System.Net.HttpStatusCode.OK,
@@ -201,7 +205,7 @@ public class MapRotationCleanupTests
 
         await sut.RunMapRotationCleanup(null);
 
-        var succeeded = outcome == "success";
+        var succeeded = outcome is "success" or "other-recent" or "old-in-progress";
         api.Verify(x => x.UpdateServerAssignment(It.Is<UpdateMapRotationServerAssignmentDto>(dto =>
             dto.MapRotationServerAssignmentId == assignmentId && dto.DeploymentState == DeploymentState.Removed
             && dto.UnassignedAt == oldUpdatedAt), It.IsAny<CancellationToken>()),
@@ -218,7 +222,7 @@ public class MapRotationCleanupTests
         AssertLog(logger, LogLevel.Information, "Starting map rotation cleanup", null);
         var template = (removing, outcome) switch
         {
-            (true, "success") => "Reconciled stale removing assignment {AssignmentId} to Removed",
+            (true, "success" or "other-recent" or "old-in-progress") => "Reconciled stale removing assignment {AssignmentId} to Removed",
             (true, "failure") => "Failed to reconcile stale removing assignment {AssignmentId}. API returned {StatusCode}",
             (true, "exception") => "Failed to reconcile stale removing assignment {AssignmentId}",
             (true, "operations-failure") => "Skipping stale removing reconciliation for assignment {AssignmentId} because operations could not be retrieved: {StatusCode}",
