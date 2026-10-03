@@ -13,12 +13,13 @@ namespace XtremeIdiots.Portal.Sync.App.Tests;
 public class MapRotationActivitiesTransportTests
 {
     private readonly Mock<IServersApiClient> _serversApiClientMock = new(MockBehavior.Loose) { DefaultValue = DefaultValue.Mock };
+    private readonly Mock<ILogger<MapRotationActivities>> _loggerMock = new();
     private readonly MapRotationActivities _sut;
 
     public MapRotationActivitiesTransportTests()
     {
         _sut = new MapRotationActivities(
-            Mock.Of<ILogger<MapRotationActivities>>(),
+            _loggerMock.Object,
             Mock.Of<IRepositoryApiClient>(),
             _serversApiClientMock.Object);
     }
@@ -177,11 +178,27 @@ public class MapRotationActivitiesTransportTests
     public async Task SetRconDvar_WhenGameTypeIsUnsupported_ReturnsFailureWithoutCallingAnySetEndpoint()
     {
         var serverId = Guid.NewGuid();
+        _loggerMock.Setup(x => x.IsEnabled(LogLevel.Warning)).Returns(true);
+        const string dvarName = "sv_hostname";
 
-        var result = await _sut.SetRconDvar(new SetRconDvarInput(serverId, GameType.Insurgency, "sv_hostname", "XI Server"));
+        var result = await _sut.SetRconDvar(new SetRconDvarInput(serverId, GameType.Insurgency, dvarName, "XI Server"));
+        var error = result.Error ?? string.Empty;
 
         Assert.False(result.Success);
-        Assert.Contains("not supported", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(dvarName, result.MapName);
+        Assert.Contains(GameType.Insurgency.ToString(), error);
+        Assert.Contains("not supported", error, StringComparison.OrdinalIgnoreCase);
+
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Warning,
+            It.Is<EventId>(eventId => eventId.Id == 0),
+            It.Is<It.IsAnyType>((state, _) =>
+                state != null
+                && state.ToString()!.Contains(dvarName, StringComparison.Ordinal)
+                && state.ToString()!.Contains(serverId.ToString(), StringComparison.Ordinal)
+                && state.ToString()!.Contains(error, StringComparison.Ordinal)),
+            It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
 
         Mock.Get(_serversApiClientMock.Object.Cod2Rcon.V1)
             .Verify(x => x.Set(
