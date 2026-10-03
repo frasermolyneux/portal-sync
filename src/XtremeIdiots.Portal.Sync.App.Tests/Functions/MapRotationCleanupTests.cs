@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using MX.Api.Abstractions;
 using MX.Observability.ApplicationInsights.Auditing;
+using MX.Observability.ApplicationInsights.Auditing.Models;
 using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.MapRotations;
@@ -156,10 +157,12 @@ public class MapRotationCleanupTests
     [InlineData(true, "recent", false, true)]
     [InlineData(true, "other-recent", false, true)]
     [InlineData(true, "old-in-progress", false, true)]
+    [InlineData(true, "audit-exception", false, true)]
     [InlineData(false, "success", true, true)]
     [InlineData(false, "success", false, true)]
     [InlineData(false, "failure", false, true)]
     [InlineData(false, "exception", false, true)]
+    [InlineData(false, "audit-exception", false, true)]
     [InlineData(true, "success", false, false)]
     [InlineData(false, "success", false, false)]
     public async Task RunMapRotationCleanup_PreservesLoggingAndSideEffects(bool removing, string outcome, bool hasUnassignedAt, bool loggingEnabled)
@@ -199,13 +202,17 @@ public class MapRotationCleanupTests
             api.Setup(x => x.DeleteServerAssignment(assignmentId, It.IsAny<CancellationToken>()))
                 .ThrowsAsync(exception);
         }
+        if (outcome == "audit-exception")
+        {
+            auditLoggerMock.Setup(x => x.LogAudit(It.IsAny<AuditEvent>())).Throws(exception);
+        }
         var logger = new Mock<ILogger<MapRotationCleanup>>();
         logger.Setup(x => x.IsEnabled(It.IsAny<LogLevel>())).Returns(loggingEnabled);
         var sut = new MapRotationCleanup(logger.Object, repositoryApiClientMock.Object, jobTelemetryMock.Object, auditLoggerMock.Object);
 
         await sut.RunMapRotationCleanup(null);
 
-        var succeeded = outcome is "success" or "other-recent" or "old-in-progress";
+        var succeeded = outcome is "success" or "other-recent" or "old-in-progress" or "audit-exception";
         api.Verify(x => x.UpdateServerAssignment(It.Is<UpdateMapRotationServerAssignmentDto>(dto =>
             dto.MapRotationServerAssignmentId == assignmentId && dto.DeploymentState == DeploymentState.Removed
             && dto.UnassignedAt == oldUpdatedAt), It.IsAny<CancellationToken>()),
@@ -224,7 +231,7 @@ public class MapRotationCleanupTests
         {
             (true, "success" or "other-recent" or "old-in-progress") => "Reconciled stale removing assignment {AssignmentId} to Removed",
             (true, "failure") => "Failed to reconcile stale removing assignment {AssignmentId}. API returned {StatusCode}",
-            (true, "exception") => "Failed to reconcile stale removing assignment {AssignmentId}",
+            (true, "exception" or "audit-exception") => "Failed to reconcile stale removing assignment {AssignmentId}",
             (true, "operations-failure") => "Skipping stale removing reconciliation for assignment {AssignmentId} because operations could not be retrieved: {StatusCode}",
             (true, "recent") => "Skipping stale removing reconciliation for assignment {AssignmentId} because a recent in-progress Remove operation exists",
             (false, "success") => "Deleted removed assignment {AssignmentId} (unassigned at {UnassignedAt})",
@@ -236,17 +243,18 @@ public class MapRotationCleanupTests
         {
             values.Add(("StatusCode", statusCode));
         }
-        if (!removing && succeeded)
+        if (!removing && outcome == "success")
         {
             values.Add(("UnassignedAt", unassignedAt));
         }
-        var level = outcome == "exception" ? LogLevel.Error
+        var level = outcome is "exception" or "audit-exception" ? LogLevel.Error
             : outcome is "failure" or "operations-failure" ? LogLevel.Warning : LogLevel.Information;
-        AssertLog(logger, level, template, outcome == "exception" ? exception : null, values.ToArray());
+        AssertLog(logger, level, template, outcome is "exception" or "audit-exception" ? exception : null, values.ToArray());
         AssertLog(logger, LogLevel.Information,
             "Map rotation cleanup completed, reconciled {ReconciledCount} stale removing assignments and deleted {DeletedCount} removed assignments",
             null, ("ReconciledCount", removing && succeeded ? 1 : 0), ("DeletedCount", !removing && succeeded ? 1 : 0));
-        Assert.Equal(3, logger.Invocations.Count(invocation => invocation.Method.Name == "Log"));
+        Assert.Equal(outcome == "audit-exception" ? 4 : 3,
+            logger.Invocations.Count(invocation => invocation.Method.Name == "Log"));
     }
 
     [Theory]

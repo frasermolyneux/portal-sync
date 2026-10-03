@@ -92,6 +92,7 @@ public partial class MapRotationCleanup(
             return false;
         }
 
+        var persisted = false;
         try
         {
             var operationsResult = await repositoryApiClient.MapRotations.V1
@@ -137,6 +138,7 @@ public partial class MapRotationCleanup(
                 return false;
             }
 
+            persisted = true;
             LogStaleRemovingAssignmentReconciled(logger, assignment.MapRotationServerAssignmentId);
 
             auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentReconciled", AuditAction.Update)
@@ -153,7 +155,7 @@ public partial class MapRotationCleanup(
                 logger,
                 assignment.MapRotationServerAssignmentId,
                 ex);
-            return false;
+            return persisted;
         }
     }
 
@@ -165,6 +167,7 @@ public partial class MapRotationCleanup(
             return false;
         }
 
+        var persisted = false;
         try
         {
             var deleteResult = await repositoryApiClient.MapRotations.V1
@@ -179,6 +182,7 @@ public partial class MapRotationCleanup(
                 return false;
             }
 
+            persisted = true;
             LogRemovedAssignmentDeleted(logger, assignment.MapRotationServerAssignmentId, assignment.UnassignedAt);
 
             auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentCleaned", AuditAction.Delete)
@@ -192,7 +196,7 @@ public partial class MapRotationCleanup(
         catch (Exception ex)
         {
             LogAssignmentDeleteException(logger, assignment.MapRotationServerAssignmentId, ex);
-            return false;
+            return persisted;
         }
     }
 
