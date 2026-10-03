@@ -204,7 +204,7 @@ public class MapRotationCleanupTests
         }
         if (outcome == "audit-exception")
         {
-            auditLoggerMock.Setup(x => x.LogAudit(It.IsAny<AuditEvent>())).Throws(exception);
+            _ = auditLoggerMock.Setup(x => x.LogAudit(It.IsAny<AuditEvent>())).Throws(exception);
         }
         var logger = new Mock<ILogger<MapRotationCleanup>>();
         logger.Setup(x => x.IsEnabled(It.IsAny<LogLevel>())).Returns(loggingEnabled);
@@ -249,7 +249,7 @@ public class MapRotationCleanupTests
         }
         var level = outcome is "exception" or "audit-exception" ? LogLevel.Error
             : outcome is "failure" or "operations-failure" ? LogLevel.Warning : LogLevel.Information;
-        AssertLog(logger, level, template, outcome is "exception" or "audit-exception" ? exception : null, values.ToArray());
+        AssertLog(logger, level, template, outcome is "exception" or "audit-exception" ? exception : null, [.. values]);
         AssertLog(logger, LogLevel.Information,
             "Map rotation cleanup completed, reconciled {ReconciledCount} stale removing assignments and deleted {DeletedCount} removed assignments",
             null, ("ReconciledCount", removing && succeeded ? 1 : 0), ("DeletedCount", !removing && succeeded ? 1 : 0));
