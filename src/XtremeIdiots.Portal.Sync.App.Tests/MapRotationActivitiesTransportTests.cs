@@ -178,7 +178,7 @@ public class MapRotationActivitiesTransportTests
     public async Task SetRconDvar_WhenGameTypeIsUnsupported_ReturnsFailureWithoutCallingAnySetEndpoint()
     {
         var serverId = Guid.NewGuid();
-        _loggerMock.Setup(x => x.IsEnabled(LogLevel.Warning)).Returns(true);
+        _ = _loggerMock.Setup(x => x.IsEnabled(LogLevel.Warning)).Returns(true);
         const string dvarName = "sv_hostname";
 
         var result = await _sut.SetRconDvar(new SetRconDvarInput(serverId, GameType.Insurgency, dvarName, "XI Server"));
