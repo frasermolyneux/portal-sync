@@ -14,6 +14,12 @@ public class MapRotationActivities(
     IRepositoryApiClient repositoryApiClient,
     IServersApiClient serversApiClient)
 {
+    private static readonly Action<ILogger, string, Guid, string, Exception?> UnsupportedRconDvarUpdateLogger =
+        LoggerMessage.Define<string, Guid, string>(
+            LogLevel.Warning,
+            new EventId(0),
+            "Skipping RCON dvar update {DvarName} on server {GameServerId}: {UnsupportedError}");
+
     private readonly ILogger<MapRotationActivities> logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IRepositoryApiClient repositoryApiClient = repositoryApiClient ?? throw new ArgumentNullException(nameof(repositoryApiClient));
     private readonly IServersApiClient serversApiClient = serversApiClient ?? throw new ArgumentNullException(nameof(serversApiClient));
@@ -476,11 +482,12 @@ public class MapRotationActivities(
 
                 default:
                     var unsupportedError = $"RCON dvar updates are not supported for game type '{input.GameType}'.";
-                    logger.LogWarning(
-                        "Skipping RCON dvar update {DvarName} on server {GameServerId}: {UnsupportedError}",
+                    UnsupportedRconDvarUpdateLogger(
+                        logger,
                         input.DvarName,
                         input.GameServerId,
-                        unsupportedError);
+                        unsupportedError,
+                        null);
                     return new MapOperationResult(input.DvarName, false, unsupportedError);
             }
 
