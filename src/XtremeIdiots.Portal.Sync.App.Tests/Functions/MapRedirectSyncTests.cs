@@ -113,6 +113,73 @@ public class MapRedirectSyncTests
         Assert.Equal(2, _auditLoggerMock.Invocations.Count);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task TimerAndManualTriggersForwardCancellationToRedirectReadsAndRepositoryReadsAndWrites(bool manual, bool update)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var token = cancellation.Token;
+        var file = RedirectDtoFactory.CreateFile(version: "new");
+        ConfigureSnapshot(file);
+        if (update)
+        {
+            ConfigureRepository(new MapFileDto(file.Name, file.DirectUrl!) { RedirectVersion = "old" });
+        }
+
+        if (manual)
+        {
+            await CreateSut().RunMapRedirectSyncManual(new DefaultHttpContext().Request, token);
+        }
+        else
+        {
+            await CreateSut().RunMapRedirectSync(null, token);
+        }
+
+        _mapRedirectRepositoryMock.Verify(x => x.GetSnapshotForGame("cod4", token), Times.Once);
+        _mapRedirectRepositoryMock.Verify(x => x.GetSnapshotForGame("cod5", token), Times.Once);
+        Maps.Verify(x => x.GetMaps(It.IsAny<GameType?>(), It.IsAny<string[]?>(), It.IsAny<MapsFilter?>(),
+            It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<MapsOrder?>(), token),
+            Times.Exactly(update ? 5 : 3));
+        Maps.Verify(x => x.CreateMaps(It.IsAny<List<CreateMapDto>>(), token), update ? Times.Never() : Times.Exactly(2));
+        Maps.Verify(x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), token), update ? Times.Exactly(2) : Times.Never());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancellationDuringPagingStopsBeforeFurtherReadsWritesOrSuccessAudits(bool manual)
+    {
+        using var cancellation = new CancellationTokenSource();
+        var token = cancellation.Token;
+        ConfigureSnapshot(RedirectDtoFactory.CreateFile());
+        Maps.Setup(x => x.GetMaps(It.IsAny<GameType?>(), It.IsAny<string[]?>(), It.IsAny<MapsFilter?>(),
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<MapsOrder?>(), token))
+            .Returns((GameType? game, string[]? names, MapsFilter? filter, string? search, int skip, int take,
+                MapsOrder? order, CancellationToken _) =>
+            {
+                if (skip == 0)
+                {
+                    return Task.FromResult(Collection([StoredMap(GameType.CallOfDuty4, [])]));
+                }
+                cancellation.Cancel();
+                return Task.FromResult(Collection([]));
+            });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => manual
+            ? CreateSut().RunMapRedirectSyncManual(new DefaultHttpContext().Request, token)
+            : CreateSut().RunMapRedirectSync(null, token));
+
+        _mapRedirectRepositoryMock.Verify(x => x.GetSnapshotForGame(It.IsAny<string>(), token), Times.Once);
+        Maps.Verify(x => x.GetMaps(It.IsAny<GameType?>(), It.IsAny<string[]?>(), It.IsAny<MapsFilter?>(),
+            It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<MapsOrder?>(), token), Times.Exactly(2));
+        Maps.Verify(x => x.CreateMaps(It.IsAny<List<CreateMapDto>>(), It.IsAny<CancellationToken>()), Times.Never);
+        Maps.Verify(x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_auditLoggerMock.Invocations);
+    }
+
     [Fact]
     public async Task UnchangedFilesAreIdempotent()
     {

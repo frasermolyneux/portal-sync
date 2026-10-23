@@ -51,6 +51,7 @@ public class MapRedirectSync(
 
                 foreach (var group in gamesToSync.GroupBy(game => game.Value))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var snapshot = await MapRedirectRepository.GetSnapshotForGame(group.Key, cancellationToken).ConfigureAwait(false);
                     foreach (var game in group)
                     {
@@ -74,8 +75,10 @@ public class MapRedirectSync(
             List<MapDto> repositoryMaps = [];
             while (true)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null,
                     skipEntries, takeEntries, null, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!mapsCollectionBatch.IsSuccess || mapsCollectionBatch.Result?.Data?.Items is not { } items)
                 {
                     throw new InvalidOperationException($"Repository map enumeration failed for '{gameType}' (HTTP {(int)mapsCollectionBatch.StatusCode}); no partial synchronization is permitted.");
@@ -151,6 +154,7 @@ public class MapRedirectSync(
 
             if (mapDtosToCreate.Count != 0)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var created = await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate, cancellationToken).ConfigureAwait(false);
                 if (!created.IsSuccess)
                 {
@@ -170,6 +174,7 @@ public class MapRedirectSync(
 
             if (mapDtosToUpdate.Count != 0)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var updated = await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate, cancellationToken).ConfigureAwait(false);
                 if (!updated.IsSuccess)
                 {
@@ -188,6 +193,10 @@ public class MapRedirectSync(
             }
 
             logger.LogInformation("Completed map sync for game '{GameType}'", gameType);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
