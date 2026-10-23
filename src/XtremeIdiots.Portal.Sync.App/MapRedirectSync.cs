@@ -120,8 +120,13 @@ public class MapRedirectSync(
                 }
                 else
                 {
+                    mapFiles.AddRange(GetExternalFiles(repositoryMap, snapshot.DirectBaseUrl, gameKey));
                     if (!mapFiles.OrderBy(file => file.FileName, StringComparer.Ordinal)
-                        .SequenceEqual(repositoryMap.MapFiles.OrderBy(file => file.FileName, StringComparer.Ordinal)))
+                        .ThenBy(file => file.Url, StringComparer.Ordinal)
+                        .ThenBy(file => file.RedirectVersion, StringComparer.Ordinal)
+                        .SequenceEqual(repositoryMap.MapFiles.OrderBy(file => file.FileName, StringComparer.Ordinal)
+                            .ThenBy(file => file.Url, StringComparer.Ordinal)
+                            .ThenBy(file => file.RedirectVersion, StringComparer.Ordinal)))
                     {
                         mapDtosToUpdate.Add(new EditMapDto(repositoryMap.MapId)
                         {
@@ -134,10 +139,7 @@ public class MapRedirectSync(
 
             foreach (var map in repositoryMaps.Where(map => !redirectNames.Contains(map.MapName)))
             {
-                var mapRoot = new Uri($"{snapshot.DirectBaseUrl.TrimEnd('/')}/redirect/{gameKey}/usermaps/{Uri.EscapeDataString(map.MapName)}/");
-                var retainedFiles = map.MapFiles
-                    .Where(file => !Uri.TryCreate(file.Url, UriKind.Absolute, out var fileUrl) || !mapRoot.IsBaseOf(fileUrl))
-                    .ToList();
+                var retainedFiles = GetExternalFiles(map, snapshot.DirectBaseUrl, gameKey).ToList();
                 if (retainedFiles.Count != map.MapFiles.Count)
                 {
                     mapDtosToUpdate.Add(new EditMapDto(map.MapId) { MapFiles = retainedFiles, ReplaceMapFiles = true });
@@ -192,5 +194,12 @@ public class MapRedirectSync(
             logger.LogError(ex, "Failed to sync maps for game '{GameType}' with key '{GameKey}'", gameType, gameKey);
             throw;
         }
+    }
+
+    private static IEnumerable<MapFileDto> GetExternalFiles(MapDto map, string directBaseUrl, string gameKey)
+    {
+        var mapRoot = new Uri($"{directBaseUrl.TrimEnd('/')}/redirect/{gameKey}/usermaps/{Uri.EscapeDataString(map.MapName)}/");
+        return map.MapFiles.Where(file =>
+            !Uri.TryCreate(file.Url, UriKind.Absolute, out var fileUrl) || !mapRoot.IsBaseOf(fileUrl));
     }
 }

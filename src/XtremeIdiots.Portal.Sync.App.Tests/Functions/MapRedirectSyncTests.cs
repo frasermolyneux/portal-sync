@@ -139,6 +139,38 @@ public class MapRedirectSyncTests
             It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PresentMapsRetainExternalMirrorsAndRemainIdempotentWithEmptyOrPopulatedManifests(bool empty)
+    {
+        var file = RedirectDtoFactory.CreateFile();
+        var external = new MapFileDto(file.Name, "https://elsewhere.invalid/external.ff");
+        ConfigureSnapshot(empty ? [] : [file]);
+        ConfigureRepository(new MapFileDto(file.Name, file.DirectUrl!) { RedirectVersion = "old" }, external);
+        var saved = new List<EditMapDto>();
+        Maps.Setup(x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), It.IsAny<CancellationToken>()))
+            .Callback<List<EditMapDto>, CancellationToken>((updates, _) => saved.AddRange(updates))
+            .ReturnsAsync(new ApiResult(HttpStatusCode.OK));
+
+        await CreateSut().RunMapRedirectSync(null);
+
+        Assert.Equal(2, saved.Count);
+        Assert.All(saved, update =>
+        {
+            Assert.True(update.ReplaceMapFiles);
+            Assert.Contains(external, update.MapFiles);
+            Assert.Equal(empty ? 1 : 2, update.MapFiles.Count);
+        });
+        ConfigureRepository(saved[0].MapFiles.AsEnumerable().Reverse().ToArray());
+        Maps.Invocations.Clear();
+
+        await CreateSut().RunMapRedirectSync(null);
+
+        Maps.Verify(x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(2, _auditLoggerMock.Invocations.Count);
+    }
+
     [Fact]
     public async Task DeletedMapFolderRemovesOnlyItsManagedRedirectReferences()
     {
