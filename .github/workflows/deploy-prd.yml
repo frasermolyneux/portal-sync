@@ -8,7 +8,7 @@ on:
     # checkov:skip=CKV_GHA_7:Deployment entry point selects fixed jobs; build inputs are unchanged and user input never enters commands.
     inputs:
       scope:
-        description: "Use maps-bootstrap for application-only delivery without Terraform or APIM changes."
+        description: "Use maps-bootstrap for production application-only delivery without dev, Terraform or APIM changes."
         type: choice
         default: standard
         options:
@@ -45,7 +45,7 @@ jobs:
             terraform:terraform/**
 
   terraform-state-check-dev:
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && inputs.scope != 'maps-bootstrap'
     permissions:
       contents: read
       id-token: write
@@ -83,7 +83,7 @@ jobs:
           src-folder: "src"
 
   terraform-plan-and-apply-dev:
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && inputs.scope != 'maps-bootstrap'
     permissions:
       contents: read
       id-token: write
@@ -153,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-dev
-    if: "!failure() && !cancelled() && github.event_name != 'schedule' && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')"
+    if: "!failure() && !cancelled() && inputs.scope != 'maps-bootstrap' && github.event_name != 'schedule' && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')"
     steps:
       - uses: frasermolyneux/actions/deploy-function-app@deploy-function-app/v1.2
         with:
@@ -224,7 +224,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-prd
-    if: "!failure() && !cancelled() && (needs.terraform-plan-and-apply-dev.result == 'success' || github.event_name == 'schedule')"
+    if: "!failure() && !cancelled() && (inputs.scope == 'maps-bootstrap' || needs.terraform-plan-and-apply-dev.result == 'success' || github.event_name == 'schedule')"
     steps:
       - if: inputs.scope != 'maps-bootstrap' && needs.detect-changes.outputs.terraform == 'true'
         uses: frasermolyneux/actions/terraform-plan-and-apply@terraform-plan-and-apply/v1.4
@@ -278,6 +278,7 @@ jobs:
     environment: Production
     needs:
       - detect-changes
+      - build-and-test
       - terraform-plan-and-apply-prd
       - function-app-deploy-dev
     runs-on: ubuntu-latest
