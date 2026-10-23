@@ -49,7 +49,7 @@ var host = new HostBuilder()
                     .Select("ServersIntegrationApi:*", environmentLabel)
                     .Select("XtremeIdiots:*", environmentLabel)
                     .Select("GameTracker:*", environmentLabel)
-                    .Select("MapRedirect:*", environmentLabel)
+                    .Select("RedirectApi:*", environmentLabel)
                     .Select("ApplicationInsights:*", environmentLabel)
                     .ConfigureRefresh(refresh =>
                     {
@@ -100,11 +100,9 @@ var host = new HostBuilder()
                 .WithEntraIdAuthentication(configuration["ServersIntegrationApi:ApplicationAudience"] ?? throw new InvalidOperationException("ServersIntegrationApi:ApplicationAudience configuration is required"));
         });
 
-        services.AddMapRedirectRepository(options =>
-        {
-            options.MapRedirectBaseUrl = configuration["MapRedirect:BaseUrl"] ?? throw new InvalidOperationException("MapRedirect:BaseUrl configuration is required");
-            options.ApiKey = configuration["MapRedirect:ApiKey"] ?? throw new InvalidOperationException("MapRedirect:ApiKey configuration is required");
-        });
+        services.AddMapRedirectRepository(options => options
+            .WithBaseUrl(configuration["RedirectApi:BaseUrl"] ?? throw new InvalidOperationException("RedirectApi:BaseUrl configuration is required"))
+            .WithEntraIdAuthentication(configuration["RedirectApi:ApplicationAudience"] ?? throw new InvalidOperationException("RedirectApi:ApplicationAudience configuration is required")));
 
         services.AddInvisionApiClient(options => options
             .WithBaseUrl(configuration["XtremeIdiots:Forums:BaseUrl"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:BaseUrl configuration is required"))

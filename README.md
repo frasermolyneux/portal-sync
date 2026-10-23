@@ -17,6 +17,21 @@
 ## Overview
 Azure Functions app that synchronizes portal data with external game telemetry and platform services. Handles scheduled and on-demand sync pipelines, ensuring DTO contracts stay aligned with portal APIs and repository data. Integrates with Azure Storage and Application Insights for durable execution and observability. CI/CD uses OIDC-authenticated GitHub Actions and Terraform-provisioned App Service and supporting resources.
 
+## Redirect catalogue integration
+
+Map synchronization uses the shared redirect client with `RedirectApi:BaseUrl`
+and `RedirectApi:ApplicationAudience`, loaded from this application's App
+Configuration namespace. Its managed identity needs only `Maps.Read`.
+The obsolete PHP endpoint and API key are not used.
+
+Each game snapshot pins discovery, map pages and recursive catalogue pages to
+one version, validating complete file counts, bytes and authoritative URLs
+before repository writes. A catalogue conflict discards the whole attempt;
+other API failures fail the job rather than synchronizing partial data.
+COD4 and COD4x share one source snapshot. Paging is per catalogue, not per map.
+Updates include file versions and explicitly replace even empty file lists;
+deleted source folders remove only their own legacy redirect references.
+
 ## Contributing
 Please read the [contributing](CONTRIBUTING.md) guidance; this is a learning and development project.
 

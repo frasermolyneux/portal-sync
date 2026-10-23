@@ -1,21 +1,16 @@
 using Microsoft.Extensions.DependencyInjection;
 
+using XtremeIdiots.Redirect.Api.Client.V1;
+
 namespace XtremeIdiots.Portal.Sync.App.Redirect;
 
 public static class ServiceCollectionExtensions
 {
-    public static void AddMapRedirectRepository(this IServiceCollection serviceCollection, Action<MapRedirectRepositoryOptions> configureOptions)
+    public static void AddMapRedirectRepository(this IServiceCollection serviceCollection, Action<RedirectApiClientOptionsBuilder> configureOptions)
     {
         ArgumentNullException.ThrowIfNull(configureOptions);
 
-        serviceCollection.Configure(configureOptions);
-
-        serviceCollection.AddSingleton(configureOptions);
-        serviceCollection.AddHttpClient<IMapRedirectRepository, MapRedirectRepository>(client =>
-        {
-            // Base address optional; left null because full URLs are constructed dynamically.
-            client.Timeout = TimeSpan.FromSeconds(30);
-        });
-
+        serviceCollection.AddRedirectApiClient(configureOptions);
+        serviceCollection.AddTransient<IMapRedirectRepository, MapRedirectRepository>();
     }
 }

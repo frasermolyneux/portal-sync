@@ -1,104 +1,180 @@
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using System.Net;
 
-using Newtonsoft.Json;
+using Microsoft.Extensions.Logging;
+
+using MX.Api.Abstractions;
 
 using XtremeIdiots.Portal.Sync.App.Models;
+using XtremeIdiots.Redirect.Api.Abstractions.V1;
 
 namespace XtremeIdiots.Portal.Sync.App.Redirect;
 
 public class MapRedirectRepository(
-    IOptions<MapRedirectRepositoryOptions> options,
-    HttpClient httpClient,
+    IRedirectApiClient client,
     ILogger<MapRedirectRepository> logger) : IMapRedirectRepository
 {
-    private const int MaxContentPreviewLength = 200;
+    private const int PageSize = 200;
+    private const int SnapshotAttempts = 3;
 
-    private readonly IOptions<MapRedirectRepositoryOptions> _options = options ?? throw new ArgumentNullException(nameof(options));
-    private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-    private readonly ILogger<MapRedirectRepository> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    public async Task<List<MapRedirectEntry>> GetMapEntriesForGame(string game)
+    public async Task<MapRedirectSnapshot> GetSnapshotForGame(string game, CancellationToken cancellationToken = default)
     {
-        var apiKey = _options.Value.ApiKey;
-        if (string.IsNullOrEmpty(apiKey))
+        var canonicalGame = game.Equals("cod4x", StringComparison.OrdinalIgnoreCase) ? "cod4" : game.ToLowerInvariant();
+        for (var attempt = 1; ; attempt++)
         {
-            _logger.LogError("API key is not configured for map redirect repository");
-            throw new InvalidOperationException("Map redirect API key is not configured");
-        }
-
-        var url = $"{_options.Value.MapRedirectBaseUrl}/portal-map-sync.php?game={game}&key={apiKey}";
-        _logger.LogInformation("Requesting map entries for game '{Game}' from map redirect API", game);
-
-        HttpResponseMessage response;
-        try
-        {
-            response = await _httpClient.GetAsync(url).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to make HTTP request to map redirect API for game '{Game}'", game);
-            throw new ApplicationException($"Failed to connect to map redirect API for game '{game}': {ex.Message}", ex);
-        }
-
-        using (response)
-        {
-            var statusCode = (int)response.StatusCode;
-            _logger.LogInformation("Received HTTP {StatusCode} response from map redirect API for game '{Game}'", statusCode, game);
-
-            var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-            // Log a preview of the response content for debugging
-            _logger.LogDebug("Response content preview for game '{Game}': {ContentPreview}", game, TruncateForLogging(content));
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Map redirect API returned error status {StatusCode} for game '{Game}'. Response preview: {ErrorPreview}",
-                    statusCode, game, TruncateForLogging(content));
-
-                if (statusCode == 401 || statusCode == 403)
-                {
-                    throw new ApplicationException($"Authentication failed for map redirect API (HTTP {statusCode}). Check that the API key is valid.");
-                }
-
-                throw new ApplicationException($"Map redirect API returned error status {statusCode} for game '{game}'.");
-            }
-
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                _logger.LogError("Map redirect API returned empty response for game '{Game}'", game);
-                throw new ApplicationException($"Map redirect API returned empty response for game '{game}'");
-            }
-
-            List<MapRedirectEntry>? mapRedirectEntries;
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                mapRedirectEntries = JsonConvert.DeserializeObject<List<MapRedirectEntry>>(content);
+                return await ReadSnapshot(canonicalGame, cancellationToken).ConfigureAwait(false);
             }
-            catch (JsonException ex)
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict && attempt < SnapshotAttempts)
             {
-                _logger.LogError(ex, "Failed to deserialize JSON response from map redirect API for game '{Game}'. Response preview: {ContentPreview}",
-                    game, TruncateForLogging(content));
-                throw new ApplicationException($"Failed to parse JSON response from map redirect API for game '{game}'. This may indicate an invalid API key or server error.", ex);
+                logger.LogWarning("Redirect catalogue changed while reading '{Game}'; discarding the incomplete snapshot and restarting ({Attempt}/{MaximumAttempts})",
+                    game, attempt, SnapshotAttempts);
             }
-
-            if (mapRedirectEntries == null)
-            {
-                _logger.LogError("Deserialized map entries is null for game '{Game}'", game);
-                throw new ApplicationException($"Failed to retrieve map entries from redirect server for game '{game}'. Response deserialized to null.");
-            }
-
-            _logger.LogInformation("Successfully retrieved {Count} map entries for game '{Game}'", mapRedirectEntries.Count, game);
-            return mapRedirectEntries;
         }
     }
 
-    private static string TruncateForLogging(string content)
+    private async Task<MapRedirectSnapshot> ReadSnapshot(string game, CancellationToken cancellationToken)
     {
-        if (content.Length <= MaxContentPreviewLength)
+        var discovery = RequireData(await client.Discover(cancellationToken).ConfigureAwait(false), "discover the catalogue", cancellationToken);
+        if (string.IsNullOrWhiteSpace(discovery.CatalogueVersion) ||
+            !Uri.TryCreate(discovery.DirectBaseUrl, UriKind.Absolute, out var directOrigin) ||
+            (directOrigin.Scheme != Uri.UriSchemeHttps && directOrigin.Scheme != Uri.UriSchemeHttp) ||
+            directOrigin.UserInfo.Length != 0 || directOrigin.Query.Length != 0 || directOrigin.Fragment.Length != 0)
         {
-            return content;
+            throw new InvalidOperationException("Redirect discovery returned an invalid version or direct origin.");
         }
 
-        return content[..MaxContentPreviewLength] + "... (truncated)";
+        var root = $"redirect/{game}/usermaps";
+        var entries = new Dictionary<string, MapEntry>(StringComparer.Ordinal);
+        long? totalCount = null;
+        for (var page = 1; ; page++)
+        {
+            var batch = RequireData(await client.Maps(game, page: page, pageSize: PageSize,
+                version: discovery.CatalogueVersion, cancellationToken: cancellationToken).ConfigureAwait(false), $"read maps page {page}", cancellationToken);
+            if (batch.Maps is null || batch.Maps.Count > PageSize || batch.Page != page || batch.PageSize != PageSize ||
+                batch.Version != discovery.CatalogueVersion || batch.TotalCount < 0 ||
+                (totalCount.HasValue && totalCount.Value != batch.TotalCount))
+            {
+                throw new InvalidOperationException("Redirect returned inconsistent map pagination; no partial snapshot can be synchronized.");
+            }
+
+            totalCount = batch.TotalCount;
+            foreach (var entry in batch.Maps)
+            {
+                if (entry.Game != game || !IsCanonicalPath(entry.Name) || entry.Name.Contains('/') ||
+                    entry.Path != $"{root}/{entry.Name}" || entry.Bytes < 0 || entry.FileCount < 0)
+                {
+                    throw new InvalidOperationException("Redirect returned a map entry that does not match the requested game.");
+                }
+                if (!entries.TryAdd(entry.Name, entry))
+                {
+                    throw new InvalidOperationException("Redirect returned a duplicate map in a version-pinned catalogue.");
+                }
+            }
+
+            if (entries.Count == totalCount.Value)
+            {
+                break;
+            }
+            if (entries.Count > totalCount.Value || batch.Maps.Count == 0)
+            {
+                throw new InvalidOperationException("Redirect returned an incomplete map catalogue.");
+            }
+        }
+
+        var files = entries.Keys.ToDictionary(name => name, _ => new List<ContentEntry>(), StringComparer.Ordinal);
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        var folders = new HashSet<string>(StringComparer.Ordinal);
+        totalCount = null;
+        for (var page = 1; ; page++)
+        {
+            var batch = RequireData(await client.BrowseTree(root, page: page, pageSize: PageSize,
+                version: discovery.CatalogueVersion, cancellationToken: cancellationToken).ConfigureAwait(false), $"read catalogue tree page {page}", cancellationToken);
+            if (batch.Entries is null || batch.Entries.Count > PageSize || batch.Page != page || batch.PageSize != PageSize ||
+                batch.Version != discovery.CatalogueVersion || batch.TotalCount < 0 ||
+                (totalCount.HasValue && totalCount.Value != batch.TotalCount))
+            {
+                throw new InvalidOperationException("Redirect returned inconsistent tree pagination; no partial snapshot can be synchronized.");
+            }
+
+            totalCount = batch.TotalCount;
+            foreach (var entry in batch.Entries)
+            {
+                if (!IsCanonicalPath(entry.Path) || !entry.Path.StartsWith(root + "/", StringComparison.Ordinal) ||
+                    entry.Name != entry.Path[(entry.Path.LastIndexOf('/') + 1)..] ||
+                    entry.Bytes < 0 || string.IsNullOrWhiteSpace(entry.Version) ||
+                    (!entry.IsDirectory && !HasExpectedDirectUrl(entry, directOrigin)) || !paths.Add(entry.Path))
+                {
+                    throw new InvalidOperationException("Redirect returned an invalid or duplicate entry in the version-pinned tree.");
+                }
+
+                var relative = entry.Path[(root.Length + 1)..];
+                var separator = relative.IndexOf('/');
+                if (separator < 0 && !entry.IsDirectory)
+                {
+                    continue;
+                }
+                var mapName = separator < 0 ? relative : relative[..separator];
+                if (!files.TryGetValue(mapName, out var mapFiles))
+                {
+                    throw new InvalidOperationException("Redirect returned a tree entry outside the enumerated map folders.");
+                }
+                if (separator < 0)
+                {
+                    folders.Add(mapName);
+                }
+                else if (!entry.IsDirectory)
+                {
+                    mapFiles.Add(entry);
+                }
+            }
+
+            if (paths.Count == totalCount.Value)
+            {
+                break;
+            }
+            if (paths.Count > totalCount.Value || batch.Entries.Count == 0)
+            {
+                throw new InvalidOperationException("Redirect returned an incomplete catalogue tree.");
+            }
+        }
+
+        var manifests = new List<MapManifest>();
+        foreach (var entry in entries.Values)
+        {
+            var mapFiles = files[entry.Name];
+            if (!folders.Contains(entry.Name) || mapFiles.Count != entry.FileCount || mapFiles.Sum(file => file.Bytes) != entry.Bytes)
+            {
+                throw new InvalidOperationException($"Redirect returned an inconsistent manifest for '{entry.Name}'.");
+            }
+            manifests.Add(new MapManifest(game, entry.Name, entry.Path, mapFiles, entry.Bytes, discovery.CatalogueVersion));
+        }
+        logger.LogInformation("Retrieved {MapCount} complete redirect map manifests for '{Game}' at catalogue version '{Version}'",
+            manifests.Count, game, discovery.CatalogueVersion);
+        return new MapRedirectSnapshot(discovery.DirectBaseUrl, manifests);
+    }
+
+    private static bool IsCanonicalPath(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && !path.Contains('\\') && !path.Any(char.IsControl) &&
+        path.Split('/').All(segment => segment.Length != 0 && segment != "." && segment != "..");
+
+    private static bool HasExpectedDirectUrl(ContentEntry entry, Uri origin) =>
+        Uri.TryCreate(entry.DirectUrl, UriKind.Absolute, out var target) &&
+        target.Scheme == origin.Scheme && target.Port == origin.Port &&
+        target.Host.Equals(origin.Host, StringComparison.OrdinalIgnoreCase) && target.UserInfo.Length == 0 &&
+        target.Query.Length == 0 && target.Fragment.Length == 0 &&
+        target.AbsolutePath == new Uri(origin.AbsoluteUri.TrimEnd('/') + "/" +
+            string.Join('/', entry.Path.Split('/').Select(Uri.EscapeDataString))).AbsolutePath;
+
+    private static T RequireData<T>(ApiResult<T> result, string operation, CancellationToken cancellationToken) where T : class
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!result.IsSuccess)
+        {
+            throw new HttpRequestException($"Redirect API could not {operation} (HTTP {(int)result.StatusCode}).",
+                null, result.StatusCode);
+        }
+        return result.Result?.Data ?? throw new InvalidOperationException($"Redirect API returned no data while attempting to {operation}.");
     }
 }
