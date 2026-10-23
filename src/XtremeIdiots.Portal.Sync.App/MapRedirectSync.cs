@@ -12,6 +12,7 @@ using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Models;
 using XtremeIdiots.Portal.Sync.App.Redirect;
 
 namespace XtremeIdiots.Portal.Sync.App;
@@ -20,23 +21,20 @@ public class MapRedirectSync(
     ILogger<MapRedirectSync> logger,
     IRepositoryApiClient repositoryApiClient,
     IMapRedirectRepository mapRedirectRepository,
-    Microsoft.Extensions.Configuration.IConfiguration configuration,
     IJobTelemetry jobTelemetry,
     IAuditLogger auditLogger)
 {
-    private readonly string _mapRedirectBaseUrl = (configuration["MapRedirect:BaseUrl"] ?? "https://redirect.xtremeidiots.net").TrimEnd('/');
-
     public IRepositoryApiClient repositoryApiClient { get; } = repositoryApiClient;
     public IMapRedirectRepository MapRedirectRepository { get; } = mapRedirectRepository;
     [Function(nameof(RunMapRedirectSyncManual))]
-    public async Task RunMapRedirectSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
+    public async Task RunMapRedirectSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req, CancellationToken cancellationToken = default)
     {
-        await RunMapRedirectSync(null).ConfigureAwait(false);
+        await RunMapRedirectSync(null, cancellationToken).ConfigureAwait(false);
     }
 
     [Function(nameof(RunMapRedirectSync))]
     // ReSharper disable once UnusedMember.Global
-    public async Task RunMapRedirectSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer)
+    public async Task RunMapRedirectSync([TimerTrigger("0 0 0 * * *")] TimerInfo? myTimer, CancellationToken cancellationToken = default)
     {
         await jobTelemetry.ExecuteAsync(
             nameof(RunMapRedirectSync),
@@ -51,74 +49,103 @@ public class MapRedirectSync(
                     [GameType.CallOfDuty5] = "cod5"
                 };
 
-                foreach (var game in gamesToSync)
+                foreach (var group in gamesToSync.GroupBy(game => game.Value))
                 {
-                    await ProcessGameMapSync(game.Key, game.Value).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var snapshot = await MapRedirectRepository.GetSnapshotForGame(group.Key, cancellationToken).ConfigureAwait(false);
+                    foreach (var game in group)
+                    {
+                        await ProcessGameMapSync(game.Key, game.Value, snapshot, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 logger.LogDebug("Stop RunMapRedirectSync @ {Timestamp}", DateTime.UtcNow);
             }).ConfigureAwait(false);
     }
 
-    private async Task ProcessGameMapSync(GameType gameType, string gameKey)
+    private async Task ProcessGameMapSync(GameType gameType, string gameKey, MapRedirectSnapshot snapshot, CancellationToken cancellationToken)
     {
         logger.LogInformation("Starting map sync for game '{GameType}' with key '{GameKey}'", gameType, gameKey);
 
         try
         {
-            // Retrieve all of the maps from the redirect server
-            var mapRedirectEntries = await MapRedirectRepository.GetMapEntriesForGame(gameKey).ConfigureAwait(false);
-
-            // Retrieve all of the maps from the repository in batches
             var skipEntries = 0;
             var takeEntries = 500;
 
             List<MapDto> repositoryMaps = [];
-            ApiResult<CollectionModel<MapDto>>? mapsCollectionBatch = null;
-            while (mapsCollectionBatch is null || (mapsCollectionBatch.IsSuccess && mapsCollectionBatch.Result?.Data?.Items is not null && mapsCollectionBatch.Result.Data.Items.Any()))
+            while (true)
             {
-                mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null, skipEntries, takeEntries, null).ConfigureAwait(false);
-                if (mapsCollectionBatch.IsSuccess && mapsCollectionBatch.Result?.Data?.Items is not null)
+                cancellationToken.ThrowIfCancellationRequested();
+                var mapsCollectionBatch = await repositoryApiClient.Maps.V1.GetMaps(gameType, null, null, null,
+                    skipEntries, takeEntries, null, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!mapsCollectionBatch.IsSuccess || mapsCollectionBatch.Result?.Data?.Items is not { } items)
                 {
-                    repositoryMaps.AddRange(mapsCollectionBatch.Result.Data.Items);
+                    throw new InvalidOperationException($"Repository map enumeration failed for '{gameType}' (HTTP {(int)mapsCollectionBatch.StatusCode}); no partial synchronization is permitted.");
+                }
+                if (!items.Any())
+                {
+                    break;
                 }
 
+                repositoryMaps.AddRange(items);
                 skipEntries += takeEntries;
             }
 
             logger.LogInformation("Total maps retrieved from redirect for '{GameType}' is '{RedirectCount}' and repository is '{RepositoryCount}'",
-                gameType, mapRedirectEntries.Count, repositoryMaps.Count);
+                gameType, snapshot.Maps.Count, repositoryMaps.Count);
 
             // Compare the map entries in the redirect to those in the repository and generate a list of additions and changes.
             List<CreateMapDto> mapDtosToCreate = [];
             List<EditMapDto> mapDtosToUpdate = [];
 
-            foreach (var mapRedirectEntry in mapRedirectEntries)
+            var redirectNames = snapshot.Maps.Select(map => map.Name).ToHashSet(StringComparer.Ordinal);
+            foreach (var manifest in snapshot.Maps)
             {
-                var repositoryMap = repositoryMaps.SingleOrDefault(m => m.GameType == gameType && m.MapName == mapRedirectEntry.MapName);
+                var repositoryMap = repositoryMaps.SingleOrDefault(m => m.GameType == gameType && m.MapName == manifest.Name);
+                var mapFiles = manifest.Files
+                    .Where(file => file.Name.EndsWith(".iwd", StringComparison.OrdinalIgnoreCase) || file.Name.EndsWith(".ff", StringComparison.OrdinalIgnoreCase))
+                    .Select(file => new MapFileDto(file.Path[(manifest.Path.Length + 1)..],
+                        file.DirectUrl ?? throw new InvalidOperationException("Redirect manifest file has no direct URL."))
+                    {
+                        RedirectVersion = file.Version
+                    })
+                    .ToList();
 
                 if (repositoryMap is null)
                 {
-                    var mapDtoToCreate = new CreateMapDto(gameType, mapRedirectEntry.MapName)
+                    var mapDtoToCreate = new CreateMapDto(gameType, manifest.Name)
                     {
-                        MapFiles = [..mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).Select(mf =>
-                            new MapFileDto(mf, $"{_mapRedirectBaseUrl}/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
+                        MapFiles = mapFiles
                     };
 
                     mapDtosToCreate.Add(mapDtoToCreate);
                 }
                 else
                 {
-                    var mapFiles = mapRedirectEntry.MapFiles.Where(mf => mf.EndsWith(".iwd") || mf.EndsWith(".ff")).ToList();
-
-                    if (mapFiles.Count != repositoryMap.MapFiles.Count)
+                    mapFiles.AddRange(GetExternalFiles(repositoryMap, snapshot.DirectBaseUrl, gameKey));
+                    if (!mapFiles.OrderBy(file => file.FileName, StringComparer.Ordinal)
+                        .ThenBy(file => file.Url, StringComparer.Ordinal)
+                        .ThenBy(file => file.RedirectVersion, StringComparer.Ordinal)
+                        .SequenceEqual(repositoryMap.MapFiles.OrderBy(file => file.FileName, StringComparer.Ordinal)
+                            .ThenBy(file => file.Url, StringComparer.Ordinal)
+                            .ThenBy(file => file.RedirectVersion, StringComparer.Ordinal)))
                     {
                         mapDtosToUpdate.Add(new EditMapDto(repositoryMap.MapId)
                         {
-                            MapFiles = [..mapFiles.Select(mf =>
-                                new MapFileDto(mf, $"{_mapRedirectBaseUrl}/redirect/{gameKey}/usermaps/{mapRedirectEntry.MapName}/{mf}"))]
+                            MapFiles = mapFiles,
+                            ReplaceMapFiles = true
                         });
                     }
+                }
+            }
+
+            foreach (var map in repositoryMaps.Where(map => !redirectNames.Contains(map.MapName)))
+            {
+                var retainedFiles = GetExternalFiles(map, snapshot.DirectBaseUrl, gameKey).ToList();
+                if (retainedFiles.Count != map.MapFiles.Count)
+                {
+                    mapDtosToUpdate.Add(new EditMapDto(map.MapId) { MapFiles = retainedFiles, ReplaceMapFiles = true });
                 }
             }
 
@@ -127,7 +154,12 @@ public class MapRedirectSync(
 
             if (mapDtosToCreate.Count != 0)
             {
-                await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                var created = await repositoryApiClient.Maps.V1.CreateMaps(mapDtosToCreate, cancellationToken).ConfigureAwait(false);
+                if (!created.IsSuccess)
+                {
+                    throw new InvalidOperationException($"Creating maps from redirect failed (HTTP {(int)created.StatusCode}).");
+                }
 
                 foreach (var mapDto in mapDtosToCreate)
                 {
@@ -142,7 +174,12 @@ public class MapRedirectSync(
 
             if (mapDtosToUpdate.Count != 0)
             {
-                await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                var updated = await repositoryApiClient.Maps.V1.UpdateMaps(mapDtosToUpdate, cancellationToken).ConfigureAwait(false);
+                if (!updated.IsSuccess)
+                {
+                    throw new InvalidOperationException($"Updating maps from redirect failed (HTTP {(int)updated.StatusCode}).");
+                }
 
                 foreach (var mapDto in mapDtosToUpdate)
                 {
@@ -157,10 +194,21 @@ public class MapRedirectSync(
 
             logger.LogInformation("Completed map sync for game '{GameType}'", gameType);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to sync maps for game '{GameType}' with key '{GameKey}'", gameType, gameKey);
             throw;
         }
+    }
+
+    private static IEnumerable<MapFileDto> GetExternalFiles(MapDto map, string directBaseUrl, string gameKey)
+    {
+        var mapRoot = new Uri($"{directBaseUrl.TrimEnd('/')}/redirect/{gameKey}/usermaps/{Uri.EscapeDataString(map.MapName)}/");
+        return map.MapFiles.Where(file =>
+            !Uri.TryCreate(file.Url, UriKind.Absolute, out var fileUrl) || !mapRoot.IsBaseOf(fileUrl));
     }
 }
