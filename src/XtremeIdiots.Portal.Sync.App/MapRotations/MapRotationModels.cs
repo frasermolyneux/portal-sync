@@ -23,6 +23,9 @@ public static class MapRotationOrchestrationPolicies
 public record SyncMapInput(Guid GameServerId, string MapName, GameType GameType);
 public record RemoveMapInput(Guid GameServerId, string MapName, GameType GameType);
 public record GetLoadedMapsInput(Guid GameServerId);
+public record VerifyMapFilesInput(Guid GameServerId, List<string> MapNames);
+public record RotationWorkflowResult(bool Success, string? Error = null);
+public record LinkedConfigurationInput(Guid GameServerId, Guid RotationId, Guid AssignmentId, string? Variable);
 public record GetSharedMapsInput(Guid GameServerId, Guid ExcludeAssignmentId);
 public record UpdateStatusInput(
     Guid AssignmentId,

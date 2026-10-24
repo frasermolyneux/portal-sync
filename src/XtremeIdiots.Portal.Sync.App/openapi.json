@@ -20,6 +20,31 @@
     }
   ],
   "paths": {
+    "/api/map-rotations/apply/{assignmentId}": {
+      "post": {
+        "operationId": "TriggerApplyMapRotation",
+        "description": "Repair and verify map files, then apply this slot and linked main/AACP slots using the same rotation.",
+        "parameters": [
+          {
+            "name": "assignmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Operation accepted; poll its status for the actual result"
+          },
+          "409": {
+            "description": "Another assignment operation is already in progress"
+          }
+        }
+      }
+    },
     "/api/map-rotations/sync/{assignmentId}": {
       "post": {
         "operationId": "TriggerSyncMapRotation",
@@ -127,6 +152,7 @@
     "/api/map-rotations/terminate/{instanceId}": {
       "post": {
         "operationId": "TerminateMapRotationOrchestration",
+        "description": "Request safe cancellation. A 202 acknowledgment is not completed cancellation; the current service call may still finish.",
         "parameters": [
           {
             "name": "instanceId",
@@ -139,7 +165,10 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "The instance is already terminal"
+          },
+          "202": {
+            "description": "Cancellation requested; continue polling until terminal"
           },
           "404": {
             "description": "Orchestration instance not found"

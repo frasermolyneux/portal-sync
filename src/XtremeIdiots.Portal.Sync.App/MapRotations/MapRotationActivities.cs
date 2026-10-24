@@ -1,5 +1,6 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using System.Text.RegularExpressions;
 using MX.Api.Abstractions;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
@@ -39,12 +40,6 @@ public class MapRotationActivities(
             logger.LogInformation("Pushing map {MapName} to server {GameServerId}", input.MapName, input.GameServerId);
             var result = await serversApiClient.Maps.V1.PushServerMapToHost(input.GameServerId, input.MapName).ConfigureAwait(false);
 
-            if (!result.IsSuccess && result.StatusCode == System.Net.HttpStatusCode.BadRequest)
-            {
-                logger.LogWarning("Map {MapName} has no files available for server {GameServerId}", input.MapName, input.GameServerId);
-                return new MapOperationResult(input.MapName, true, SkipReason: SkipReasons.NoMapFiles);
-            }
-
             return new MapOperationResult(input.MapName, result.IsSuccess,
                 Error: result.IsSuccess ? null : $"Failed to push map: {result.StatusCode}");
         }
@@ -53,6 +48,26 @@ public class MapRotationActivities(
             logger.LogError(ex, "Failed to push map {MapName} to server {GameServerId}", input.MapName, input.GameServerId);
             return new MapOperationResult(input.MapName, false, ex.Message);
         }
+    }
+
+    [Function(nameof(VerifyMapFiles))]
+    public async Task<List<MapOperationResult>> VerifyMapFiles([ActivityTrigger] VerifyMapFilesInput input)
+    {
+        var names = input.MapNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var response = await serversApiClient.Maps.V1.VerifyServerMaps(input.GameServerId, names).ConfigureAwait(false);
+        if (!response.IsSuccess || response.Result?.Data?.Items is not { } items)
+        {
+            throw new InvalidOperationException($"File verification failed for server {input.GameServerId}: {response.StatusCode}.");
+        }
+
+        if (items.Count() != names.Count || names.Any(name =>
+            items.Count(item => string.Equals(item.MapName, name, StringComparison.OrdinalIgnoreCase)) != 1))
+        {
+            throw new InvalidOperationException("File verification returned an incomplete or ambiguous map result.");
+        }
+
+        return items.Select(item => new MapOperationResult(item.MapName, item.ExistsOnServer,
+            item.ExistsOnServer ? null : "Required map files are missing or have an incorrect size.")).ToList();
     }
 
     [Function(nameof(RemoveSingleMapFromServer))]
@@ -141,6 +156,39 @@ public class MapRotationActivities(
         }
 
         return sharedMapNames.Distinct().ToList();
+    }
+
+    [Function(nameof(GetLinkedConfigurationAssignments))]
+    public async Task<List<Guid>> GetLinkedConfigurationAssignments([ActivityTrigger] LinkedConfigurationInput input)
+    {
+        var counterpart = string.Equals(input.Variable, "sv_maprotation", StringComparison.OrdinalIgnoreCase)
+            ? "scr_aacp_maps_1"
+            : string.Equals(input.Variable, "scr_aacp_maps_1", StringComparison.OrdinalIgnoreCase)
+                ? "sv_maprotation" : null;
+        if (counterpart is null)
+        {
+            return [];
+        }
+        var linked = new List<Guid>();
+        for (var skip = 0; ; skip += 100)
+        {
+            var result = await repositoryApiClient.MapRotations.V1
+                .GetServerAssignments(null, input.GameServerId, null, skip, 100).ConfigureAwait(false);
+            if (!result.IsSuccess || result.Result?.Data?.Items is not { } items)
+            {
+                throw new InvalidOperationException($"Could not load linked configuration slots for server {input.GameServerId}: {result.StatusCode}.");
+            }
+            linked.AddRange(items.Where(assignment =>
+                assignment.MapRotationServerAssignmentId != input.AssignmentId &&
+                assignment.MapRotationId == input.RotationId &&
+                assignment.DeploymentState is not (DeploymentState.Removed or DeploymentState.Removing) &&
+                string.Equals(assignment.ConfigVariableName, counterpart, StringComparison.OrdinalIgnoreCase))
+                .Select(assignment => assignment.MapRotationServerAssignmentId));
+            if (items.Count() < 100)
+            {
+                return linked;
+            }
+        }
     }
 
     [Function(nameof(UpdateAssignmentStatus))]
@@ -426,6 +474,47 @@ public class MapRotationActivities(
             return new MapOperationResult(input.ConfigVariableName, false, ex.Message);
         }
     }
+
+    [Function(nameof(WriteAndVerifyConfigVariable))]
+    public async Task WriteAndVerifyConfigVariable([ActivityTrigger] WriteConfigInput input)
+    {
+        var write = await WriteConfigVariable(input).ConfigureAwait(false);
+        if (!write.Success)
+        {
+            throw new InvalidOperationException(write.Error);
+        }
+
+        var content = await ReadConfig(input).ConfigureAwait(false);
+        var matches = ConfigVariableMatches(content, input.ConfigVariableName);
+        if (matches.Count != 1 || !string.Equals(matches[0].Groups[1].Value, input.Value, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Config read-back did not confirm a unique '{input.ConfigVariableName}' value.");
+        }
+    }
+
+    [Function(nameof(ClearConfigVariableIfPresent))]
+    public async Task ClearConfigVariableIfPresent([ActivityTrigger] WriteConfigInput input)
+    {
+        var content = await ReadConfig(input).ConfigureAwait(false);
+        if (ConfigVariableMatches(content, input.ConfigVariableName).Count != 0)
+        {
+            await WriteAndVerifyConfigVariable(input with { Value = "" }).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<string> ReadConfig(WriteConfigInput input)
+    {
+        var response = await serversApiClient.Config.V1.GetConfigFile(input.GameServerId, input.ConfigFilePath).ConfigureAwait(false);
+        if (!response.IsSuccess || response.Result?.Data is not { } config)
+        {
+            throw new InvalidOperationException($"Could not read back configuration '{input.ConfigFilePath}': {response.StatusCode}.");
+        }
+        return config.Content;
+    }
+
+    private static MatchCollection ConfigVariableMatches(string content, string name) =>
+        Regex.Matches(content, $@"^\s*set\s+{Regex.Escape(name)}\s+""([^""]*)""",
+            RegexOptions.Multiline | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
 
     [Function(nameof(SetRconDvar))]
     public async Task<MapOperationResult> SetRconDvar(

@@ -14,6 +14,32 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 {
     private readonly ILogger<MapRotationHttpTriggers> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
+    [Function(nameof(TriggerApplyMapRotation))]
+    public async Task<HttpResponseData> TriggerApplyMapRotation(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "map-rotations/apply/{assignmentId}")] HttpRequestData req,
+        [DurableClient] DurableTaskClient client,
+        Guid assignmentId)
+    {
+        var instanceId = $"maprot-apply-{assignmentId}";
+        var conflict = await RejectConflictingOperation(req, client, assignmentId, instanceId).ConfigureAwait(false);
+        if (conflict != null)
+        {
+            return conflict;
+        }
+        var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
+        if (existing is not null && IsBusy(existing.RuntimeStatus))
+        {
+            return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+        }
+        if (existing is not null)
+        {
+            await client.PurgeInstanceAsync(instanceId).ConfigureAwait(false);
+        }
+        await client.ScheduleNewOrchestrationInstanceAsync(nameof(MapRotationWorkflow.ApplyMapRotationV2),
+            new SyncOrchestrationInput(assignmentId), new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
+        return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+    }
+
     [Function(nameof(TriggerSyncMapRotation))]
     public async Task<HttpResponseData> TriggerSyncMapRotation(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "map-rotations/sync/{assignmentId}")] HttpRequestData req,
@@ -21,9 +47,11 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         Guid assignmentId)
     {
         var instanceId = $"maprot-sync-{assignmentId}";
+        var conflict = await RejectConflictingOperation(req, client, assignmentId, instanceId).ConfigureAwait(false);
+        if (conflict != null) { return conflict; }
 
         var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
-        if (existing is not null && existing.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        if (existing is not null && IsBusy(existing.RuntimeStatus))
         {
             logger.LogWarning("SyncMapRotation already running for assignment {AssignmentId}, instance {InstanceId}", assignmentId, instanceId);
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
@@ -37,7 +65,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationOrchestrators.SyncMapRotationOrchestrator),
+            nameof(MapRotationWorkflow.RepairMapRotationV2),
             new SyncOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -52,9 +80,11 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         Guid assignmentId)
     {
         var instanceId = $"maprot-remove-{assignmentId}";
+        var conflict = await RejectConflictingOperation(req, client, assignmentId, instanceId).ConfigureAwait(false);
+        if (conflict != null) { return conflict; }
 
         var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
-        if (existing is not null && existing.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        if (existing is not null && IsBusy(existing.RuntimeStatus))
         {
             logger.LogWarning("RemoveMapRotation already running for assignment {AssignmentId}, instance {InstanceId}", assignmentId, instanceId);
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
@@ -67,7 +97,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationOrchestrators.RemoveMapRotationOrchestrator),
+            nameof(MapRotationWorkflow.UnassignMapRotationV2),
             new RemoveOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -82,9 +112,11 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         Guid assignmentId)
     {
         var instanceId = $"maprot-activate-{assignmentId}";
+        var conflict = await RejectConflictingOperation(req, client, assignmentId, instanceId).ConfigureAwait(false);
+        if (conflict != null) { return conflict; }
 
         var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
-        if (existing is not null && existing.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        if (existing is not null && IsBusy(existing.RuntimeStatus))
         {
             logger.LogWarning("ActivateMapRotation already running for assignment {AssignmentId}, instance {InstanceId}", assignmentId, instanceId);
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
@@ -97,7 +129,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationOrchestrators.ActivateMapRotationOrchestrator),
+            nameof(MapRotationWorkflow.ActivateMapRotationV2),
             new ActivateOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -112,9 +144,11 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         Guid assignmentId)
     {
         var instanceId = $"maprot-deactivate-{assignmentId}";
+        var conflict = await RejectConflictingOperation(req, client, assignmentId, instanceId).ConfigureAwait(false);
+        if (conflict != null) { return conflict; }
 
         var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
-        if (existing is not null && existing.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        if (existing is not null && IsBusy(existing.RuntimeStatus))
         {
             logger.LogWarning("DeactivateMapRotation already running for assignment {AssignmentId}, instance {InstanceId}", assignmentId, instanceId);
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
@@ -127,7 +161,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationOrchestrators.DeactivateMapRotationOrchestrator),
+            nameof(MapRotationWorkflow.DeactivateMapRotationV2),
             new DeactivateOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -142,9 +176,11 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         Guid assignmentId)
     {
         var instanceId = $"maprot-verify-{assignmentId}";
+        var conflict = await RejectConflictingOperation(req, client, assignmentId, instanceId).ConfigureAwait(false);
+        if (conflict != null) { return conflict; }
 
         var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
-        if (existing is not null && existing.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        if (existing is not null && IsBusy(existing.RuntimeStatus))
         {
             logger.LogWarning("VerifyMapRotation already running for assignment {AssignmentId}, instance {InstanceId}", assignmentId, instanceId);
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
@@ -157,7 +193,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationOrchestrators.VerifyMapRotationOrchestrator),
+            nameof(MapRotationWorkflow.VerifyMapRotationV2),
             new VerifyOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -180,13 +216,10 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
             return notFoundResponse;
         }
 
-        // Parse custom status from serialized JSON to avoid double-encoding
-        JsonNode? customStatus = null;
-        if (!string.IsNullOrEmpty(metadata.SerializedCustomStatus))
-        {
-            try { customStatus = JsonNode.Parse(metadata.SerializedCustomStatus); }
-            catch { /* ignore parse failures */ }
-        }
+        var customStatus = ParseState(metadata.SerializedCustomStatus, instanceId);
+        var result = ParseState(metadata.SerializedOutput, instanceId) as JsonObject;
+        var successValue = result?["Success"] ?? result?["success"];
+        bool? success = successValue is JsonValue value && value.TryGetValue<bool>(out var succeeded) ? succeeded : null;
 
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(new
@@ -195,7 +228,9 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
             runtimeStatus = metadata.RuntimeStatus.ToString(),
             createdAt = metadata.CreatedAt,
             lastUpdatedAt = metadata.LastUpdatedAt,
-            progress = customStatus
+            progress = customStatus,
+            success,
+            result
         }).ConfigureAwait(false);
 
         return response;
@@ -216,10 +251,32 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
             return notFoundResponse;
         }
 
-        if (metadata.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        if (IsBusy(metadata.RuntimeStatus))
         {
+            if (metadata.Name.EndsWith("V2", StringComparison.Ordinal))
+            {
+                await client.RaiseEventAsync(instanceId, MapRotationWorkflow.CancellationEvent, new { requested = true }).ConfigureAwait(false);
+                if (metadata.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)
+                {
+                    await client.ResumeInstanceAsync(instanceId, "Resume only to process the requested safe cancellation.").ConfigureAwait(false);
+                }
+                var accepted = req.CreateResponse(HttpStatusCode.Accepted);
+                await accepted.WriteAsJsonAsync(new { instanceId, terminated = false, cancellationRequested = true }).ConfigureAwait(false);
+                accepted.StatusCode = HttpStatusCode.Accepted;
+                return accepted;
+            }
             await client.TerminateInstanceAsync(instanceId, "Manually cancelled by user via portal").ConfigureAwait(false);
-            logger.LogInformation("Terminated orchestration {InstanceId} (was {RuntimeStatus})", instanceId, metadata.RuntimeStatus);
+            logger.LogInformation("Requested termination of legacy orchestration {InstanceId} (was {RuntimeStatus})", instanceId, metadata.RuntimeStatus);
+            var acceptedLegacy = req.CreateResponse(HttpStatusCode.Accepted);
+            await acceptedLegacy.WriteAsJsonAsync(new
+            {
+                instanceId,
+                terminated = false,
+                cancellationRequested = true,
+                warning = "An in-flight legacy activity may still finish. Verify files and configuration before retrying."
+            }).ConfigureAwait(false);
+            acceptedLegacy.StatusCode = HttpStatusCode.Accepted;
+            return acceptedLegacy;
         }
         else
         {
@@ -256,7 +313,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         var instanceId = $"map-push-{gameServerId}-{safeMapName}";
 
         var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
-        if (existing is not null && existing.RuntimeStatus is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending)
+        if (existing is not null && IsBusy(existing.RuntimeStatus))
         {
             logger.LogWarning("PushMapToServer already running for {GameServerId}/{MapName}, instance {InstanceId}", gameServerId, mapName, instanceId);
             return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
@@ -268,11 +325,52 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationOrchestrators.PushMapToServerOrchestrator),
+            nameof(MapRotationWorkflow.PushMapToServerV2),
             new PushMapOrchestrationInput(gameServerId, mapName, parsedGameType),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
         logger.LogInformation("Started PushMapToServer orchestration {InstanceId} for {GameServerId}/{MapName}", instanceId, gameServerId, mapName);
         return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
+    }
+
+    private JsonNode? ParseState(string? serialized, string instanceId)
+    {
+        if (string.IsNullOrEmpty(serialized))
+        {
+            return null;
+        }
+        try
+        {
+            return JsonNode.Parse(serialized);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            logger.LogWarning(ex, "Invalid state JSON for orchestration {InstanceId}", instanceId);
+            return null;
+        }
+    }
+
+    private static bool IsBusy(OrchestrationRuntimeStatus state) =>
+        state is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending or OrchestrationRuntimeStatus.Suspended;
+
+    private static async Task<HttpResponseData?> RejectConflictingOperation(
+        HttpRequestData req, DurableTaskClient client, Guid assignmentId, string requestedId)
+    {
+        foreach (var action in new[] { "sync", "apply", "activate", "deactivate", "verify", "remove" })
+        {
+            var instanceId = $"maprot-{action}-{assignmentId}";
+            if (instanceId == requestedId)
+            {
+                continue;
+            }
+            var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
+            if (existing is not null && IsBusy(existing.RuntimeStatus))
+            {
+                var response = req.CreateResponse(HttpStatusCode.Conflict);
+                await response.WriteAsJsonAsync(new { error = "Another operation is already in progress for this assignment.", instanceId }).ConfigureAwait(false);
+                return response;
+            }
+        }
+        return null;
     }
 }
