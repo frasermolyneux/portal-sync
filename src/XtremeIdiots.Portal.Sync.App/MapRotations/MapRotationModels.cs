@@ -27,7 +27,7 @@ public record VerifyMapFilesInput(Guid GameServerId, List<string> MapNames);
 public record RotationWorkflowResult(bool Success, string? Error = null);
 public record LinkedConfigurationInput(Guid GameServerId, Guid RotationId, Guid AssignmentId, string? Variable);
 public record LinkedConfigurationTarget(Guid AssignmentId, string? ConfigFilePath, string? ConfigVariableName);
-public record ConfigSlotInput(Guid GameServerId, Guid AssignmentId, string ConfigFilePath, string ConfigVariableName);
+public record ConfigSlotInput(Guid GameServerId, Guid AssignmentId, string ConfigVariableName);
 public record GetSharedMapsInput(Guid GameServerId, Guid ExcludeAssignmentId);
 public record UpdateStatusInput(
     Guid AssignmentId,

@@ -156,9 +156,10 @@ public class MapRotationWorkflowTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task AacpContinuationsCannotClearOrOverwriteAnotherSlotsVariable(bool needsReservedPart)
+    [InlineData(false, "Activate")]
+    [InlineData(true, "Activate")]
+    [InlineData(false, "Deactivate")]
+    public async Task AacpContinuationsCannotClearOrOverwriteAnotherSlotsVariable(bool needsReservedPart, string action)
     {
         const string reserved = "scr_aacp_maps_2";
         context.Setup(x => x.CallActivityAsync<List<string>>(
@@ -171,15 +172,15 @@ public class MapRotationWorkflowTests
                     new RotationStringPart("scr_aacp_maps_1", "mp_custom"), new RotationStringPart(reserved, "mp_more")]));
         }
 
-        var result = await Run("Activate");
+        var result = await Run(action);
 
         Assert.Equal(!needsReservedPart, result.Success);
         context.Verify(x => x.CallActivityAsync(
             It.Is<TaskName>(name => name == nameof(MapRotationActivities.ClearConfigVariableIfPresent)),
-            It.Is<WriteConfigInput>(input => input.ConfigVariableName == reserved), It.IsAny<TaskOptions>()), Times.Never);
+            It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Never);
         context.Verify(x => x.CallActivityAsync<MapOperationResult>(
             It.Is<TaskName>(name => name == nameof(MapRotationActivities.SetRconDvar)),
-            It.Is<SetRconDvarInput>(input => input.DvarName == reserved), It.IsAny<TaskOptions>()), Times.Never);
+            It.Is<SetRconDvarInput>(input => input.DvarName != "scr_aacp_maps_1"), It.IsAny<TaskOptions>()), Times.Never);
         if (needsReservedPart)
         {
             context.Verify(x => x.CallActivityAsync(

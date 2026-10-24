@@ -1,5 +1,6 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using System.Text;
 using System.Text.RegularExpressions;
 using MX.Api.Abstractions;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
@@ -220,8 +221,7 @@ public class MapRotationActivities(
             }
             foreach (var assignment in items.Where(assignment =>
                 assignment.MapRotationServerAssignmentId != input.AssignmentId &&
-                assignment.DeploymentState is not (DeploymentState.Removed or DeploymentState.Removing) &&
-                string.Equals(assignment.ConfigFilePath, input.ConfigFilePath, StringComparison.OrdinalIgnoreCase) &&
+                assignment.DeploymentState != DeploymentState.Removed &&
                 !string.IsNullOrWhiteSpace(assignment.ConfigVariableName) &&
                 !string.Equals(assignment.ConfigVariableName, input.ConfigVariableName, StringComparison.OrdinalIgnoreCase)))
             {
@@ -528,8 +528,8 @@ public class MapRotationActivities(
         }
 
         var content = await ReadConfig(input).ConfigureAwait(false);
-        var matches = ConfigVariableMatches(content, input.ConfigVariableName);
-        if (matches.Count != 1 || !string.Equals(matches[0].Groups[1].Value, input.Value, StringComparison.Ordinal))
+        var values = ConfigVariableValues(content, input.ConfigVariableName);
+        if (values.Count != 1 || !string.Equals(values[0], input.Value, StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Config read-back did not confirm a unique '{input.ConfigVariableName}' value.");
         }
@@ -539,7 +539,7 @@ public class MapRotationActivities(
     public async Task ClearConfigVariableIfPresent([ActivityTrigger] WriteConfigInput input)
     {
         var content = await ReadConfig(input).ConfigureAwait(false);
-        if (ConfigVariableMatches(content, input.ConfigVariableName).Count != 0)
+        if (ConfigVariableValues(content, input.ConfigVariableName).Count != 0)
         {
             await WriteAndVerifyConfigVariable(input with { Value = "" }).ConfigureAwait(false);
         }
@@ -555,9 +555,100 @@ public class MapRotationActivities(
         return config.Content;
     }
 
-    private static MatchCollection ConfigVariableMatches(string content, string name) =>
-        Regex.Matches(content, $@"^\s*set\s+{Regex.Escape(name)}\s+""([^""]*)""",
-            RegexOptions.Multiline | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+    private static List<string> ConfigVariableValues(string content, string name)
+    {
+        var definition = $@"^(?:(?:set|seta|sets|setu)\s+)?{Regex.Escape(name)}";
+        const RegexOptions options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+        var header = new Regex(definition + @"(?:\s|$)", options, TimeSpan.FromSeconds(1));
+        var value = new Regex(definition + @"\s+""([^""]*)""\s*$", options, TimeSpan.FromSeconds(1));
+        var values = new List<string>();
+        foreach (var command in ConfigCommands(content).Where(command => header.IsMatch(command)))
+        {
+            var match = value.Match(command);
+            if (!match.Success)
+            {
+                throw new InvalidOperationException($"Configuration contains an unsupported '{name}' definition; read-back cannot be confirmed.");
+            }
+            values.Add(match.Groups[1].Value);
+        }
+        return values;
+    }
+
+    private static List<string> ConfigCommands(string content)
+    {
+        var commands = new List<string>();
+        var buffer = new StringBuilder();
+        var quoted = false;
+        var lineComment = false;
+        var blockComment = false;
+        void FinishCommand()
+        {
+            var command = buffer.ToString().Trim();
+            if (command.Length != 0)
+            {
+                commands.Add(command);
+            }
+            buffer.Length = 0;
+        }
+        for (var index = 0; index < content.Length; index++)
+        {
+            var character = content[index];
+            var next = index + 1 < content.Length ? content[index + 1] : '\0';
+            if (lineComment)
+            {
+                if (character is '\r' or '\n')
+                {
+                    lineComment = false;
+                    FinishCommand();
+                }
+                continue;
+            }
+            if (blockComment)
+            {
+                if (character == '*' && next == '/')
+                {
+                    blockComment = false;
+                    index++;
+                }
+                continue;
+            }
+            if (quoted)
+            {
+                _ = buffer.Append(character);
+                if (character == '\\' && next != '\0')
+                {
+                    _ = buffer.Append(next);
+                    index++;
+                }
+                else if (character == '"')
+                {
+                    quoted = false;
+                }
+                continue;
+            }
+            if (character == '/' && next is '/' or '*')
+            {
+                lineComment = next == '/';
+                blockComment = next == '*';
+                _ = buffer.Append(' ');
+                index++;
+                continue;
+            }
+            if (character is ';' or '\r' or '\n')
+            {
+                FinishCommand();
+                continue;
+            }
+            quoted = character == '"';
+            _ = buffer.Append(character);
+        }
+        if (quoted || blockComment)
+        {
+            throw new InvalidOperationException("Configuration contains unterminated quoted text or a block comment; read-back cannot be confirmed.");
+        }
+        FinishCommand();
+        return commands;
+    }
 
     [Function(nameof(SetRconDvar))]
     public async Task<MapOperationResult> SetRconDvar(

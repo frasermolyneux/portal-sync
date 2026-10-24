@@ -347,11 +347,11 @@ public static class MapRotationWorkflow
                     new FormatRotationInput(names, details.GameMode ?? "war", details.ConfigVariableName));
             var isAacp = details.ConfigVariableName.StartsWith("scr_aacp_maps_", StringComparison.OrdinalIgnoreCase);
             var aacpVariables = Enumerable.Range(1, 10).Select(index => $"scr_aacp_maps_{index}")
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                .ToList();
             if (formatted.Parts.Count == 0 || formatted.Parts.Any(part => part.Value.Length > 1024) ||
                 (!isAacp && formatted.Parts.Count > 1) || (isAacp && (formatted.Parts.Count > 10 ||
-                    !aacpVariables.Contains(details.ConfigVariableName) ||
-                    formatted.Parts.Any(part => !aacpVariables.Contains(part.VariableName)))))
+                    !aacpVariables.Contains(details.ConfigVariableName, StringComparer.OrdinalIgnoreCase) ||
+                    formatted.Parts.Any(part => !aacpVariables.Contains(part.VariableName, StringComparer.OrdinalIgnoreCase)))))
             {
                 throw new InvalidOperationException("The rotation exceeds the server slot's supported variable limits (1024 characters; one standard variable or ten AACP parts). Shorten the rotation before applying.");
             }
@@ -361,18 +361,20 @@ public static class MapRotationWorkflow
             }
             var reserved = isAacp
                 ? (await context.CallActivityAsync<List<string>>(nameof(MapRotationActivities.GetReservedConfigVariables),
-                    new ConfigSlotInput(serverId, assignmentId, details.ConfigFilePath, details.ConfigVariableName)))
+                    new ConfigSlotInput(serverId, assignmentId, details.ConfigVariableName)))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (formatted.Parts.Any(part => reserved.Contains(part.VariableName)))
+            var ownedAacpVariables = isAacp
+                ? aacpVariables.SkipWhile(variable => !string.Equals(variable, details.ConfigVariableName, StringComparison.OrdinalIgnoreCase))
+                    .TakeWhile(variable => !reserved.Contains(variable)).ToList()
+                : [];
+            if (isAacp && formatted.Parts.Any(part =>
+                !ownedAacpVariables.Contains(part.VariableName, StringComparer.OrdinalIgnoreCase)))
             {
                 throw new InvalidOperationException("An AACP continuation variable belongs to another configuration slot. Resolve the slot overlap before applying.");
             }
-            var overflowVariables = isAacp
-                ? RotationVariableNaming.GetOverflowVariableNames(details.ConfigVariableName,
-                    formatted.Parts.Select(part => part.VariableName).ToHashSet(StringComparer.OrdinalIgnoreCase))
-                    .Where(variable => aacpVariables.Contains(variable) && !reserved.Contains(variable)).ToList()
-                : [];
+            var used = formatted.Parts.Select(part => part.VariableName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var overflowVariables = ownedAacpVariables.Where(variable => !used.Contains(variable)).ToList();
 
             foreach (var part in formatted.Parts)
             {

@@ -28,10 +28,11 @@ public class MapRotationFileVerificationTests
         var selected = Guid.NewGuid();
         var linked = Guid.NewGuid();
         var now = DateTime.UtcNow;
-        MapRotationServerAssignmentDto Assignment(Guid id, Guid rotationId, string variable)
+        MapRotationServerAssignmentDto Assignment(Guid id, Guid rotationId, string variable,
+            DeploymentState state = DeploymentState.Synced, string path = "server.cfg")
         {
-            return new(id, rotationId, server, DeploymentState.Synced, ActivationState.Active, 1, 1,
-                "server.cfg", variable, null, null, now, now, null);
+            return new(id, rotationId, server, state, ActivationState.Active, 1, 1,
+                path, variable, null, null, now, now, null);
         }
         var firstPage = Enumerable.Range(0, 100)
             .Select(_ => Assignment(Guid.NewGuid(), Guid.NewGuid(), "scr_aacp_maps_1")).ToList();
@@ -39,6 +40,7 @@ public class MapRotationFileVerificationTests
         {
             Assignment(linked, rotation, "scr_aacp_maps_1"),
             Assignment(Guid.NewGuid(), Guid.NewGuid(), "scr_aacp_maps_2"),
+            Assignment(Guid.NewGuid(), Guid.NewGuid(), "scr_aacp_maps_3", DeploymentState.Removing, "other.cfg"),
             Assignment(Guid.NewGuid(), rotation, "scr_small_rotation")
         };
         var api = Mock.Get(repository.Object.MapRotations.V1);
@@ -58,8 +60,9 @@ public class MapRotationFileVerificationTests
         Assert.Equal("scr_aacp_maps_1", target.ConfigVariableName);
         Assert.Empty(await activities.GetLinkedConfigurationAssignments(
             new LinkedConfigurationInput(server, rotation, selected, "scr_small_rotation")));
-        var reserved = await activities.GetReservedConfigVariables(new ConfigSlotInput(server, selected, "server.cfg", "scr_aacp_maps_1"));
+        var reserved = await activities.GetReservedConfigVariables(new ConfigSlotInput(server, selected, "scr_aacp_maps_1"));
         Assert.Contains("scr_aacp_maps_2", reserved);
+        Assert.Contains("scr_aacp_maps_3", reserved);
         Assert.DoesNotContain("scr_aacp_maps_1", reserved);
     }
 
@@ -112,6 +115,55 @@ public class MapRotationFileVerificationTests
 
         Assert.False(result.Success);
         Assert.Null(result.SkipReason);
+    }
+
+    [Theory]
+    [InlineData("set sv_maprotation \"expected\"; set sv_maprotation \"stale\"", "expected", false)]
+    [InlineData("set sv_maprotation \"\"; set sv_maprotation \"stale\"", "", false)]
+    [InlineData("set sv_maprotation \"expected\"\nseta sv_maprotation \"stale\"", "expected", false)]
+    [InlineData("set sv_maprotation \"expected\"\nsv_maprotation \"stale\"", "expected", false)]
+    [InlineData("/*\nset sv_maprotation \"expected\"\n*/", "expected", false)]
+    [InlineData("set sv_maprotation \"expected\" // set sv_maprotation \"stale\";", "expected", true)]
+    [InlineData("/* set sv_maprotation \"stale\" */\nset sv_maprotation \"expected\";", "expected", true)]
+    [InlineData("set sv_maprotation \"mp_a;mp_b\"", "mp_a;mp_b", true)]
+    [InlineData("set hostname \"// not a comment\"; set sv_maprotation \"expected\"", "expected", true)]
+    public async Task ConfigReadBackFindsAllExecutableDefinitionsWithoutCountingCommentsOrQuotedSeparators(
+        string config, string expected, bool success)
+    {
+        var server = Guid.NewGuid();
+        var api = Mock.Get(servers.Object.Config.V1);
+        api.Setup(x => x.UpdateConfigVariable(server, "server.cfg", "sv_maprotation", expected, null))
+            .ReturnsAsync(new ApiResult(HttpStatusCode.OK));
+        api.Setup(x => x.GetConfigFile(server, "server.cfg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
+                new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg", config))));
+        var input = new WriteConfigInput(server, "server.cfg", "sv_maprotation", expected);
+        if (success)
+        {
+            await Create().WriteAndVerifyConfigVariable(input);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Create().WriteAndVerifyConfigVariable(input));
+        }
+    }
+
+    [Fact]
+    public async Task ClearCannotIgnoreADefinitionAfterAnotherCommandOnTheSameLine()
+    {
+        var server = Guid.NewGuid();
+        var api = Mock.Get(servers.Object.Config.V1);
+        api.Setup(x => x.UpdateConfigVariable(server, "server.cfg", "sv_maprotation", "", null))
+            .ReturnsAsync(new ApiResult(HttpStatusCode.OK));
+        api.Setup(x => x.GetConfigFile(server, "server.cfg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
+                new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg",
+                    "set other \"value\"; set sv_maprotation \"stale\""))));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Create().ClearConfigVariableIfPresent(
+            new WriteConfigInput(server, "server.cfg", "sv_maprotation", "")));
+
+        api.Verify(x => x.UpdateConfigVariable(server, "server.cfg", "sv_maprotation", "", null), Times.Once);
     }
 
     [Theory]
