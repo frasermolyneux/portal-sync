@@ -167,6 +167,23 @@ public static class MapRotationWorkflow
             RequireSuccess(result);
         }
 
+        async Task WriteConfig(string activity, WriteConfigInput input)
+        {
+            Check();
+            try
+            {
+                await context.CallActivityAsync(activity, input);
+            }
+            catch (TaskFailedException)
+            {
+                Check();
+                await context.CreateTimer(context.CurrentUtcDateTime.AddSeconds(10), CancellationToken.None);
+                Check();
+                await context.CallActivityAsync(activity, input);
+            }
+            Check();
+        }
+
         try
         {
             await StartOperation(action switch
@@ -216,20 +233,20 @@ public static class MapRotationWorkflow
                     Check();
                     mapProgress[index] = mapProgress[index] with { Status = "InProgress" };
                     context.SetCustomStatus(new OrchestrationProgress(action, names.Count, index, mapProgress));
-                    var result = await context.CallActivityAsync<MapOperationResult>(nameof(MapRotationActivities.SyncSingleMapToServer),
+                    var result = await context.CallActivityAsync<MapOperationResult>(nameof(MapRotationActivities.RepairSingleMapToServer),
                         new SyncMapInput(serverId, names[index], details.GameType));
                     if (!result.Success)
                     {
                         Check();
                         await context.CreateTimer(context.CurrentUtcDateTime.AddSeconds(10), CancellationToken.None);
                         Check();
-                        result = await context.CallActivityAsync<MapOperationResult>(nameof(MapRotationActivities.SyncSingleMapToServer),
+                        result = await context.CallActivityAsync<MapOperationResult>(nameof(MapRotationActivities.RepairSingleMapToServer),
                             new SyncMapInput(serverId, names[index], details.GameType));
                     }
                     mapProgress[index] = mapProgress[index] with
                     {
-                        Status = result.Success ? "Completed" : "Failed",
-                        Error = result.Error
+                        Status = result.Success ? (result.SkipReason is null ? "Completed" : "Skipped") : "Failed",
+                        Error = result.Error ?? result.SkipReason
                     };
                     context.SetCustomStatus(new OrchestrationProgress(action, names.Count, index + 1, mapProgress));
                     if (!result.Success)
@@ -300,21 +317,19 @@ public static class MapRotationWorkflow
             {
                 Check();
                 Progress(context, action, $"Write and read back {part.VariableName}", "InProgress");
-                await context.CallActivityAsync(nameof(MapRotationActivities.WriteAndVerifyConfigVariable),
+                await WriteConfig(nameof(MapRotationActivities.WriteAndVerifyConfigVariable),
                     new WriteConfigInput(serverId, details.ConfigFilePath, part.VariableName, part.Value,
                         action == "Deactivate" ? [] :
                         [$"Managed by XtremeIdiots Portal - {details.Title ?? "Map Rotation"}",
-                         $"https://portal.xtremeidiots.com/MapRotations/Details/{details.MapRotationId}"]),
-                    MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+                         $"https://portal.xtremeidiots.com/MapRotations/Details/{details.MapRotationId}"]));
             }
 
             var used = formatted.Parts.Select(part => part.VariableName).ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var variable in RotationVariableNaming.GetOverflowVariableNames(details.ConfigVariableName, used))
             {
                 Check();
-                await context.CallActivityAsync(nameof(MapRotationActivities.ClearConfigVariableIfPresent),
-                    new WriteConfigInput(serverId, details.ConfigFilePath, variable, "", []),
-                    MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
+                await WriteConfig(nameof(MapRotationActivities.ClearConfigVariableIfPresent),
+                    new WriteConfigInput(serverId, details.ConfigFilePath, variable, "", []));
             }
 
             foreach (var part in formatted.Parts.Concat(RotationVariableNaming.GetOverflowVariableNames(details.ConfigVariableName, used)

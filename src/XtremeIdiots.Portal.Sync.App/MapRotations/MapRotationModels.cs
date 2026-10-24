@@ -111,6 +111,7 @@ public record MapOperationResult(string MapName, bool Success, string? Error = n
 
 public static class SkipReasons
 {
+    public const string AlreadyVerified = "Required map files and sizes already verified";
     public const string BuiltInMap = "Built-in map";
     public const string NoMapFiles = "No map files available";
     public const string AacpSharedMaps = "AACP — maps shared with main rotation";

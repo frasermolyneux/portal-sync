@@ -50,6 +50,20 @@ public class MapRotationActivities(
         }
     }
 
+    [Function(nameof(RepairSingleMapToServer))]
+    public async Task<MapOperationResult> RepairSingleMapToServer([ActivityTrigger] SyncMapInput input)
+    {
+        if (!BuiltInMaps.IsBuiltIn(input.GameType, input.MapName))
+        {
+            var verification = await VerifyMapFiles(new VerifyMapFilesInput(input.GameServerId, [input.MapName])).ConfigureAwait(false);
+            if (verification.All(result => result.Success))
+            {
+                return new MapOperationResult(input.MapName, true, SkipReason: SkipReasons.AlreadyVerified);
+            }
+        }
+        return await SyncSingleMapToServer(input).ConfigureAwait(false);
+    }
+
     [Function(nameof(VerifyMapFiles))]
     public async Task<List<MapOperationResult>> VerifyMapFiles([ActivityTrigger] VerifyMapFilesInput input)
     {

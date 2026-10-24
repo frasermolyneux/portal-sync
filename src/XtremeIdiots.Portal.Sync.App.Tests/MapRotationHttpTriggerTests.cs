@@ -1,4 +1,6 @@
 using System.Net;
+using System.Reflection;
+using System.Text.Json;
 using Azure.Core.Serialization;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -13,6 +15,31 @@ namespace XtremeIdiots.Portal.Sync.App.Tests;
 [Trait("Category", "Unit")]
 public class MapRotationHttpTriggerTests
 {
+    [Fact]
+    public void RotationHttpRoutesArePublishedInTheApimContract()
+    {
+        var contractPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..",
+            "XtremeIdiots.Portal.Sync.App", "openapi.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(contractPath));
+        var paths = document.RootElement.GetProperty("paths");
+        foreach (var method in typeof(MapRotationHttpTriggers).GetMethods())
+        {
+            var function = method.GetCustomAttribute<FunctionAttribute>();
+            if (function is null)
+            {
+                continue;
+            }
+            var trigger = method.GetParameters().Select(parameter => parameter.GetCustomAttribute<HttpTriggerAttribute>())
+                .OfType<HttpTriggerAttribute>().Single();
+            Assert.True(paths.TryGetProperty($"/api/{trigger.Route}", out var route), $"Missing APIM route for {function.Name}");
+            Assert.NotNull(trigger.Methods);
+            foreach (var verb in trigger.Methods)
+            {
+                Assert.Equal(function.Name, route.GetProperty(verb.ToLowerInvariant()).GetProperty("operationId").GetString());
+            }
+        }
+    }
+
     [Fact]
     public async Task CancellationAcknowledgmentDoesNotClaimTerminationOrAbandonInFlightTransfer()
     {

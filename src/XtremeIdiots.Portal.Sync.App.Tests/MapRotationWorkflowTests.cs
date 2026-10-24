@@ -76,7 +76,7 @@ public class MapRotationWorkflowTests
             ids.Single().Key == serverId.ToString())), Times.Once);
         lease.Verify(x => x.DisposeAsync(), Times.Once);
         context.Verify(x => x.CallActivityAsync<MapOperationResult>(
-            It.Is<TaskName>(name => name == nameof(MapRotationActivities.SyncSingleMapToServer)),
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.RepairSingleMapToServer)),
             It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Once);
         Assert.Contains(updates, update => update.AssignmentId == linkedId && update.ActivationState == ActivationState.Active);
     }
@@ -103,7 +103,7 @@ public class MapRotationWorkflowTests
         var result = await Run("Repair");
         Assert.True(result.Success);
         context.Verify(x => x.CallActivityAsync<MapOperationResult>(
-            It.Is<TaskName>(name => name == nameof(MapRotationActivities.SyncSingleMapToServer)),
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.RepairSingleMapToServer)),
             It.Is<SyncMapInput>(input => input.MapName == "mp_custom"), It.IsAny<TaskOptions>()), Times.Once);
         Assert.Contains(updates, update => update.DeploymentState == DeploymentState.Synced && update.DeployedVersion == 1);
         context.Verify(x => x.CallActivityAsync(
@@ -136,7 +136,7 @@ public class MapRotationWorkflowTests
 
         Assert.False(result.Success);
         context.Verify(x => x.CallActivityAsync<MapOperationResult>(
-            It.Is<TaskName>(name => name == nameof(MapRotationActivities.SyncSingleMapToServer)),
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.RepairSingleMapToServer)),
             It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Exactly(2));
         context.Verify(x => x.CallActivityAsync(
             It.Is<TaskName>(name => name == nameof(MapRotationActivities.WriteAndVerifyConfigVariable)),
@@ -165,7 +165,7 @@ public class MapRotationWorkflowTests
     {
         var cancelled = new TaskCompletionSource();
         context.Setup(x => x.CallActivityAsync<MapOperationResult>(
-            It.Is<TaskName>(name => name == nameof(MapRotationActivities.SyncSingleMapToServer)),
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.RepairSingleMapToServer)),
             It.IsAny<object>(), It.IsAny<TaskOptions>()))
             .Callback(() => cancelled.SetResult())
             .ReturnsAsync(new MapOperationResult("mp_custom", true));

@@ -57,6 +57,20 @@ public class MapRotationFileVerificationTests
     }
 
     [Fact]
+    public async Task RepairSkipsTransfersOnlyAfterActualFileVerificationSucceeds()
+    {
+        Mock.Get(servers.Object.Maps.V1).Setup(x => x.VerifyServerMaps(It.IsAny<Guid>(), It.IsAny<List<string>>()))
+            .ReturnsAsync(new ApiResult<MapVerificationCollectionDto>(HttpStatusCode.OK,
+                new ApiResponse<MapVerificationCollectionDto>(new MapVerificationCollectionDto([new("mp_custom", true)]))));
+
+        var result = await Create().RepairSingleMapToServer(new SyncMapInput(Guid.NewGuid(), "mp_custom", GameType.CallOfDuty4));
+
+        Assert.True(result.Success);
+        Assert.Equal(SkipReasons.AlreadyVerified, result.SkipReason);
+        Mock.Get(servers.Object.Maps.V1).Verify(x => x.PushServerMapToHost(It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
     public async Task VerifyUsesFileIntegrityResultsNotDirectoryNames()
     {
         Mock.Get(servers.Object.Maps.V1).Setup(x => x.VerifyServerMaps(It.IsAny<Guid>(), It.IsAny<List<string>>()))
