@@ -38,6 +38,7 @@ public class MapRotationFileVerificationTests
         var secondPage = new[]
         {
             Assignment(linked, rotation, "scr_aacp_maps_1"),
+            Assignment(Guid.NewGuid(), Guid.NewGuid(), "scr_aacp_maps_2"),
             Assignment(Guid.NewGuid(), rotation, "scr_small_rotation")
         };
         var api = Mock.Get(repository.Object.MapRotations.V1);
@@ -51,9 +52,15 @@ public class MapRotationFileVerificationTests
 
         var result = await activities.GetLinkedConfigurationAssignments(new LinkedConfigurationInput(server, rotation, selected, "sv_maprotation"));
 
-        Assert.Equal(linked, Assert.Single(result));
+        var target = Assert.Single(result);
+        Assert.Equal(linked, target.AssignmentId);
+        Assert.Equal("server.cfg", target.ConfigFilePath);
+        Assert.Equal("scr_aacp_maps_1", target.ConfigVariableName);
         Assert.Empty(await activities.GetLinkedConfigurationAssignments(
             new LinkedConfigurationInput(server, rotation, selected, "scr_small_rotation")));
+        var reserved = await activities.GetReservedConfigVariables(new ConfigSlotInput(server, selected, "server.cfg", "scr_aacp_maps_1"));
+        Assert.Contains("scr_aacp_maps_2", reserved);
+        Assert.DoesNotContain("scr_aacp_maps_1", reserved);
     }
 
     [Fact]

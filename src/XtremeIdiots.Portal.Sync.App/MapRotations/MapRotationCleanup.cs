@@ -48,6 +48,7 @@ public class MapRotationCleanup(
         }
 
         var cutoff = DateTime.UtcNow.AddDays(-90);
+        var failures = new List<Exception>();
         foreach (var assignment in assignments)
         {
             if (assignment.DeploymentState == DeploymentState.Removing && assignment.UpdatedAt < DateTime.UtcNow.AddMinutes(-15))
@@ -63,18 +64,31 @@ public class MapRotationCleanup(
                 continue;
             }
 
-            var delete = await repositoryApiClient.MapRotations.V1
-                .DeleteServerAssignment(assignment.MapRotationServerAssignmentId).ConfigureAwait(false);
-            if (!delete.IsSuccess)
+            try
             {
-                throw new InvalidOperationException($"Could not delete retained assignment {assignment.MapRotationServerAssignmentId}: {delete.StatusCode}.");
+                var delete = await repositoryApiClient.MapRotations.V1
+                    .DeleteServerAssignment(assignment.MapRotationServerAssignmentId).ConfigureAwait(false);
+                if (!delete.IsSuccess)
+                {
+                    throw new InvalidOperationException($"Could not delete retained assignment {assignment.MapRotationServerAssignmentId}: {delete.StatusCode}.");
+                }
+                auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentCleaned", AuditAction.Delete)
+                    .WithService("MapRotationCleanup")
+                    .WithTarget(assignment.MapRotationServerAssignmentId.ToString(), "MapRotationAssignment")
+                    .WithSource("MapRotationCleanup").Build());
+                logger.LogInformation("Deleted removed assignment {AssignmentId} after its 90-day evidence retention period.",
+                    assignment.MapRotationServerAssignmentId);
             }
-            auditLogger.LogAudit(AuditEvent.SystemAction("MapRotationAssignmentCleaned", AuditAction.Delete)
-                .WithService("MapRotationCleanup")
-                .WithTarget(assignment.MapRotationServerAssignmentId.ToString(), "MapRotationAssignment")
-                .WithSource("MapRotationCleanup").Build());
-            logger.LogInformation("Deleted removed assignment {AssignmentId} after its 90-day evidence retention period.",
-                assignment.MapRotationServerAssignmentId);
+            catch (Exception ex)
+            {
+                failures.Add(ex);
+                logger.LogError(ex, "Could not clean up assignment {AssignmentId}; continuing with other retained assignments.",
+                    assignment.MapRotationServerAssignmentId);
+            }
+        }
+        if (failures.Count != 0)
+        {
+            throw new AggregateException("Some retained rotation assignments could not be cleaned up.", failures);
         }
     }
 }

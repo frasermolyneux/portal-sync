@@ -173,7 +173,7 @@ public class MapRotationActivities(
     }
 
     [Function(nameof(GetLinkedConfigurationAssignments))]
-    public async Task<List<Guid>> GetLinkedConfigurationAssignments([ActivityTrigger] LinkedConfigurationInput input)
+    public async Task<List<LinkedConfigurationTarget>> GetLinkedConfigurationAssignments([ActivityTrigger] LinkedConfigurationInput input)
     {
         var counterpart = string.Equals(input.Variable, "sv_maprotation", StringComparison.OrdinalIgnoreCase)
             ? "scr_aacp_maps_1"
@@ -183,7 +183,7 @@ public class MapRotationActivities(
         {
             return [];
         }
-        var linked = new List<Guid>();
+        var linked = new List<LinkedConfigurationTarget>();
         for (var skip = 0; ; skip += 100)
         {
             var result = await repositoryApiClient.MapRotations.V1
@@ -197,10 +197,39 @@ public class MapRotationActivities(
                 assignment.MapRotationId == input.RotationId &&
                 assignment.DeploymentState is not (DeploymentState.Removed or DeploymentState.Removing) &&
                 string.Equals(assignment.ConfigVariableName, counterpart, StringComparison.OrdinalIgnoreCase))
-                .Select(assignment => assignment.MapRotationServerAssignmentId));
+                .Select(assignment => new LinkedConfigurationTarget(assignment.MapRotationServerAssignmentId,
+                    assignment.ConfigFilePath, assignment.ConfigVariableName)));
             if (items.Count() < 100)
             {
                 return linked;
+            }
+        }
+    }
+
+    [Function(nameof(GetReservedConfigVariables))]
+    public async Task<List<string>> GetReservedConfigVariables([ActivityTrigger] ConfigSlotInput input)
+    {
+        var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var skip = 0; ; skip += 100)
+        {
+            var result = await repositoryApiClient.MapRotations.V1
+                .GetServerAssignments(null, input.GameServerId, null, skip, 100).ConfigureAwait(false);
+            if (!result.IsSuccess || result.Result?.Data?.Items is not { } items)
+            {
+                throw new InvalidOperationException($"Could not determine configuration-variable ownership: {result.StatusCode}.");
+            }
+            foreach (var assignment in items.Where(assignment =>
+                assignment.MapRotationServerAssignmentId != input.AssignmentId &&
+                assignment.DeploymentState is not (DeploymentState.Removed or DeploymentState.Removing) &&
+                string.Equals(assignment.ConfigFilePath, input.ConfigFilePath, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(assignment.ConfigVariableName) &&
+                !string.Equals(assignment.ConfigVariableName, input.ConfigVariableName, StringComparison.OrdinalIgnoreCase)))
+            {
+                reserved.Add(assignment.ConfigVariableName!);
+            }
+            if (items.Count() < 100)
+            {
+                return reserved.ToList();
             }
         }
     }

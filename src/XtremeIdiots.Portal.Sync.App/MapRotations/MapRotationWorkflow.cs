@@ -72,20 +72,54 @@ public static class MapRotationWorkflow
         Progress(context, action, "Waiting for this server's current operation", "InProgress");
         await using var serverLock = await context.Entities.LockEntitiesAsync(
             new EntityInstanceId(nameof(MapRotationServerLock), details.GameServerId.ToString()));
-        var result = await RunLocked(context, assignmentId, details.GameServerId, action, cancellation);
+        var snapshot = await context.CallActivityAsync<RotationDetails>(nameof(MapRotationActivities.GetRotationDetails),
+            new GetRotationDetailsInput(assignmentId));
+        if (snapshot.GameServerId != details.GameServerId)
+        {
+            throw new InvalidOperationException("The assignment's server changed before its server lock was acquired.");
+        }
+        var linked = action == "Apply"
+            ? await context.CallActivityAsync<List<LinkedConfigurationTarget>>(nameof(MapRotationActivities.GetLinkedConfigurationAssignments),
+                new LinkedConfigurationInput(snapshot.GameServerId, snapshot.MapRotationId, assignmentId, snapshot.ConfigVariableName))
+            : [];
+        var result = await RunLocked(context, assignmentId, snapshot.GameServerId, action, cancellation, snapshot);
         if (result.Success && action == "Apply")
         {
-            details = await context.CallActivityAsync<RotationDetails>(nameof(MapRotationActivities.GetRotationDetails),
-                new GetRotationDetailsInput(assignmentId));
-            var linked = await context.CallActivityAsync<List<Guid>>(nameof(MapRotationActivities.GetLinkedConfigurationAssignments),
-                new LinkedConfigurationInput(details.GameServerId, details.MapRotationId, assignmentId, details.ConfigVariableName));
-            foreach (var linkedId in linked)
+            const string driftError = "A selected/linked slot changed during Apply. Review the group and apply it again.";
+            foreach (var target in linked)
             {
-                result = await RunLocked(context, linkedId, details.GameServerId, "Activate", cancellation);
+                var selected = await context.CallActivityAsync<RotationDetails>(nameof(MapRotationActivities.GetRotationDetails),
+                    new GetRotationDetailsInput(assignmentId));
+                if (!IsAppliedSnapshot(selected, snapshot))
+                {
+                    Progress(context, action, "Validate selected configuration slot", "Failed", driftError);
+                    return new RotationWorkflowResult(false, driftError);
+                }
+                var expected = snapshot with
+                {
+                    AssignmentId = target.AssignmentId,
+                    ConfigFilePath = target.ConfigFilePath,
+                    ConfigVariableName = target.ConfigVariableName
+                };
+                result = await RunLocked(context, target.AssignmentId, snapshot.GameServerId, "Activate", cancellation, expected);
                 if (!result.Success)
                 {
                     Progress(context, action, "Linked configuration slot", "Failed", result.Error);
                     return result;
+                }
+            }
+            foreach (var target in linked.Prepend(new LinkedConfigurationTarget(assignmentId, snapshot.ConfigFilePath, snapshot.ConfigVariableName)))
+            {
+                var current = await context.CallActivityAsync<RotationDetails>(nameof(MapRotationActivities.GetRotationDetails),
+                    new GetRotationDetailsInput(target.AssignmentId));
+                if (!IsAppliedSnapshot(current, snapshot with
+                {
+                    ConfigFilePath = target.ConfigFilePath,
+                    ConfigVariableName = target.ConfigVariableName
+                }))
+                {
+                    Progress(context, action, "Validate linked configuration group", "Failed", driftError);
+                    return new RotationWorkflowResult(false, driftError);
                 }
             }
             Progress(context, action, "Map files verified and selected/linked configuration slots applied", "Completed");
@@ -94,9 +128,11 @@ public static class MapRotationWorkflow
     }
 
     internal static async Task<RotationWorkflowResult> RunLocked(
-        TaskOrchestrationContext context, Guid assignmentId, Guid serverId, string action, Task cancellation)
+        TaskOrchestrationContext context, Guid assignmentId, Guid serverId, string action, Task cancellation,
+        RotationDetails? expected = null)
     {
         Guid? operationId = null;
+        var targetValidated = false;
         var configuring = action is "Activate" or "Deactivate";
         var deadline = context.CurrentUtcDateTime.AddMinutes(30);
         var logger = context.CreateReplaySafeLogger(nameof(MapRotationWorkflow));
@@ -136,9 +172,7 @@ public static class MapRotationWorkflow
             Check();
             var current = await context.CallActivityAsync<RotationDetails>(nameof(MapRotationActivities.GetRotationDetails),
                 new GetRotationDetailsInput(assignmentId));
-            if (current.RotationVersion != snapshot.RotationVersion || current.MapRotationId != snapshot.MapRotationId ||
-                current.GameServerId != snapshot.GameServerId || current.ConfigFilePath != snapshot.ConfigFilePath ||
-                current.ConfigVariableName != snapshot.ConfigVariableName)
+            if (!MatchesSnapshot(current, snapshot))
             {
                 throw new InvalidOperationException("The rotation or configuration target changed during this operation. Review the current assignment and apply it again.");
             }
@@ -201,6 +235,11 @@ public static class MapRotationWorkflow
             {
                 throw new InvalidOperationException("The assignment was removed or its server changed while this operation was waiting.");
             }
+            if (expected != null && !MatchesSnapshot(details, expected))
+            {
+                throw new InvalidOperationException("The expected rotation version or linked configuration target changed. No further server changes will be started for this slot.");
+            }
+            targetValidated = true;
 
             if (action == "Unassign")
             {
@@ -307,11 +346,33 @@ public static class MapRotationWorkflow
                 : await context.CallActivityAsync<FormatRotationOutput>(nameof(MapRotationActivities.FormatRotationString),
                     new FormatRotationInput(names, details.GameMode ?? "war", details.ConfigVariableName));
             var isAacp = details.ConfigVariableName.StartsWith("scr_aacp_maps_", StringComparison.OrdinalIgnoreCase);
+            var aacpVariables = Enumerable.Range(1, 10).Select(index => $"scr_aacp_maps_{index}")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (formatted.Parts.Count == 0 || formatted.Parts.Any(part => part.Value.Length > 1024) ||
-                (!isAacp && formatted.Parts.Count > 1) || (isAacp && formatted.Parts.Count > 10))
+                (!isAacp && formatted.Parts.Count > 1) || (isAacp && (formatted.Parts.Count > 10 ||
+                    !aacpVariables.Contains(details.ConfigVariableName) ||
+                    formatted.Parts.Any(part => !aacpVariables.Contains(part.VariableName)))))
             {
                 throw new InvalidOperationException("The rotation exceeds the server slot's supported variable limits (1024 characters; one standard variable or ten AACP parts). Shorten the rotation before applying.");
             }
+            if (!isAacp)
+            {
+                formatted = new FormatRotationOutput([formatted.Parts[0] with { VariableName = details.ConfigVariableName }]);
+            }
+            var reserved = isAacp
+                ? (await context.CallActivityAsync<List<string>>(nameof(MapRotationActivities.GetReservedConfigVariables),
+                    new ConfigSlotInput(serverId, assignmentId, details.ConfigFilePath, details.ConfigVariableName)))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (formatted.Parts.Any(part => reserved.Contains(part.VariableName)))
+            {
+                throw new InvalidOperationException("An AACP continuation variable belongs to another configuration slot. Resolve the slot overlap before applying.");
+            }
+            var overflowVariables = isAacp
+                ? RotationVariableNaming.GetOverflowVariableNames(details.ConfigVariableName,
+                    formatted.Parts.Select(part => part.VariableName).ToHashSet(StringComparer.OrdinalIgnoreCase))
+                    .Where(variable => aacpVariables.Contains(variable) && !reserved.Contains(variable)).ToList()
+                : [];
 
             foreach (var part in formatted.Parts)
             {
@@ -324,15 +385,14 @@ public static class MapRotationWorkflow
                          $"https://portal.xtremeidiots.com/MapRotations/Details/{details.MapRotationId}"]));
             }
 
-            var used = formatted.Parts.Select(part => part.VariableName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var variable in RotationVariableNaming.GetOverflowVariableNames(details.ConfigVariableName, used))
+            foreach (var variable in overflowVariables)
             {
                 Check();
                 await WriteConfig(nameof(MapRotationActivities.ClearConfigVariableIfPresent),
                     new WriteConfigInput(serverId, details.ConfigFilePath, variable, "", []));
             }
 
-            foreach (var part in formatted.Parts.Concat(RotationVariableNaming.GetOverflowVariableNames(details.ConfigVariableName, used)
+            foreach (var part in formatted.Parts.Concat(overflowVariables
                 .Select(variable => new RotationStringPart(variable, ""))))
             {
                 Check();
@@ -358,10 +418,13 @@ public static class MapRotationWorkflow
         {
             logger.LogError(ex, "{Action} failed for assignment {AssignmentId}", action, assignmentId);
             Progress(context, action, action, "Failed", ex.Message);
-            await SetState(new UpdateStatusInput(assignmentId,
-                DeploymentState: action == "Unassign" || (configuring && ex is not InvalidDataException) ? null : DeploymentState.Failed,
-                ActivationState: configuring ? ActivationState.Failed : null,
-                LastError: ex.Message, LastErrorAt: context.CurrentUtcDateTime));
+            if (targetValidated)
+            {
+                await SetState(new UpdateStatusInput(assignmentId,
+                    DeploymentState: action == "Unassign" || (configuring && ex is not InvalidDataException) ? null : DeploymentState.Failed,
+                    ActivationState: configuring ? ActivationState.Failed : null,
+                    LastError: ex.Message, LastErrorAt: context.CurrentUtcDateTime));
+            }
             if (operationId.HasValue)
             {
                 await context.CallActivityAsync(nameof(MapRotationActivities.CompleteOperation),
@@ -384,6 +447,15 @@ public static class MapRotationWorkflow
             throw new InvalidDataException($"Map files incomplete: {string.Join("; ", failures.Select(result => $"{result.MapName}: {result.Error}"))}");
         }
     }
+
+    private static bool MatchesSnapshot(RotationDetails current, RotationDetails snapshot) =>
+        current.RotationVersion == snapshot.RotationVersion && current.MapRotationId == snapshot.MapRotationId &&
+        current.GameServerId == snapshot.GameServerId && current.ConfigFilePath == snapshot.ConfigFilePath &&
+        current.ConfigVariableName == snapshot.ConfigVariableName;
+
+    private static bool IsAppliedSnapshot(RotationDetails current, RotationDetails snapshot) =>
+        MatchesSnapshot(current, snapshot) && current.ActivationState == ActivationState.Active &&
+        current.DeploymentState == DeploymentState.Synced && current.DeployedVersion == snapshot.RotationVersion;
 
     private static void RequireSuccess(MapOperationResult result)
     {

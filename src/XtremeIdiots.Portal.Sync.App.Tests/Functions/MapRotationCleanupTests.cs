@@ -15,6 +15,48 @@ namespace XtremeIdiots.Portal.Sync.App.Tests.Functions;
 public class MapRotationCleanupTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedDeletionDoesNotPreventLaterCleanupAndStillFailsTheJob(bool requestThrows)
+    {
+        var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
+        var jobs = new Mock<IJobTelemetry>();
+        jobs.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<Func<Task>>(), It.IsAny<Dictionary<string, string>?>()))
+            .Returns<string, Func<Task>, Dictionary<string, string>?>((_, run, _) => run());
+        var audit = new Mock<IAuditLogger>();
+        var failedId = Guid.NewGuid();
+        var succeedingId = Guid.NewGuid();
+        var timestamp = DateTime.UtcNow.AddDays(-91);
+        var items = new CollectionModel<MapRotationServerAssignmentDto>(
+            new[] { failedId, succeedingId }.Select(id => new MapRotationServerAssignmentDto(id, Guid.NewGuid(), Guid.NewGuid(),
+                DeploymentState.Removed, ActivationState.Inactive, null, null, "server.cfg", "sv_maprotation",
+                null, null, timestamp, timestamp, timestamp)));
+        var api = Mock.Get(repository.Object.MapRotations.V1);
+        api.Setup(x => x.GetServerAssignments(null, null, null, 0, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(items)));
+        var firstDelete = api.Setup(x => x.DeleteServerAssignment(failedId, It.IsAny<CancellationToken>()));
+        if (requestThrows)
+        {
+            firstDelete.ThrowsAsync(new IOException("Delete request failed"));
+        }
+        else
+        {
+            firstDelete.ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.InternalServerError));
+        }
+        api.Setup(x => x.DeleteServerAssignment(succeedingId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
+        var cleanup = new MapRotationCleanup(Mock.Of<ILogger<MapRotationCleanup>>(), repository.Object, jobs.Object, audit.Object);
+
+        var error = await Assert.ThrowsAsync<AggregateException>(() => cleanup.RunMapRotationCleanup(null));
+
+        Assert.Single(error.InnerExceptions);
+        api.Verify(x => x.DeleteServerAssignment(failedId, It.IsAny<CancellationToken>()), Times.Once);
+        api.Verify(x => x.DeleteServerAssignment(succeedingId, It.IsAny<CancellationToken>()), Times.Once);
+        audit.Verify(x => x.LogAudit(It.IsAny<AuditEvent>()), Times.Once);
+    }
+
+    [Theory]
     [InlineData(DeploymentState.Removing, 100, false)]
     [InlineData(DeploymentState.Removed, 3, false)]
     [InlineData(DeploymentState.Removed, 89, false)]
