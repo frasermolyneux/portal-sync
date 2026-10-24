@@ -23,6 +23,11 @@ public static class MapRotationOrchestrationPolicies
 public record SyncMapInput(Guid GameServerId, string MapName, GameType GameType);
 public record RemoveMapInput(Guid GameServerId, string MapName, GameType GameType);
 public record GetLoadedMapsInput(Guid GameServerId);
+public record VerifyMapFilesInput(Guid GameServerId, List<string> MapNames);
+public record RotationWorkflowResult(bool Success, string? Error = null);
+public record LinkedConfigurationInput(Guid GameServerId, Guid RotationId, Guid AssignmentId, string? Variable);
+public record LinkedConfigurationTarget(Guid AssignmentId, string? ConfigFilePath, string? ConfigVariableName);
+public record ConfigSlotInput(Guid GameServerId, Guid AssignmentId, string ConfigVariableName);
 public record GetSharedMapsInput(Guid GameServerId, Guid ExcludeAssignmentId);
 public record UpdateStatusInput(
     Guid AssignmentId,
@@ -108,6 +113,7 @@ public record MapOperationResult(string MapName, bool Success, string? Error = n
 
 public static class SkipReasons
 {
+    public const string AlreadyVerified = "Required map files and sizes already verified";
     public const string BuiltInMap = "Built-in map";
     public const string NoMapFiles = "No map files available";
     public const string AacpSharedMaps = "AACP — maps shared with main rotation";
