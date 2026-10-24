@@ -19,7 +19,8 @@ public class MapRedirectRepository(
     public async Task<MapRedirectSnapshot> GetSnapshotForGame(string game, CancellationToken cancellationToken = default)
     {
         var canonicalGame = game.Equals("cod4x", StringComparison.OrdinalIgnoreCase) ? "cod4" : game.ToLowerInvariant();
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
@@ -30,6 +31,7 @@ public class MapRedirectRepository(
             {
                 logger.LogWarning("Redirect catalogue changed while reading '{Game}'; discarding the incomplete snapshot and restarting ({Attempt}/{MaximumAttempts})",
                     game, attempt, SnapshotAttempts);
+                attempt++;
             }
         }
     }
