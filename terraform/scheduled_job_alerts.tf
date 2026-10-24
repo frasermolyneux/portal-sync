@@ -2,6 +2,15 @@
 # These alerts monitor the custom telemetry events emitted by scheduled jobs
 # to detect failures and missed executions.
 
+locals {
+  sync_job_completions = <<-QUERY
+    customEvents
+    | where name == "Audit:JobCompleted"
+    | where cloud_RoleName in~ ("Sync FuncApp", "${azurerm_linux_function_app.function_app.name}")
+    | extend JobName = tostring(customDimensions["Audit.SourceComponent"])
+  QUERY
+}
+
 # Alert when any scheduled job fails
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "scheduled_job_failures" {
   name                = "${var.workload_name}-${var.environment}-scheduled-job-failures"
@@ -17,9 +26,10 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "scheduled_job_failure
   criteria {
     query = <<-QUERY
       customEvents
-      | where name endswith "_Failed"
+      | where name == "Audit:JobFailed"
+      | where cloud_RoleName in~ ("Sync FuncApp", "${azurerm_linux_function_app.function_app.name}")
       | where timestamp > ago(5m)
-      | project timestamp, name, tostring(customDimensions.JobName), tostring(customDimensions.ExceptionType), tostring(customDimensions.ExceptionMessage)
+      | project timestamp, JobName=tostring(customDimensions["Audit.SourceComponent"]), tostring(customDimensions.ExceptionType), tostring(customDimensions.ExceptionMessage)
     QUERY
 
     time_aggregation_method = "Count"
@@ -40,7 +50,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "scheduled_job_failure
   tags                    = var.tags
 }
 
-# Alert when ImportLatestBanFiles hasn't run (expected every 5 minutes)
+# Preserve the retired import rule's identity and price; monitor current jobs instead.
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "import_ban_files_not_running" {
   name                = "${var.workload_name}-${var.environment}-import-ban-files-not-running"
   resource_group_name = data.azurerm_resource_group.rg.name
@@ -48,21 +58,21 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "import_ban_files_not_
 
   scopes               = [data.azurerm_application_insights.app_insights.id]
   severity             = 4 # Informational
-  description          = "Alert when ImportLatestBanFiles job hasn't run in the expected timeframe (10 minutes)"
+  description          = "Alert when player-tag reconciliation or map-rotation cleanup misses its successful completion deadline. Retains the legacy import-rule name."
   evaluation_frequency = "PT5M"
-  window_duration      = "PT15M"
+  window_duration      = "PT2H"
 
   criteria {
     query = <<-QUERY
-      let expectedJobName = "ImportLatestBanFiles";
-      let expectedIntervalMinutes = 10;
-      let completionEvents = customEvents
-        | where name == strcat(expectedJobName, "_Completed")
-        | where timestamp > ago(15m);
-      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
-      let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, MinutesSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('minute', lastRun, now()))
-      | where not(HasRecentCompletion) or MinutesSinceLastRun > expectedIntervalMinutes
+      let expectedJobs = datatable(JobName:string, MaximumAge:timespan)
+        ["RunConnectedPlayerTagReconciliationSync", 15m, "RunMapRotationCleanup", 2h];
+      let completions = ${local.sync_job_completions}
+        | where timestamp > ago(2h)
+        | summarize LastSuccess=max(timestamp) by JobName;
+      expectedJobs
+      | join kind=leftouter completions on JobName
+      | where isnull(LastSuccess) or now() - LastSuccess > MaximumAge
+      | project JobName, LastSuccess, MaximumAge
     QUERY
 
     time_aggregation_method = "Count"
@@ -97,15 +107,10 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "generate_ban_files_no
 
   criteria {
     query = <<-QUERY
-      let expectedJobName = "GenerateLatestBansFile";
-      let expectedIntervalMinutes = 20;
-      let completionEvents = customEvents
-        | where name == strcat(expectedJobName, "_Completed")
-        | where timestamp > ago(30m);
-      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
-      let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, MinutesSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('minute', lastRun, now()))
-      | where not(HasRecentCompletion) or MinutesSinceLastRun > expectedIntervalMinutes
+      ${local.sync_job_completions}
+      | where timestamp > ago(30m) and JobName == "GenerateLatestBansFile"
+      | summarize LastSuccess=max(timestamp)
+      | where isnull(LastSuccess) or now() - LastSuccess > 20m
     QUERY
 
     time_aggregation_method = "Count"
@@ -140,15 +145,10 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_redirect_sync_not
 
   criteria {
     query = <<-QUERY
-      let expectedJobName = "RunMapRedirectSync";
-      let expectedIntervalHours = 26;
-      let completionEvents = customEvents
-        | where name == strcat(expectedJobName, "_Completed")
-        | where timestamp > ago(2d);
-      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
-      let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', lastRun, now()))
-      | where not(HasRecentCompletion) or HoursSinceLastRun > expectedIntervalHours
+      ${local.sync_job_completions}
+      | where timestamp > ago(2d) and JobName == "RunMapRedirectSync"
+      | summarize LastSuccess=max(timestamp)
+      | where isnull(LastSuccess) or now() - LastSuccess > 26h
     QUERY
 
     time_aggregation_method = "Count"
@@ -169,7 +169,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "map_redirect_sync_not
   tags                    = var.tags
 }
 
-# Alert when RunUserProfileForumsSync hasn't run (expected every 4 hours)
+# Alert when RunUserProfileForumsSync hasn't run (expected hourly)
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "user_profile_sync_not_running" {
   name                = "${var.workload_name}-${var.environment}-user-profile-sync-not-running"
   resource_group_name = data.azurerm_resource_group.rg.name
@@ -177,21 +177,16 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "user_profile_sync_not
 
   scopes               = [data.azurerm_application_insights.app_insights.id]
   severity             = 4 # Informational
-  description          = "Alert when RunUserProfileForumsSync job hasn't run in the expected timeframe (5 hours)"
+  description          = "Alert when the hourly RunUserProfileForumsSync job has not completed successfully for two hours"
   evaluation_frequency = "PT1H"
   window_duration      = "PT6H"
 
   criteria {
     query = <<-QUERY
-      let expectedJobName = "RunUserProfileForumsSync";
-      let expectedIntervalHours = 5;
-      let completionEvents = customEvents
-        | where name == strcat(expectedJobName, "_Completed")
-        | where timestamp > ago(6h);
-      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
-      let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', lastRun, now()))
-      | where not(HasRecentCompletion) or HoursSinceLastRun > expectedIntervalHours
+      ${local.sync_job_completions}
+      | where timestamp > ago(6h) and JobName == "RunUserProfileForumsSync"
+      | summarize LastSuccess=max(timestamp)
+      | where isnull(LastSuccess) or now() - LastSuccess > 2h
     QUERY
 
     time_aggregation_method = "Count"
@@ -269,15 +264,10 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "redirect_to_server_sy
 
   criteria {
     query = <<-QUERY
-      let expectedJobName = "RunRedirectToGameServerMapSync";
-      let expectedIntervalHours = 26;
-      let completionEvents = customEvents
-        | where name == strcat(expectedJobName, "_Completed")
-        | where timestamp > ago(2d);
-      let hasRecentCompletion = toscalar(completionEvents | count) > 0;
-      let lastRun = toscalar(completionEvents | summarize max(timestamp));
-      print HasRecentCompletion = hasRecentCompletion, LastRun = lastRun, HoursSinceLastRun = iff(isnull(lastRun), 999, datetime_diff('hour', lastRun, now()))
-      | where not(HasRecentCompletion) or HoursSinceLastRun > expectedIntervalHours
+      ${local.sync_job_completions}
+      | where timestamp > ago(2d) and JobName == "RunRedirectToGameServerMapSync"
+      | summarize LastSuccess=max(timestamp)
+      | where isnull(LastSuccess) or now() - LastSuccess > 26h
     QUERY
 
     time_aggregation_method = "Count"
