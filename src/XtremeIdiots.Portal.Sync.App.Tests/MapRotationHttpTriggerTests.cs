@@ -73,6 +73,56 @@ public class MapRotationHttpTriggerTests
         Assert.DoesNotContain(client.Invocations, invocation => invocation.Method.Name == nameof(DurableTaskClient.TerminateInstanceAsync));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LegacyDrainConflictPreventsSchedulingAndPurgingEvidence(bool pushMap)
+    {
+        using var services = new ServiceCollection().Configure<WorkerOptions>(options =>
+            options.Serializer = new JsonObjectSerializer()).BuildServiceProvider();
+        var function = new Mock<FunctionContext>();
+        function.SetupGet(x => x.InstanceServices).Returns(services);
+        var request = new Mock<HttpRequestData>(function.Object);
+        request.Setup(x => x.CreateResponse()).Returns(() => new TestResponse(function.Object));
+        var client = LegacyMapRotationDrainTests.CreateClient(new OrchestrationMetadata(
+            nameof(MapRotationOrchestrators.ActivateMapRotationOrchestrator), "maprot-activate-another-slot")
+        {
+            RuntimeStatus = OrchestrationRuntimeStatus.Running
+        });
+        var trigger = new MapRotationHttpTriggers(Mock.Of<ILogger<MapRotationHttpTriggers>>());
+
+        var response = pushMap
+            ? await trigger.TriggerPushMapToServer(request.Object, client.Object, Guid.NewGuid(), "CallOfDuty5", "mp_custom")
+            : await trigger.TriggerSyncMapRotation(request.Object, client.Object, Guid.NewGuid());
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.DoesNotContain(client.Invocations, invocation => invocation.Method.Name is
+            nameof(DurableTaskClient.PurgeInstanceAsync) or nameof(DurableTaskClient.ScheduleNewOrchestrationInstanceAsync));
+    }
+
+    [Fact]
+    public async Task LegacyCancellationCannotCreateAnotherOrphanedActivity()
+    {
+        using var services = new ServiceCollection().Configure<WorkerOptions>(options =>
+            options.Serializer = new JsonObjectSerializer()).BuildServiceProvider();
+        var function = new Mock<FunctionContext>();
+        function.SetupGet(x => x.InstanceServices).Returns(services);
+        var request = new Mock<HttpRequestData>(function.Object);
+        request.Setup(x => x.CreateResponse()).Returns(() => new TestResponse(function.Object));
+        var client = new Mock<DurableTaskClient>("tests");
+        client.Setup(x => x.GetInstanceAsync("maprot-legacy", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OrchestrationMetadata(nameof(MapRotationOrchestrators.SyncMapRotationOrchestrator), "maprot-legacy")
+            {
+                RuntimeStatus = OrchestrationRuntimeStatus.Running
+            });
+        var trigger = new MapRotationHttpTriggers(Mock.Of<ILogger<MapRotationHttpTriggers>>());
+
+        var response = await trigger.TerminateMapRotationOrchestration(request.Object, client.Object, "maprot-legacy");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.DoesNotContain(client.Invocations, invocation => invocation.Method.Name == nameof(DurableTaskClient.TerminateInstanceAsync));
+    }
+
     private sealed class TestResponse(FunctionContext context) : HttpResponseData(context)
     {
         public override HttpStatusCode StatusCode { get; set; }

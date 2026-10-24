@@ -265,18 +265,17 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
                 accepted.StatusCode = HttpStatusCode.Accepted;
                 return accepted;
             }
-            await client.TerminateInstanceAsync(instanceId, "Manually cancelled by user via portal").ConfigureAwait(false);
-            logger.LogInformation("Requested termination of legacy orchestration {InstanceId} (was {RuntimeStatus})", instanceId, metadata.RuntimeStatus);
-            var acceptedLegacy = req.CreateResponse(HttpStatusCode.Accepted);
-            await acceptedLegacy.WriteAsJsonAsync(new
+            logger.LogWarning("Rejected unsafe hard termination of legacy orchestration {InstanceId}", instanceId);
+            var legacyConflict = req.CreateResponse(HttpStatusCode.Conflict);
+            await legacyConflict.WriteAsJsonAsync(new
             {
                 instanceId,
                 terminated = false,
-                cancellationRequested = true,
-                warning = "An in-flight legacy activity may still finish. Verify files and configuration before retrying."
+                cancellationRequested = false,
+                error = "Legacy operations cannot be safely cancelled. Let the operation finish or request service-side investigation; hard termination does not stop its activities."
             }).ConfigureAwait(false);
-            acceptedLegacy.StatusCode = HttpStatusCode.Accepted;
-            return acceptedLegacy;
+            legacyConflict.StatusCode = HttpStatusCode.Conflict;
+            return legacyConflict;
         }
         else
         {
@@ -312,6 +311,11 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
         var instanceId = $"map-push-{gameServerId}-{safeMapName}";
 
+        var legacyConflict = await RejectLegacyOperation(req, client).ConfigureAwait(false);
+        if (legacyConflict is not null)
+        {
+            return legacyConflict;
+        }
         var existing = await client.GetInstanceAsync(instanceId).ConfigureAwait(false);
         if (existing is not null && IsBusy(existing.RuntimeStatus))
         {
@@ -356,6 +360,11 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
     private static async Task<HttpResponseData?> RejectConflictingOperation(
         HttpRequestData req, DurableTaskClient client, Guid assignmentId, string requestedId)
     {
+        var legacyConflict = await RejectLegacyOperation(req, client).ConfigureAwait(false);
+        if (legacyConflict is not null)
+        {
+            return legacyConflict;
+        }
         foreach (var action in new[] { "sync", "apply", "activate", "deactivate", "verify", "remove" })
         {
             var instanceId = $"maprot-{action}-{assignmentId}";
@@ -372,5 +381,18 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
             }
         }
         return null;
+    }
+
+    private static async Task<HttpResponseData?> RejectLegacyOperation(HttpRequestData req, DurableTaskClient client)
+    {
+        var conflict = await LegacyMapRotationDrain.FindConflict(client).ConfigureAwait(false);
+        if (conflict is null)
+        {
+            return null;
+        }
+        var response = req.CreateResponse(HttpStatusCode.Conflict);
+        await response.WriteAsJsonAsync(new { error = conflict }).ConfigureAwait(false);
+        response.StatusCode = HttpStatusCode.Conflict;
+        return response;
     }
 }

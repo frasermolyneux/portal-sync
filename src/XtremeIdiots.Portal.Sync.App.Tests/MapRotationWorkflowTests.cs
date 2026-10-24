@@ -70,6 +70,44 @@ public class MapRotationWorkflowTests
         Assert.Contains(updates, update => update.AssignmentId == linkedId && update.ActivationState == ActivationState.Active);
     }
 
+    [Fact]
+    public async Task ApplyRejectsUndrainedLegacyWorkWithoutRecordingOrMutatingAssignments()
+    {
+        _ = SetupLinkedApply();
+        context.Setup(x => x.CallActivityAsync<string?>(
+            It.Is<TaskName>(name => name == nameof(LegacyMapRotationDrain.CheckLegacyMapRotationDrain)),
+            It.IsAny<object?>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync("Legacy operation is still running.");
+
+        var result = await MapRotationWorkflow.ApplyMapRotationV2(context.Object);
+
+        Assert.False(result.Success);
+        Assert.Contains("Legacy", result.Error);
+        Assert.Empty(updates);
+        context.Verify(x => x.CallActivityAsync<Guid>(
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.RecordOperation)),
+            It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task MapPushChecksLegacyDrainBeforeStartingAFileTransfer()
+    {
+        _ = SetupLinkedApply();
+        context.Setup(x => x.GetInput<PushMapOrchestrationInput>())
+            .Returns(new PushMapOrchestrationInput(serverId, "mp_custom", GameType.CallOfDuty5));
+        context.Setup(x => x.CallActivityAsync<string?>(
+            It.Is<TaskName>(name => name == nameof(LegacyMapRotationDrain.CheckLegacyMapRotationDrain)),
+            It.IsAny<object?>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync("Legacy operation has unconfirmed activity completion.");
+
+        var result = await MapRotationWorkflow.PushMapToServerV2(context.Object);
+
+        Assert.False(result.Success);
+        context.Verify(x => x.CallActivityAsync<MapOperationResult>(
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.SyncSingleMapToServer)),
+            It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Never);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

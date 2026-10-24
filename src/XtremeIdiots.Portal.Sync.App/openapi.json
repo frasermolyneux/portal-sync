@@ -40,7 +40,7 @@
             "description": "Operation accepted; poll its status for the actual result"
           },
           "409": {
-            "description": "Another assignment operation is already in progress"
+            "description": "Another assignment operation is in progress, or legacy rotation work has not safely drained"
           }
         }
       }
@@ -62,6 +62,9 @@
         "responses": {
           "202": {
             "description": "Accepted"
+          },
+          "409": {
+            "description": "Another assignment operation is in progress, or legacy rotation work has not safely drained"
           }
         }
       }
@@ -83,6 +86,9 @@
         "responses": {
           "202": {
             "description": "Accepted"
+          },
+          "409": {
+            "description": "Another assignment operation is in progress, or legacy rotation work has not safely drained"
           }
         }
       }
@@ -104,6 +110,9 @@
         "responses": {
           "202": {
             "description": "Accepted"
+          },
+          "409": {
+            "description": "Another assignment operation is in progress, or legacy rotation work has not safely drained"
           }
         }
       }
@@ -125,6 +134,9 @@
         "responses": {
           "202": {
             "description": "Accepted"
+          },
+          "409": {
+            "description": "Another assignment operation is in progress, or legacy rotation work has not safely drained"
           }
         }
       }
@@ -152,7 +164,7 @@
     "/api/map-rotations/terminate/{instanceId}": {
       "post": {
         "operationId": "TerminateMapRotationOrchestration",
-        "description": "Request safe cancellation. A 202 acknowledgment is not completed cancellation; the current service call may still finish.",
+        "description": "Request safe V2 cancellation. A 202 acknowledgment is not completed cancellation; the current service call may still finish. Legacy hard termination is rejected because it cannot stop in-flight activities.",
         "parameters": [
           {
             "name": "instanceId",
@@ -172,6 +184,9 @@
           },
           "404": {
             "description": "Orchestration instance not found"
+          },
+          "409": {
+            "description": "A legacy operation cannot be safely cancelled; let it finish or request service-side investigation"
           }
         }
       }
@@ -193,6 +208,9 @@
         "responses": {
           "202": {
             "description": "Accepted"
+          },
+          "409": {
+            "description": "Another assignment operation is in progress, or legacy rotation work has not safely drained"
           }
         }
       }
@@ -233,6 +251,9 @@
           },
           "400": {
             "description": "Bad Request - invalid map name or game type"
+          },
+          "409": {
+            "description": "Legacy rotation work has not safely drained"
           }
         }
       }

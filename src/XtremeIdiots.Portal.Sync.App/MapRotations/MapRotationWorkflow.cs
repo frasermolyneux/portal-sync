@@ -46,6 +46,12 @@ public static class MapRotationWorkflow
             new EntityInstanceId(nameof(MapRotationServerLock), input.GameServerId.ToString()));
         try
         {
+            var legacyConflict = await context.CallActivityAsync<string?>(nameof(LegacyMapRotationDrain.CheckLegacyMapRotationDrain), input.GameServerId);
+            if (legacyConflict is not null)
+            {
+                Progress(context, "PushMap", "Wait for legacy operations", "Failed", legacyConflict);
+                return new RotationWorkflowResult(false, legacyConflict);
+            }
             if (cancellation.IsCompleted)
             {
                 throw new OperationCanceledException("Map push cancelled before starting the transfer.");
@@ -72,6 +78,12 @@ public static class MapRotationWorkflow
         Progress(context, action, "Waiting for this server's current operation", "InProgress");
         await using var serverLock = await context.Entities.LockEntitiesAsync(
             new EntityInstanceId(nameof(MapRotationServerLock), details.GameServerId.ToString()));
+        var legacyConflict = await context.CallActivityAsync<string?>(nameof(LegacyMapRotationDrain.CheckLegacyMapRotationDrain), details.GameServerId);
+        if (legacyConflict is not null)
+        {
+            Progress(context, action, "Wait for legacy operations", "Failed", legacyConflict);
+            return new RotationWorkflowResult(false, legacyConflict);
+        }
         var snapshot = await context.CallActivityAsync<RotationDetails>(nameof(MapRotationActivities.GetRotationDetails),
             new GetRotationDetailsInput(assignmentId));
         if (snapshot.GameServerId != details.GameServerId)
