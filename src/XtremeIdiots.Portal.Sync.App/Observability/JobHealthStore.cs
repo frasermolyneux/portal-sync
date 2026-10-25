@@ -102,14 +102,24 @@ public sealed class BlobJobHealthStore(BlobContainerClient container) : IJobHeal
         {
             throw new InvalidDataException("Cannot merge outcomes belonging to different jobs.");
         }
+        var currentWinsTie = (OutcomeRank(current.Outcome), current.Failed, current.Expected)
+            .CompareTo((OutcomeRank(incoming.Outcome), incoming.Failed, incoming.Expected)) >= 0;
         var latest = current.CompletedAt > incoming.CompletedAt
-            || (current.CompletedAt == incoming.CompletedAt && current.Failed > incoming.Failed) ? current : incoming;
+            || (current.CompletedAt == incoming.CompletedAt && currentWinsTie) ? current : incoming;
         return latest with
         {
             LastSuccess = Max(current.LastSuccess, incoming.LastSuccess),
             LastFailure = Max(current.LastFailure, incoming.LastFailure)
         };
     }
+
+    private static int OutcomeRank(string outcome) => outcome switch
+    {
+        "success" => 0,
+        "partial_failure" => 1,
+        "failed" => 2,
+        _ => throw new InvalidDataException("Cannot rank an invalid durable job outcome.")
+    };
 
     internal static void Validate(JobHealthState state, string expectedName, DateTimeOffset now)
     {

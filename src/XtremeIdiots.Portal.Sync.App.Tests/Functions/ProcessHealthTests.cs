@@ -18,6 +18,18 @@ public class ProcessHealthTests
     private const string Job = "RunMapImageSync";
 
     [Theory]
+    [InlineData(1, 2)]
+    [InlineData(2, 3)]
+    public void TiedCompletionsRetainTheWorstOutcomeRegardlessOfMergeOrder(int failed, int expected)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var fullFailure = new JobHealthState(Job, now, now.AddHours(-1), now, "failed", 1, 1);
+        var partialFailure = new JobHealthState(Job, now, now.AddHours(-2), now, "partial_failure", expected, failed);
+        Assert.Equal(fullFailure, BlobJobHealthStore.Merge(fullFailure, partialFailure));
+        Assert.Equal(fullFailure, BlobJobHealthStore.Merge(partialFailure, fullFailure));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task ConflictingWritesReloadTheETagAndRetainPendingFactsWhenRetriesAreExhausted(bool exhaustRetries)
