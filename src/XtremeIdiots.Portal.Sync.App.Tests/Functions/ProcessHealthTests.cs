@@ -1,6 +1,10 @@
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Channel;
+using Microsoft.ApplicationInsights.DataContracts;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using MX.Observability.ApplicationInsights.Jobs;
@@ -12,6 +16,87 @@ namespace XtremeIdiots.Portal.Sync.App.Tests.Functions;
 public class ProcessHealthTests
 {
     private const string Job = "RunMapImageSync";
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConflictingWritesReloadTheETagAndRetainPendingFactsWhenRetriesAreExhausted(bool exhaustRetries)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var original = new JobHealthState(Job, now.AddHours(-2), now.AddHours(-2), null, "success", 1, 0);
+        var incoming = new JobHealthState(Job, now.AddHours(-1), now.AddHours(-1), null, "success", 1, 0);
+        var concurrent = new JobHealthState(Job, now, original.LastSuccess, now, "failed", 1, 1);
+        var container = new Mock<BlobContainerClient>();
+        var blob = new Mock<BlobClient>();
+        container.Setup(client => client.GetBlobClient($"{Job}.json")).Returns(blob.Object);
+        var reads = 0;
+        blob.Setup(client => client.DownloadContentAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => Response.FromValue(BlobsModelFactory.BlobDownloadResult(
+                content: BinaryData.FromObjectAsJson(++reads == 1 ? original : concurrent),
+                details: BlobsModelFactory.BlobDownloadDetails(eTag: new ETag(reads == 1 ? "original" : "concurrent"))),
+                Mock.Of<Response>()));
+        var writes = new List<(JobHealthState State, ETag? ETag)>();
+        blob.Setup(client => client.UploadAsync(It.IsAny<BinaryData>(), It.IsAny<BlobUploadOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((BinaryData content, BlobUploadOptions options, CancellationToken _) =>
+            {
+                writes.Add((content.ToObjectFromJson<JobHealthState>()!, options.Conditions.IfMatch));
+                return exhaustRetries || writes.Count == 1
+                    ? Task.FromException<Response<BlobContentInfo>>(new RequestFailedException(412, "ETag changed."))
+                    : Task.FromResult(Mock.Of<Response<BlobContentInfo>>());
+            });
+        var store = new BlobJobHealthStore(container.Object);
+        if (exhaustRetries)
+        {
+            await Assert.ThrowsAsync<RequestFailedException>(() => store.RecordAsync(incoming, default));
+            var retained = await store.ReadAsync(Job, default);
+            Assert.Equal(incoming.LastSuccess, retained!.LastSuccess);
+            Assert.Equal(concurrent.LastFailure, retained.LastFailure);
+        }
+        else
+        {
+            await store.RecordAsync(incoming, default);
+        }
+        Assert.Equal(exhaustRetries ? 4 : 2, writes.Count);
+        Assert.Equal(new ETag("original"), writes[0].ETag);
+        Assert.Equal(new ETag("concurrent"), writes[1].ETag);
+        Assert.Equal("failed", writes[^1].State.Outcome);
+        Assert.Equal(incoming.LastSuccess, writes[^1].State.LastSuccess);
+        Assert.Equal(concurrent.LastFailure, writes[^1].State.LastFailure);
+    }
+
+    [Fact]
+    public async Task OneInvalidDurableJobDoesNotSuppressOtherJobsOrAggregateFeeds()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = new Mock<IJobHealthStore>();
+        store.Setup(target => target.ReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((string name, CancellationToken _) => name == Job
+                ? Task.FromException<JobHealthState?>(new InvalidDataException("Invalid durable record."))
+                : Task.FromResult<JobHealthState?>(new(name, now, now, null, "success", 1, 0)));
+        var channel = new Mock<ITelemetryChannel>();
+        var events = new List<EventTelemetry>();
+        channel.Setup(target => target.Send(It.IsAny<ITelemetry>()))
+            .Callback<ITelemetry>(item => events.Add(Assert.IsType<EventTelemetry>(item)));
+        using var configuration = new TelemetryConfiguration
+        {
+            ConnectionString = "InstrumentationKey=11111111-1111-1111-1111-111111111111",
+            TelemetryChannel = channel.Object
+        };
+        var client = new TelemetryClient(configuration);
+        var projection = new ProcessHealthProjection(store.Object, new ProcessHealthTelemetry(client), client,
+            NullLogger<ProcessHealthProjection>.Instance);
+
+        await projection.PublishProcessHealth(new(), default);
+
+        Assert.Equal(9, events.Count);
+        Assert.Equal("unknown", Assert.Single(events, item =>
+            item.Name == "ProcessJobSnapshot" && item.Properties["jobName"] == Job).Properties["status"]);
+        Assert.Equal("operational", Assert.Single(events, item => item.Name == "ProcessHealthSnapshot"
+            && item.Properties["checkId"] == "xi.process.ban-sync.generation").Properties["status"]);
+        Assert.Equal("unknown", Assert.Single(events, item => item.Name == "ProcessHealthSnapshot"
+            && item.Properties["checkId"] == "xi.process.portal-sync.jobs").Properties["status"]);
+    }
 
     [Fact]
     public async Task FailedPersistenceCannotHideAKnownFailureBehindAnOlderDurableSuccess()
@@ -88,15 +173,18 @@ public class ProcessHealthTests
         Assert.Equal("outage", ProcessHealthTelemetry.Classify(1, 0, 1, 0, true));
     }
 
-    [Fact]
-    public async Task TelemetryStorageFailureDoesNotRetrySuccessfulBusinessEffects()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TelemetryStorageFailureDoesNotRetrySuccessfulBusinessEffects(bool invalidRecord)
     {
         var inner = new Mock<IJobTelemetry>();
         var operation = new Mock<IJobOperation>();
         var store = new Mock<IJobHealthStore>();
         inner.Setup(telemetry => telemetry.StartJob(Job, null)).Returns(operation.Object);
         store.Setup(target => target.RecordAsync(It.IsAny<JobHealthState>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new RequestFailedException(503, "Storage unavailable."));
+            .ThrowsAsync(invalidRecord ? new InvalidDataException("Invalid durable state.")
+                : new RequestFailedException(503, "Storage unavailable."));
         var telemetry = new PersistentJobTelemetry(inner.Object, store.Object, NullLogger<PersistentJobTelemetry>.Instance);
         var runs = 0;
         await telemetry.ExecuteAsync(Job, () => { runs++; return Task.CompletedTask; });

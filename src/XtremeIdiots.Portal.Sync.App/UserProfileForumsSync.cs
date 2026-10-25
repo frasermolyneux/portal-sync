@@ -12,6 +12,7 @@ using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.UserProfiles;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
@@ -47,6 +48,8 @@ public class UserProfileForumsSync(
     private async Task ProcessUserProfiles()
     {
         var skip = 0;
+        var attempted = 0;
+        var failures = new List<Exception>();
         var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null).ConfigureAwait(false);
 
         do
@@ -66,6 +69,7 @@ public class UserProfileForumsSync(
 
                     if (!string.IsNullOrWhiteSpace(userProfileDto.XtremeIdiotsForumId))
                     {
+                        attempted++;
                         try
                         {
                             var memberResult = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId).ConfigureAwait(false);
@@ -148,7 +152,7 @@ public class UserProfileForumsSync(
                         catch (Exception ex)
                         {
                             logger.LogError(ex, $"Failed to sync forum profile for {userProfileDto.XtremeIdiotsForumId}");
-                            throw;
+                            failures.Add(ex);
                         }
 
                     }
@@ -162,6 +166,10 @@ public class UserProfileForumsSync(
                 throw new HttpRequestException("Unable to complete user profile enumeration.");
             }
         } while (userProfileResponseDto?.IsSuccess == true && userProfileResponseDto.Result?.Data?.Items?.Any() is true);
+        if (failures.Count > 0)
+        {
+            throw new PartialJobFailureException(attempted, failures);
+        }
     }
 
     private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, MemberDto member)

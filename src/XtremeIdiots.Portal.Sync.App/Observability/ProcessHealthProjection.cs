@@ -26,7 +26,7 @@ public sealed class ProcessHealthProjection(IJobHealthStore store, ProcessHealth
                 throw;
             }
             catch (Exception exception) when (exception is Azure.RequestFailedException or Azure.Identity.AuthenticationFailedException
-                or IOException or System.Text.Json.JsonException)
+                or IOException or InvalidDataException or System.Text.Json.JsonException)
             {
                 logger.LogError(exception, "No reliable durable outcome is available for {JobName}; reporting Unknown.", name);
                 return (Job: job, State: null);

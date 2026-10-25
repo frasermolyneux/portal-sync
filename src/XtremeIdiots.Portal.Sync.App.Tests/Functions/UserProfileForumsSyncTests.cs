@@ -5,10 +5,12 @@ using MX.Observability.ApplicationInsights.Auditing;
 using MX.Observability.ApplicationInsights.Jobs;
 using MX.InvisionCommunity.Api.Abstractions;
 using MX.InvisionCommunity.Api.Abstractions.Models;
+using Newtonsoft.Json;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.UserProfiles;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using System.Reflection;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests.Functions;
 
@@ -36,6 +38,46 @@ public class UserProfileForumsSyncTests
         _invisionApiClientMock.Object,
         _jobTelemetryMock.Object,
         _auditLoggerMock.Object);
+
+    [Fact]
+    public async Task MissingForumMemberDoesNotPreventLaterProfilesFromSynchronizing()
+    {
+        string[] forumIds = ["missing", "valid"];
+        var profiles = forumIds.Select(forumId =>
+            JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new
+            {
+                UserProfileId = Guid.NewGuid(),
+                DisplayName = forumId,
+                XtremeIdiotsForumId = forumId,
+                UserProfileClaims = Array.Empty<object>()
+            })) ?? throw new InvalidOperationException("Invalid profile fixture.")).ToArray();
+        var users = Mock.Get(_repositoryApiClientMock.Object.UserProfiles.V1);
+        users.SetupSequence(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>(profiles))))
+            .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>([]))));
+        _invisionApiClientMock.Setup(client => client.Core.GetMember("missing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MemberDto>(System.Net.HttpStatusCode.NotFound));
+        _invisionApiClientMock.Setup(client => client.Core.GetMember("valid", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MemberDto>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<MemberDto>(CreateMemberDto(123, CreateGroupDto(82, "Members")))));
+        users.Setup(client => client.UpdateUserProfile(It.IsAny<EditUserProfileDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
+        users.Setup(client => client.SetUserProfileClaims(It.IsAny<Guid>(), It.IsAny<List<CreateUserProfileClaimDto>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
+
+        var error = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null));
+
+        Assert.Equal(2, error.Expected);
+        Assert.Equal(1, error.Failed);
+        users.Verify(client => client.SetUserProfileClaims(profiles[1].UserProfileId,
+            It.IsAny<List<CreateUserProfileClaimDto>>(), It.IsAny<CancellationToken>()), Times.Once);
+        users.Verify(client => client.SetUserProfileClaims(profiles[0].UserProfileId,
+            It.IsAny<List<CreateUserProfileClaimDto>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 
     [Fact]
     public void Constructor_WithValidDependencies_ShouldNotThrow()
