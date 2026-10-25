@@ -20,9 +20,38 @@ public class MapRotationFileVerificationTests
         Mock.Of<IRepositoryApiClient>(), servers.Object);
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ConfigurationGroupExcludesOtherRotationsAndFindsOldOutstandingOperations(bool outstanding)
+    [InlineData(1)]
+    [InlineData(91)]
+    public async Task RepeatedGroupUnassignmentReconcilesRemovedTargetsWithoutPurgingHistory(int ageDays)
+    {
+        var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
+        var api = Mock.Get(repository.Object.MapRotations.V1);
+        var serverId = Guid.NewGuid();
+        var rotationId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var snapshots = new List<RotationDetails>();
+        foreach (var variable in new[] { "sv_maprotation", "scr_aacp_maps_1" })
+        {
+            var id = Guid.NewGuid();
+            var assignment = new MapRotationServerAssignmentDto(id, rotationId, serverId, DeploymentState.Removed,
+                ActivationState.Inactive, 1, 1, "server.cfg", variable, null, null, now, now, now.AddDays(-ageDays));
+            api.Setup(x => x.GetServerAssignment(id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(HttpStatusCode.OK, new ApiResponse<MapRotationServerAssignmentDto>(assignment)));
+            snapshots.Add(new(id, serverId, rotationId, GameType.CallOfDuty5, DeploymentState.Synced,
+                ActivationState.Inactive, 1, 1, null, "server.cfg", variable, "dm", []));
+        }
+        var activities = new MapRotationActivities(Mock.Of<ILogger<MapRotationActivities>>(), repository.Object, servers.Object);
+
+        await activities.UnassignConfigurationGroup(snapshots);
+
+        api.Verify(x => x.DeleteServerAssignment(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ConfigurationGroupExcludesOtherRotationsAndFindsOldOutstandingOperations(bool outstanding, bool uppercase)
     {
         var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
         var api = Mock.Get(repository.Object.MapRotations.V1);
@@ -35,8 +64,8 @@ public class MapRotationFileVerificationTests
                 1, 1, "server.cfg", variable, null, null, now, now, null);
         }
 
-        var normal = Assignment("sv_maprotation", rotationId);
-        var picker = Assignment("scr_aacp_maps_1", rotationId);
+        var normal = Assignment(uppercase ? "SV_MAPROTATION" : "sv_maprotation", rotationId);
+        var picker = Assignment(uppercase ? "SCR_AACP_MAPS_1" : "scr_aacp_maps_1", rotationId);
         var other = Assignment("scr_aacp_maps_1", Guid.NewGuid());
         var custom = Assignment("scr_small_rotation", rotationId);
         var rotationDto = new MapRotationDto(rotationId, GameType.CallOfDuty5, "Synthetic", null, "dm", 1,

@@ -56,11 +56,7 @@ public static class MapRotationGroupWorkflow
             }
             if (action == "Unassign")
             {
-                if (cancellation.IsCompleted)
-                {
-                    throw new OperationCanceledException("Unassignment cancelled before changing metadata.");
-                }
-                await context.CallActivityAsync(nameof(MapRotationActivities.UnassignConfigurationGroup), new GetRotationDetailsInput(assignmentId));
+                await context.CallActivityAsync(nameof(MapRotationActivities.UnassignConfigurationGroup), group);
                 Progress(context, action, "Server unassigned; map files retained", "Completed");
                 return new RotationWorkflowResult(true);
             }
@@ -116,7 +112,8 @@ public static class MapRotationGroupWorkflow
                 "Repair" => "Verify",
                 _ => action
             };
-            var label = member.ConfigVariableName == "scr_aacp_maps_1" ? "AACP map picker" : member.ConfigVariableName ?? "Rotation";
+            var label = string.Equals(member.ConfigVariableName, "scr_aacp_maps_1", StringComparison.OrdinalIgnoreCase)
+                ? "AACP map picker" : "Rotation";
             Progress(context, action, $"{label}: {memberAction}", "InProgress");
             var result = await MapRotationWorkflow.RunLocked(context, member.AssignmentId,
                 member.GameServerId, memberAction, cancellation, member);

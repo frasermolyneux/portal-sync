@@ -218,7 +218,7 @@ public class MapRotationActivities(
             throw new InvalidOperationException("The configuration group is missing or ambiguous. Resolve duplicate targets before applying.");
         }
         var group = new List<RotationDetails>();
-        foreach (var target in targets.OrderBy(target => target.ConfigVariableName == "sv_maprotation" ? 0 : 1))
+        foreach (var target in targets.OrderBy(target => string.Equals(target.ConfigVariableName, "sv_maprotation", StringComparison.OrdinalIgnoreCase) ? 0 : 1))
         {
             await CheckOutstandingConfigurationOperations(target.MapRotationServerAssignmentId).ConfigureAwait(false);
             group.Add(await GetRotationDetails(new GetRotationDetailsInput(target.MapRotationServerAssignmentId)).ConfigureAwait(false));
@@ -229,7 +229,7 @@ public class MapRotationActivities(
     private async Task<List<MapRotationServerAssignmentDto>> ReadConfigurationTargets(RotationDetails selected)
     {
         var targets = new List<MapRotationServerAssignmentDto>();
-        var standard = selected.ConfigVariableName is "sv_maprotation" or "scr_aacp_maps_1";
+        var standard = IsStandardConfiguration(selected.ConfigVariableName);
         for (var skip = 0; ; skip += 100)
         {
             var result = await repositoryApiClient.MapRotations.V1
@@ -240,7 +240,7 @@ public class MapRotationActivities(
             }
             targets.AddRange(items.Where(assignment => assignment.DeploymentState != DeploymentState.Removed
                 && assignment.MapRotationId == selected.MapRotationId && assignment.GameServerId == selected.GameServerId
-                && (standard ? assignment.ConfigVariableName is "sv_maprotation" or "scr_aacp_maps_1"
+                && (standard ? IsStandardConfiguration(assignment.ConfigVariableName)
                     : assignment.MapRotationServerAssignmentId == selected.AssignmentId)));
             if (items.Count() < 100)
             {
@@ -249,6 +249,10 @@ public class MapRotationActivities(
         }
         return targets;
     }
+
+    private static bool IsStandardConfiguration(string? variable) =>
+        string.Equals(variable, "sv_maprotation", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(variable, "scr_aacp_maps_1", StringComparison.OrdinalIgnoreCase);
 
     private async Task CheckOutstandingConfigurationOperations(Guid assignmentId)
     {
@@ -272,9 +276,38 @@ public class MapRotationActivities(
     }
 
     [Function(nameof(UnassignConfigurationGroup))]
-    public async Task UnassignConfigurationGroup([ActivityTrigger] GetRotationDetailsInput input)
+    public async Task UnassignConfigurationGroup([ActivityTrigger] List<RotationDetails> snapshots)
     {
-        var result = await repositoryApiClient.MapRotations.V1.DeleteServerAssignment(input.AssignmentId).ConfigureAwait(false);
+        if (snapshots.Count == 0)
+        {
+            throw new InvalidOperationException("The server assignment has no validated configuration targets.");
+        }
+        var currentAssignments = new List<MapRotationServerAssignmentDto>();
+        foreach (var snapshot in snapshots)
+        {
+            var current = await repositoryApiClient.MapRotations.V1.GetServerAssignment(snapshot.AssignmentId).ConfigureAwait(false);
+            if (!current.IsSuccess || current.Result?.Data is not { } assignment
+                || assignment.MapRotationId != snapshot.MapRotationId || assignment.GameServerId != snapshot.GameServerId)
+            {
+                throw new InvalidOperationException("A configuration target changed or could not be read before unassignment.");
+            }
+            currentAssignments.Add(assignment);
+        }
+        if (currentAssignments.All(assignment => assignment.DeploymentState == DeploymentState.Removed
+            && assignment.ActivationState == ActivationState.Inactive))
+        {
+            return;
+        }
+        if (currentAssignments.Any(assignment => assignment.DeploymentState == DeploymentState.Removed))
+        {
+            throw new InvalidOperationException("Only part of the configuration group is removed. Review its retained history before retrying.");
+        }
+        var group = await GetConfigurationGroup(new GetRotationDetailsInput(snapshots[0].AssignmentId)).ConfigureAwait(false);
+        if (!group.Select(member => member.AssignmentId).Order().SequenceEqual(snapshots.Select(member => member.AssignmentId).Order()))
+        {
+            throw new InvalidOperationException("The configuration group changed before unassignment. Review the server assignment and retry.");
+        }
+        var result = await repositoryApiClient.MapRotations.V1.DeleteServerAssignment(snapshots[0].AssignmentId).ConfigureAwait(false);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException($"Could not unassign the configuration group: {result.StatusCode}. Deactivate both configurations first.");
