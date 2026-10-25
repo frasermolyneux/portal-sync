@@ -221,7 +221,14 @@ public class MapRotationActivities(
         foreach (var target in targets.OrderBy(target => string.Equals(target.ConfigVariableName, "sv_maprotation", StringComparison.OrdinalIgnoreCase) ? 0 : 1))
         {
             await CheckOutstandingConfigurationOperations(target.MapRotationServerAssignmentId).ConfigureAwait(false);
-            group.Add(await GetRotationDetails(new GetRotationDetailsInput(target.MapRotationServerAssignmentId)).ConfigureAwait(false));
+            var details = await GetRotationDetails(new GetRotationDetailsInput(target.MapRotationServerAssignmentId)).ConfigureAwait(false);
+            if (details.MapRotationId != target.MapRotationId || details.GameServerId != target.GameServerId
+                || details.ConfigFilePath != target.ConfigFilePath
+                || !string.Equals(details.ConfigVariableName, target.ConfigVariableName, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("A configuration target changed during group discovery. Review the server assignment and retry.");
+            }
+            group.Add(details);
         }
         return group;
     }

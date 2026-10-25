@@ -48,10 +48,13 @@ public class MapRotationFileVerificationTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public async Task ConfigurationGroupExcludesOtherRotationsAndFindsOldOutstandingOperations(bool outstanding, bool uppercase)
+    [InlineData(false, false, "none")]
+    [InlineData(true, false, "none")]
+    [InlineData(false, true, "none")]
+    [InlineData(false, false, "path")]
+    [InlineData(false, false, "variable")]
+    [InlineData(false, false, "server")]
+    public async Task ConfigurationGroupExcludesOtherRotationsAndFindsOldOutstandingOperations(bool outstanding, bool uppercase, string drift)
     {
         var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
         var api = Mock.Get(repository.Object.MapRotations.V1);
@@ -78,6 +81,18 @@ public class MapRotationFileVerificationTests
                 .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(HttpStatusCode.OK,
                     new ApiResponse<MapRotationServerAssignmentDto>(assignment)));
         }
+        if (drift != "none")
+        {
+            var changed = picker with
+            {
+                ConfigFilePath = drift == "path" ? "changed.cfg" : picker.ConfigFilePath,
+                ConfigVariableName = drift == "variable" ? "scr_small_rotation" : picker.ConfigVariableName,
+                GameServerId = drift == "server" ? Guid.NewGuid() : picker.GameServerId
+            };
+            api.SetupSequence(x => x.GetServerAssignment(picker.MapRotationServerAssignmentId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(HttpStatusCode.OK, new ApiResponse<MapRotationServerAssignmentDto>(picker)))
+                .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(HttpStatusCode.OK, new ApiResponse<MapRotationServerAssignmentDto>(changed)));
+        }
         api.Setup(x => x.GetServerAssignments(rotationId, server, null, 0, 100, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(HttpStatusCode.OK,
                 new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(new CollectionModel<MapRotationServerAssignmentDto>([picker, other, custom, normal]))));
@@ -95,7 +110,7 @@ public class MapRotationFileVerificationTests
                         : []))));
         var activities = new MapRotationActivities(Mock.Of<ILogger<MapRotationActivities>>(), repository.Object, servers.Object);
 
-        if (outstanding)
+        if (outstanding || drift != "none")
         {
             await Assert.ThrowsAsync<InvalidOperationException>(() => activities.GetConfigurationGroup(new(picker.MapRotationServerAssignmentId)));
         }
