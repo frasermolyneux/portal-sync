@@ -207,6 +207,80 @@ public class MapRotationActivities(
         }
     }
 
+    [Function(nameof(GetConfigurationGroup))]
+    public async Task<List<RotationDetails>> GetConfigurationGroup([ActivityTrigger] GetRotationDetailsInput input)
+    {
+        var selected = await GetRotationDetails(input).ConfigureAwait(false);
+        var targets = await ReadConfigurationTargets(selected).ConfigureAwait(false);
+        if (targets.Count == 0 || targets.All(target => target.MapRotationServerAssignmentId != input.AssignmentId)
+            || targets.GroupBy(target => target.ConfigVariableName, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+        {
+            throw new InvalidOperationException("The configuration group is missing or ambiguous. Resolve duplicate targets before applying.");
+        }
+        var group = new List<RotationDetails>();
+        foreach (var target in targets.OrderBy(target => target.ConfigVariableName == "sv_maprotation" ? 0 : 1))
+        {
+            await CheckOutstandingConfigurationOperations(target.MapRotationServerAssignmentId).ConfigureAwait(false);
+            group.Add(await GetRotationDetails(new GetRotationDetailsInput(target.MapRotationServerAssignmentId)).ConfigureAwait(false));
+        }
+        return group;
+    }
+
+    private async Task<List<MapRotationServerAssignmentDto>> ReadConfigurationTargets(RotationDetails selected)
+    {
+        var targets = new List<MapRotationServerAssignmentDto>();
+        var standard = selected.ConfigVariableName is "sv_maprotation" or "scr_aacp_maps_1";
+        for (var skip = 0; ; skip += 100)
+        {
+            var result = await repositoryApiClient.MapRotations.V1
+                .GetServerAssignments(selected.MapRotationId, selected.GameServerId, null, skip, 100).ConfigureAwait(false);
+            if (!result.IsSuccess || result.Result?.Data?.Items is not { } items)
+            {
+                throw new InvalidOperationException("Unable to load the server's configuration group.");
+            }
+            targets.AddRange(items.Where(assignment => assignment.DeploymentState != DeploymentState.Removed
+                && assignment.MapRotationId == selected.MapRotationId && assignment.GameServerId == selected.GameServerId
+                && (standard ? assignment.ConfigVariableName is "sv_maprotation" or "scr_aacp_maps_1"
+                    : assignment.MapRotationServerAssignmentId == selected.AssignmentId)));
+            if (items.Count() < 100)
+            {
+                break;
+            }
+        }
+        return targets;
+    }
+
+    private async Task CheckOutstandingConfigurationOperations(Guid assignmentId)
+    {
+        for (var skip = 0; ; skip += 100)
+        {
+            var operations = await repositoryApiClient.MapRotations.V1
+                .GetAssignmentOperations(assignmentId, skip, 100).ConfigureAwait(false);
+            if (!operations.IsSuccess || operations.Result?.Data?.Items is not { } items)
+            {
+                throw new InvalidOperationException("Unable to check outstanding operations for a configuration target.");
+            }
+            if (items.Any(operation => operation.Status == AssignmentOperationStatus.InProgress))
+            {
+                throw new InvalidOperationException("A configuration target still has an in-progress operation. Wait for its recorded outcome.");
+            }
+            if (items.Count() < 100)
+            {
+                return;
+            }
+        }
+    }
+
+    [Function(nameof(UnassignConfigurationGroup))]
+    public async Task UnassignConfigurationGroup([ActivityTrigger] GetRotationDetailsInput input)
+    {
+        var result = await repositoryApiClient.MapRotations.V1.DeleteServerAssignment(input.AssignmentId).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            throw new InvalidOperationException($"Could not unassign the configuration group: {result.StatusCode}. Deactivate both configurations first.");
+        }
+    }
+
     [Function(nameof(GetReservedConfigVariables))]
     public async Task<List<string>> GetReservedConfigVariables([ActivityTrigger] ConfigSlotInput input)
     {

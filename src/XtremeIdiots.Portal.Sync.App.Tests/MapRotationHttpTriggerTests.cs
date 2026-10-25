@@ -40,8 +40,10 @@ public class MapRotationHttpTriggerTests
         }
     }
 
-    [Fact]
-    public async Task CancellationAcknowledgmentDoesNotClaimTerminationOrAbandonInFlightTransfer()
+    [Theory]
+    [InlineData(nameof(MapRotationWorkflow.ApplyMapRotationV2))]
+    [InlineData(nameof(MapRotationGroupWorkflow.ApplyMapRotationV3))]
+    public async Task CancellationAcknowledgmentDoesNotClaimTerminationOrAbandonInFlightTransfer(string workflow)
     {
         using var services = new ServiceCollection().Configure<WorkerOptions>(options =>
             options.Serializer = new JsonObjectSerializer()).BuildServiceProvider();
@@ -52,7 +54,7 @@ public class MapRotationHttpTriggerTests
         var client = new Mock<DurableTaskClient>("tests");
         const string instance = "maprot-apply-test";
         client.Setup(x => x.GetInstanceAsync(instance, false, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrchestrationMetadata(nameof(MapRotationWorkflow.ApplyMapRotationV2), instance)
+            .ReturnsAsync(new OrchestrationMetadata(workflow, instance)
             {
                 RuntimeStatus = OrchestrationRuntimeStatus.Running
             });
