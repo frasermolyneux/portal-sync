@@ -16,7 +16,7 @@ dotnet build src/XtremeIdiots.Portal.Sync.App.slnx
 dotnet test src --filter "FullyQualifiedName!~IntegrationTests"
 dotnet format src/XtremeIdiots.Portal.Sync.App.slnx --verify-no-changes
 terraform -chdir=terraform fmt -check -recursive
-terraform -chdir=terraform init -backend-config=backends/dev.backend.hcl
+terraform -chdir=terraform init -lockfile=readonly -backend-config=backends/dev.backend.hcl
 terraform -chdir=terraform validate
 ```
 
@@ -33,8 +33,8 @@ terraform -chdir=terraform validate
 ## Infrastructure and delivery
 
 - Configuration comes from App Configuration and Key Vault through managed identity; do not embed API keys, client secrets, or connection strings.
-- Terraform requires `>= 1.15.6`, AzureRM `~> 5.0.1`, and the `azurerm` backend. It consumes remote state from platform workloads, platform monitoring, portal environments, and portal core.
+- Terraform CLI compatibility and provider bounds are defined in `terraform/providers.tf`; exact selections come from the committed root CLI pin and provider lock. Keep the `azurerm` backend. It consumes remote state from platform workloads, platform monitoring, portal environments, and portal core.
 - Backend files are under `terraform/backends/`; environment variables are under `terraform/tfvars/`. Preserve backend/state keys, remote-state contracts, provider behavior, Function App settings, identities, schedules, alerts, and APIM outputs.
-- Deployments use GitHub environments, OIDC, Terraform, Function App deployment, and APIM synchronization. `.terraform.lock.hcl` is intentionally untracked.
+- Deployments use GitHub environments, OIDC, Terraform, Function App deployment, and APIM synchronization. Commit each root's `.terraform-version` and `.terraform.lock.hcl`. Select the exact root CLI pin before invoking Terraform; normal initialization uses `-lockfile=readonly`. Regenerate provider selections only in a reviewed dependency-update PR; never commit state, plans, or `.terraform/`.
 
 Use the README and focused source tests for operational detail; keep this file centered on invariants that protect synchronized data and job behavior.
