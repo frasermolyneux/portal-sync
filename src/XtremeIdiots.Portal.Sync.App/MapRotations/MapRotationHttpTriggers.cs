@@ -35,7 +35,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         {
             await client.PurgeInstanceAsync(instanceId).ConfigureAwait(false);
         }
-        await client.ScheduleNewOrchestrationInstanceAsync(nameof(MapRotationWorkflow.ApplyMapRotationV2),
+        await client.ScheduleNewOrchestrationInstanceAsync(nameof(MapRotationGroupWorkflow.ApplyMapRotationV3),
             new SyncOrchestrationInput(assignmentId), new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
         return await client.CreateCheckStatusResponseAsync(req, instanceId).ConfigureAwait(false);
     }
@@ -65,7 +65,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationWorkflow.RepairMapRotationV2),
+            nameof(MapRotationGroupWorkflow.RepairMapRotationV3),
             new SyncOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -97,7 +97,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationWorkflow.UnassignMapRotationV2),
+            nameof(MapRotationGroupWorkflow.UnassignMapRotationV3),
             new RemoveOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -129,7 +129,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationWorkflow.ActivateMapRotationV2),
+            nameof(MapRotationGroupWorkflow.ActivateMapRotationV3),
             new ActivateOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -161,7 +161,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationWorkflow.DeactivateMapRotationV2),
+            nameof(MapRotationGroupWorkflow.DeactivateMapRotationV3),
             new DeactivateOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -193,7 +193,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         }
 
         await client.ScheduleNewOrchestrationInstanceAsync(
-            nameof(MapRotationWorkflow.VerifyMapRotationV2),
+            nameof(MapRotationGroupWorkflow.VerifyMapRotationV3),
             new VerifyOrchestrationInput(assignmentId),
             new StartOrchestrationOptions { InstanceId = instanceId }).ConfigureAwait(false);
 
@@ -253,7 +253,13 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
 
         if (IsBusy(metadata.RuntimeStatus))
         {
-            if (metadata.Name.EndsWith("V2", StringComparison.Ordinal))
+            if (metadata.Name.EndsWith("V2", StringComparison.Ordinal)
+                || metadata.Name is nameof(MapRotationGroupWorkflow.ApplyMapRotationV3)
+                    or nameof(MapRotationGroupWorkflow.RepairMapRotationV3)
+                    or nameof(MapRotationGroupWorkflow.VerifyMapRotationV3)
+                    or nameof(MapRotationGroupWorkflow.ActivateMapRotationV3)
+                    or nameof(MapRotationGroupWorkflow.DeactivateMapRotationV3)
+                    or nameof(MapRotationGroupWorkflow.UnassignMapRotationV3))
             {
                 await client.RaiseEventAsync(instanceId, MapRotationWorkflow.CancellationEvent, new { requested = true }).ConfigureAwait(false);
                 if (metadata.RuntimeStatus == OrchestrationRuntimeStatus.Suspended)

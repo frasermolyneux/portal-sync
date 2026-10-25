@@ -54,6 +54,115 @@ public class MapRotationWorkflowTests
     }
 
     [Fact]
+    public async Task GroupApplyRepairsOnceAndConfirmsBothTargetsUnderOneServerLock()
+    {
+        var (normalId, entities, lease) = SetupGroup();
+
+        var result = await MapRotationGroupWorkflow.ApplyMapRotationV3(context.Object);
+
+        Assert.True(result.Success);
+        entities.Verify(x => x.LockEntitiesAsync(It.Is<EntityInstanceId[]>(ids =>
+            ids.Single().Key == serverId.ToString())), Times.Once);
+        lease.Verify(x => x.DisposeAsync(), Times.Once);
+        context.Verify(x => x.CallActivityAsync<MapOperationResult>(
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.RepairSingleMapToServer)),
+            It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Once);
+        Assert.Contains(updates, update => update.AssignmentId == normalId && update.ActivationState == ActivationState.Active);
+        Assert.Contains(updates, update => update.AssignmentId == assignmentId && update.ActivationState == ActivationState.Active);
+    }
+
+    [Fact]
+    public async Task GroupApplyReportsPartialFailureWithoutHidingSuccessfulNormalTarget()
+    {
+        var (normalId, _, _) = SetupGroup();
+        context.Setup(x => x.CallActivityAsync<MapOperationResult>(
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.SetRconDvar)),
+            It.Is<SetRconDvarInput>(input => input.DvarName == "scr_aacp_maps_1"), It.IsAny<TaskOptions>()))
+            .ReturnsAsync(new MapOperationResult("scr_aacp_maps_1", false, "Picker command failed"));
+
+        var result = await MapRotationGroupWorkflow.ApplyMapRotationV3(context.Object);
+
+        Assert.False(result.Success);
+        Assert.Contains("AACP", result.Error);
+        Assert.Contains(updates, update => update.AssignmentId == normalId && update.ActivationState == ActivationState.Active);
+        Assert.Contains(updates, update => update.AssignmentId == assignmentId && update.ActivationState == ActivationState.Failed);
+    }
+
+    [Theory]
+    [InlineData("Repair")]
+    [InlineData("Deactivate")]
+    public async Task GroupActionsCoordinateBothTargetsWithoutDuplicateFileRepair(string action)
+    {
+        var (normalId, _, _) = SetupGroup();
+
+        var result = await MapRotationGroupWorkflow.Run(context.Object, assignmentId, action);
+
+        Assert.True(result.Success);
+        if (action == "Repair")
+        {
+            context.Verify(x => x.CallActivityAsync<MapOperationResult>(
+                It.Is<TaskName>(name => name == nameof(MapRotationActivities.RepairSingleMapToServer)),
+                It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Once);
+            Assert.Contains(updates, update => update.AssignmentId == normalId && update.DeploymentState == DeploymentState.Synced);
+            Assert.Contains(updates, update => update.AssignmentId == assignmentId && update.DeploymentState == DeploymentState.Synced);
+        }
+        else
+        {
+            Assert.Contains(updates, update => update.AssignmentId == normalId && update.ActivationState == ActivationState.Inactive);
+            Assert.Contains(updates, update => update.AssignmentId == assignmentId && update.ActivationState == ActivationState.Inactive);
+        }
+    }
+
+    [Fact]
+    public async Task GroupUnassignRejectsAnyActiveTargetBeforeMutatingEither()
+    {
+        _ = SetupGroup();
+
+        var result = await MapRotationGroupWorkflow.Run(context.Object, assignmentId, "Unassign");
+
+        Assert.False(result.Success);
+        Assert.Empty(updates);
+        context.Verify(x => x.CallActivityAsync(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GroupUnassignUsesOneAtomicMetadataActionWithoutChangingFiles()
+    {
+        var (normalId, _, _) = SetupGroup();
+        var inactive = details with { ActivationState = ActivationState.Inactive };
+        context.Setup(x => x.CallActivityAsync<List<RotationDetails>>(
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.GetConfigurationGroup)),
+            It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync([inactive with { AssignmentId = normalId, ConfigVariableName = "sv_maprotation" }, inactive]);
+
+        var result = await MapRotationGroupWorkflow.Run(context.Object, assignmentId, "Unassign");
+
+        Assert.True(result.Success);
+        Assert.Empty(updates);
+        context.Verify(x => x.CallActivityAsync(
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.UnassignConfigurationGroup)),
+            It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Once);
+        context.Verify(x => x.CallActivityAsync<MapOperationResult>(It.IsAny<TaskName>(),
+            It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GroupCancellationBeforeExecutionLeavesBothTargetsUntouched()
+    {
+        _ = SetupGroup();
+        context.Setup(x => x.WaitForExternalEvent<object>("Cancel", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new object());
+
+        var result = await MapRotationGroupWorkflow.Run(context.Object, assignmentId, "Apply");
+
+        Assert.False(result.Success);
+        Assert.Empty(updates);
+        Assert.Empty(operations);
+        context.Verify(x => x.CallActivityAsync<MapOperationResult>(It.IsAny<TaskName>(),
+            It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ApplyHoldsOneServerLockAcrossLinkedSlotsAndRepairsFilesOnce()
     {
         var (linkedId, entities, lease) = SetupLinkedApply();
@@ -387,6 +496,28 @@ public class MapRotationWorkflowTests
 
     private Task<RotationWorkflowResult> Run(string action) =>
         MapRotationWorkflow.RunLocked(context.Object, assignmentId, serverId, action, new TaskCompletionSource().Task);
+
+    private (Guid LinkedId, Mock<TaskOrchestrationEntityFeature> Entities, Mock<IAsyncDisposable> Lease) SetupGroup()
+    {
+        var result = SetupLinkedApply();
+        var normal = details with { AssignmentId = result.LinkedId, ConfigVariableName = "sv_maprotation" };
+        RotationDetails Current(RotationDetails snapshot)
+        {
+            var applied = updates.Where(update => update.AssignmentId == snapshot.AssignmentId).ToList();
+            return snapshot with
+            {
+                DeploymentState = applied.LastOrDefault(update => update.DeploymentState.HasValue)?.DeploymentState ?? snapshot.DeploymentState,
+                ActivationState = applied.LastOrDefault(update => update.ActivationState.HasValue)?.ActivationState ?? snapshot.ActivationState,
+                DeployedVersion = applied.LastOrDefault(update => update.DeployedVersion.HasValue)?.DeployedVersion ?? snapshot.DeployedVersion
+            };
+        }
+
+        context.Setup(x => x.CallActivityAsync<List<RotationDetails>>(
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.GetConfigurationGroup)),
+            It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync(() => [Current(normal), Current(details)]);
+        return result;
+    }
 
     private (Guid LinkedId, Mock<TaskOrchestrationEntityFeature> Entities, Mock<IAsyncDisposable> Lease) SetupLinkedApply()
     {

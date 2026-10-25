@@ -19,6 +19,110 @@ public class MapRotationFileVerificationTests
     private MapRotationActivities Create() => new(Mock.Of<ILogger<MapRotationActivities>>(),
         Mock.Of<IRepositoryApiClient>(), servers.Object);
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(91)]
+    public async Task RepeatedGroupUnassignmentReconcilesRemovedTargetsWithoutPurgingHistory(int ageDays)
+    {
+        var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
+        var api = Mock.Get(repository.Object.MapRotations.V1);
+        var serverId = Guid.NewGuid();
+        var rotationId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var snapshots = new List<RotationDetails>();
+        foreach (var variable in new[] { "sv_maprotation", "scr_aacp_maps_1" })
+        {
+            var id = Guid.NewGuid();
+            var assignment = new MapRotationServerAssignmentDto(id, rotationId, serverId, DeploymentState.Removed,
+                ActivationState.Inactive, 1, 1, "server.cfg", variable, null, null, now, now, now.AddDays(-ageDays));
+            api.Setup(x => x.GetServerAssignment(id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(HttpStatusCode.OK, new ApiResponse<MapRotationServerAssignmentDto>(assignment)));
+            snapshots.Add(new(id, serverId, rotationId, GameType.CallOfDuty5, DeploymentState.Synced,
+                ActivationState.Inactive, 1, 1, null, "server.cfg", variable, "dm", []));
+        }
+        var activities = new MapRotationActivities(Mock.Of<ILogger<MapRotationActivities>>(), repository.Object, servers.Object);
+
+        await activities.UnassignConfigurationGroup(snapshots);
+
+        api.Verify(x => x.DeleteServerAssignment(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(false, false, "none")]
+    [InlineData(true, false, "none")]
+    [InlineData(false, true, "none")]
+    [InlineData(false, false, "path")]
+    [InlineData(false, false, "variable")]
+    [InlineData(false, false, "server")]
+    public async Task ConfigurationGroupExcludesOtherRotationsAndFindsOldOutstandingOperations(bool outstanding, bool uppercase, string drift)
+    {
+        var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
+        var api = Mock.Get(repository.Object.MapRotations.V1);
+        var server = Guid.NewGuid();
+        var rotationId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        MapRotationServerAssignmentDto Assignment(string variable, Guid rotation)
+        {
+            return new(Guid.NewGuid(), rotation, server, DeploymentState.Synced, ActivationState.Active,
+                1, 1, "server.cfg", variable, null, null, now, now, null);
+        }
+
+        var normal = Assignment(uppercase ? "SV_MAPROTATION" : "sv_maprotation", rotationId);
+        var picker = Assignment(uppercase ? "SCR_AACP_MAPS_1" : "scr_aacp_maps_1", rotationId);
+        var other = Assignment("scr_aacp_maps_1", Guid.NewGuid());
+        var custom = Assignment("scr_small_rotation", rotationId);
+        var rotationDto = new MapRotationDto(rotationId, GameType.CallOfDuty5, "Synthetic", null, "dm", 1,
+            null, now, now, [], [normal, picker, other, custom]);
+        api.Setup(x => x.GetMapRotation(rotationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MapRotationDto>(HttpStatusCode.OK, new ApiResponse<MapRotationDto>(rotationDto)));
+        foreach (var assignment in new[] { normal, picker, other, custom })
+        {
+            api.Setup(x => x.GetServerAssignment(assignment.MapRotationServerAssignmentId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(HttpStatusCode.OK,
+                    new ApiResponse<MapRotationServerAssignmentDto>(assignment)));
+        }
+        if (drift != "none")
+        {
+            var changed = picker with
+            {
+                ConfigFilePath = drift == "path" ? "changed.cfg" : picker.ConfigFilePath,
+                ConfigVariableName = drift == "variable" ? "scr_small_rotation" : picker.ConfigVariableName,
+                GameServerId = drift == "server" ? Guid.NewGuid() : picker.GameServerId
+            };
+            api.SetupSequence(x => x.GetServerAssignment(picker.MapRotationServerAssignmentId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(HttpStatusCode.OK, new ApiResponse<MapRotationServerAssignmentDto>(picker)))
+                .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(HttpStatusCode.OK, new ApiResponse<MapRotationServerAssignmentDto>(changed)));
+        }
+        api.Setup(x => x.GetServerAssignments(rotationId, server, null, 0, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(new CollectionModel<MapRotationServerAssignmentDto>([picker, other, custom, normal]))));
+        api.Setup(x => x.GetAssignmentOperations(It.IsAny<Guid>(), 0, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, int _, int _, CancellationToken _) =>
+                new ApiResult<CollectionModel<MapRotationAssignmentOperationDto>>(HttpStatusCode.OK,
+                    new ApiResponse<CollectionModel<MapRotationAssignmentOperationDto>>(new CollectionModel<MapRotationAssignmentOperationDto>(
+                        Enumerable.Range(0, 100).Select(_ => new MapRotationAssignmentOperationDto(Guid.NewGuid(),
+                            id, AssignmentOperationType.Verify, AssignmentOperationStatus.Succeeded, null, now, now, null)).ToList()))));
+        api.Setup(x => x.GetAssignmentOperations(It.IsAny<Guid>(), 100, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, int _, int _, CancellationToken _) =>
+                new ApiResult<CollectionModel<MapRotationAssignmentOperationDto>>(HttpStatusCode.OK,
+                    new ApiResponse<CollectionModel<MapRotationAssignmentOperationDto>>(new CollectionModel<MapRotationAssignmentOperationDto>(outstanding
+                        ? [new(Guid.NewGuid(), id, AssignmentOperationType.Sync, AssignmentOperationStatus.InProgress, null, now, null, null)]
+                        : []))));
+        var activities = new MapRotationActivities(Mock.Of<ILogger<MapRotationActivities>>(), repository.Object, servers.Object);
+
+        if (outstanding || drift != "none")
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => activities.GetConfigurationGroup(new(picker.MapRotationServerAssignmentId)));
+        }
+        else
+        {
+            var group = await activities.GetConfigurationGroup(new(picker.MapRotationServerAssignmentId));
+            Assert.Equal([normal.MapRotationServerAssignmentId, picker.MapRotationServerAssignmentId], group.Select(member => member.AssignmentId));
+            api.Verify(x => x.GetAssignmentOperations(normal.MapRotationServerAssignmentId, 100, 100, It.IsAny<CancellationToken>()), Times.Once);
+            api.Verify(x => x.GetAssignmentOperations(picker.MapRotationServerAssignmentId, 100, 100, It.IsAny<CancellationToken>()), Times.Once);
+        }
+    }
+
     [Fact]
     public async Task LinkedSlotLookupPaginatesAndExcludesOtherRotationsAndIndependentSlots()
     {
