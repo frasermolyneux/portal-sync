@@ -196,7 +196,7 @@ public class MapRedirectRepositoryRetryTests
                 invocation.Arguments[0] is LogLevel.Warning)
             .Select(invocation =>
             {
-                var state = Assert.IsAssignableFrom<IReadOnlyList<KeyValuePair<string, object?>>>(invocation.Arguments[2]);
+                var state = Assert.IsType<IReadOnlyList<KeyValuePair<string, object?>>>(invocation.Arguments[2], exactMatch: false);
                 return (int)Assert.Single(state, item => item.Key == "Attempt").Value!;
             })
             .ToArray();
