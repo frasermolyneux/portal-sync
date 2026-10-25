@@ -25,6 +25,15 @@ public sealed class BlobJobHealthStore(BlobContainerClient container) : IJobHeal
 {
     private readonly ConcurrentDictionary<string, JobHealthState> pending = new(StringComparer.Ordinal);
 
+    internal static bool IsStorageFailure(Exception exception) => exception switch
+    {
+        RequestFailedException or Azure.Identity.AuthenticationFailedException or IOException or InvalidDataException
+            or System.Text.Json.JsonException or OperationCanceledException or HttpRequestException
+            or System.Net.Sockets.SocketException => true,
+        AggregateException aggregate => aggregate.InnerExceptions.Count > 0 && aggregate.InnerExceptions.All(IsStorageFailure),
+        _ => false
+    };
+
     public async Task<JobHealthState?> ReadAsync(string name, CancellationToken ct)
     {
         try

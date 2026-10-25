@@ -569,34 +569,30 @@ public class BanFilesRepository(
         return new MemoryStream();
     }
 
-    private async Task<List<AdminActionDto>> GetActiveBans(GameType gameType, CancellationToken cancellationToken)
+    internal async Task<List<AdminActionDto>> GetActiveBans(GameType gameType, CancellationToken cancellationToken)
     {
         const int TakeEntries = 500;
         List<AdminActionDto> adminActions = [];
 
         var skip = 0;
-        var adminActionsApiResponse = await repositoryApiClient.AdminActions.V1
-            .GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc, cancellationToken)
-            .ConfigureAwait(false);
-
-        do
+        while (true)
         {
-            if (adminActionsApiResponse?.IsSuccess == true && adminActionsApiResponse.Result?.Data?.Items is not null)
+            var response = await repositoryApiClient.AdminActions.V1
+                .GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc, cancellationToken)
+                .ConfigureAwait(false);
+            if (response?.IsSuccess != true || response.Result?.Data?.Items is not { } items)
             {
-                adminActions.AddRange(adminActionsApiResponse.Result.Data.Items);
-
-                skip += TakeEntries;
-                adminActionsApiResponse = await repositoryApiClient.AdminActions.V1
-                    .GetAdminActions(gameType, null, null, AdminActionFilter.ActiveBans, skip, TakeEntries, AdminActionOrder.CreatedAsc, cancellationToken)
-                    .ConfigureAwait(false);
+                throw new HttpRequestException($"Active ban inventory for {gameType} is incomplete at offset {skip}.",
+                    null, response?.StatusCode);
             }
-            else
+            var page = items.ToArray();
+            if (page.Length == 0)
             {
-                break;
+                return adminActions;
             }
-        } while (adminActionsApiResponse?.IsSuccess == true && adminActionsApiResponse.Result?.Data?.Items?.Any() is true);
-
-        return adminActions;
+            adminActions.AddRange(page);
+            skip += TakeEntries;
+        }
     }
 
     private sealed record LaneRegenerationSnapshot

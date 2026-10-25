@@ -65,14 +65,18 @@ public class ProcessHealthTests
         Assert.Equal(concurrent.LastFailure, writes[^1].State.LastFailure);
     }
 
-    [Fact]
-    public async Task OneInvalidDurableJobDoesNotSuppressOtherJobsOrAggregateFeeds()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OneUnreadableDurableJobDoesNotSuppressOtherJobsOrAggregateFeeds(bool transportRetries)
     {
         var now = DateTimeOffset.UtcNow;
         var store = new Mock<IJobHealthStore>();
         store.Setup(target => target.ReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns((string name, CancellationToken _) => name == Job
-                ? Task.FromException<JobHealthState?>(new InvalidDataException("Invalid durable record."))
+                ? Task.FromException<JobHealthState?>(transportRetries
+                    ? new AggregateException(new HttpRequestException("Transport retries exhausted."))
+                    : new InvalidDataException("Invalid durable record."))
                 : Task.FromResult<JobHealthState?>(new(name, now, now, null, "success", 1, 0)));
         var channel = new Mock<ITelemetryChannel>();
         var events = new List<EventTelemetry>();
@@ -176,20 +180,32 @@ public class ProcessHealthTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task TelemetryStorageFailureDoesNotRetrySuccessfulBusinessEffects(bool invalidRecord)
+    [InlineData(null)]
+    public async Task TelemetryStorageFailureDoesNotRetrySuccessfulBusinessEffects(bool? invalidRecord)
     {
         var inner = new Mock<IJobTelemetry>();
         var operation = new Mock<IJobOperation>();
         var store = new Mock<IJobHealthStore>();
         inner.Setup(telemetry => telemetry.StartJob(Job, null)).Returns(operation.Object);
         store.Setup(target => target.RecordAsync(It.IsAny<JobHealthState>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(invalidRecord ? new InvalidDataException("Invalid durable state.")
-                : new RequestFailedException(503, "Storage unavailable."));
+            .ThrowsAsync(invalidRecord switch
+            {
+                true => new InvalidDataException("Invalid durable state."),
+                false => new RequestFailedException(503, "Storage unavailable."),
+                null => new AggregateException(new HttpRequestException("Transport retries exhausted."))
+            });
         var telemetry = new PersistentJobTelemetry(inner.Object, store.Object, NullLogger<PersistentJobTelemetry>.Instance);
         var runs = 0;
         await telemetry.ExecuteAsync(Job, () => { runs++; return Task.CompletedTask; });
         Assert.Equal(1, runs);
         operation.Verify(job => job.Complete(null), Times.Once);
         operation.Verify(job => job.FailAsync(It.IsAny<Exception>(), It.IsAny<Dictionary<string, string>?>()), Times.Never);
+    }
+
+    [Fact]
+    public void UnexpectedErrorsInsideTransportAggregatesAreNotSilenced()
+    {
+        Assert.False(BlobJobHealthStore.IsStorageFailure(new AggregateException(
+            new HttpRequestException("Transport failure."), new InvalidOperationException("Programming error."))));
     }
 }

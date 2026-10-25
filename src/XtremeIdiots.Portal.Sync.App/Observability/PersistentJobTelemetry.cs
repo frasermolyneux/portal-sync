@@ -1,5 +1,3 @@
-using Azure;
-using Azure.Identity;
 using Microsoft.Extensions.Logging;
 using MX.Observability.ApplicationInsights.Jobs;
 
@@ -84,8 +82,7 @@ public sealed class PersistentJobTelemetry(IJobTelemetry inner, IJobHealthStore 
             {
                 await store.RecordAsync(state!, timeout.Token).ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is RequestFailedException or AuthenticationFailedException
-                or IOException or InvalidDataException or System.Text.Json.JsonException or OperationCanceledException)
+            catch (Exception exception) when (BlobJobHealthStore.IsStorageFailure(exception))
             {
                 // Retrying business side effects because their telemetry write failed is unsafe.
                 logger.LogError(exception, "Could not persist the outcome of {JobName}; its pending outcome survives only in this process.", name);
