@@ -3,6 +3,15 @@
 # to detect failures and missed executions.
 
 locals {
+  process_health_policy = jsondecode(file("${path.module}/../src/contract/process-health-policy.json"))
+  process_health_bindings = join(", ", [
+    for binding in local.process_health_policy.bindings :
+    "\"${binding.siteId}\", \"${binding.componentId}\", \"${binding.checkId}\", \"${binding.role}\""
+  ])
+  process_health_jobs = join(", ", [
+    for job in local.process_health_policy.jobs :
+    "\"${job.name}\", ${job.maximumAgeSeconds}s"
+  ])
   sync_job_completions = <<-QUERY
     customEvents
     | where name == "Audit:JobCompleted"
@@ -17,19 +26,30 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "scheduled_job_failure
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = data.azurerm_resource_group.rg.location
 
-  scopes               = [data.azurerm_application_insights.app_insights.id]
-  severity             = 4 # Informational
-  description          = "Alert when any scheduled job fails in the Portal Sync Function App"
-  evaluation_frequency = "PT5M"
-  window_duration      = "PT5M"
+  scopes                    = [data.azurerm_application_insights.app_insights.id]
+  severity                  = 4 # Informational
+  description               = "Alert on scheduled job failures or confirmed fleet/process degradation using the strategic process-health contract"
+  evaluation_frequency      = "PT5M"
+  window_duration           = "PT5M"
+  query_time_range_override = "PT15M"
 
   criteria {
     query = <<-QUERY
-      customEvents
-      | where name == "Audit:JobFailed"
-      | where cloud_RoleName in~ ("Sync FuncApp", "${azurerm_linux_function_app.function_app.name}")
-      | where timestamp > ago(5m)
-      | project timestamp, JobName=tostring(customDimensions["Audit.SourceComponent"]), tostring(customDimensions.ExceptionType), tostring(customDimensions.ExceptionMessage)
+      let bindings = datatable(SiteId:string, ComponentId:string, CheckId:string, Role:string) [${local.process_health_bindings}];
+      let failures = customEvents
+        | where name == "Audit:JobFailed" and timestamp > ago(5m)
+        | where cloud_RoleName in~ ("Sync FuncApp", "${azurerm_linux_function_app.function_app.name}")
+        | project timestamp, JobName=tostring(customDimensions["Audit.SourceComponent"]);
+      let processes = customEvents
+        | where name == "ProcessHealthSnapshot" and timestamp > ago(15m)
+        | where tostring(customDimensions.siteId) == "xi" and tostring(customDimensions.contractVersion) == "1"
+        | extend SiteId=tostring(customDimensions.siteId), ComponentId=tostring(customDimensions.componentId),
+            CheckId=tostring(customDimensions.checkId), Role=cloud_RoleName
+        | join kind=inner bindings on SiteId, ComponentId, CheckId, Role
+        | summarize arg_max(timestamp, *) by CheckId
+        | where tostring(customDimensions.status) in ("degraded", "outage")
+        | project timestamp, JobName=CheckId;
+      union failures, processes
     QUERY
 
     time_aggregation_method = "Count"
@@ -58,21 +78,35 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "import_ban_files_not_
 
   scopes               = [data.azurerm_application_insights.app_insights.id]
   severity             = 4 # Informational
-  description          = "Alert when player-tag reconciliation or map-rotation cleanup misses its successful completion deadline. Retains the legacy import-rule name."
+  description          = "Alert on missing process feeds or overdue/unobserved scheduled jobs, including weekly jobs. Retains the legacy import-rule name and price."
   evaluation_frequency = "PT5M"
   window_duration      = "PT2H"
 
   criteria {
     query = <<-QUERY
-      let expectedJobs = datatable(JobName:string, MaximumAge:timespan)
-        ["RunConnectedPlayerTagReconciliationSync", 15m, "RunMapRotationCleanup", 2h];
-      let completions = ${local.sync_job_completions}
-        | where timestamp > ago(2h)
-        | summarize LastSuccess=max(timestamp) by JobName;
-      expectedJobs
-      | join kind=leftouter completions on JobName
-      | where isnull(LastSuccess) or now() - LastSuccess > MaximumAge
-      | project JobName, LastSuccess, MaximumAge
+      let bindings = datatable(SiteId:string, ComponentId:string, CheckId:string, Role:string) [${local.process_health_bindings}];
+      let expectedJobs = datatable(JobName:string, MaximumAge:timespan) [${local.process_health_jobs}];
+      let snapshots = customEvents
+        | where name == "ProcessHealthSnapshot" and timestamp > ago(15m)
+        | where tostring(customDimensions.siteId) == "xi" and tostring(customDimensions.contractVersion) == "1"
+        | extend SiteId=tostring(customDimensions.siteId), ComponentId=tostring(customDimensions.componentId),
+            CheckId=tostring(customDimensions.checkId), Role=cloud_RoleName
+        | summarize LastSeen=max(timestamp) by SiteId, ComponentId, CheckId, Role;
+      let missingFeeds = bindings
+        | join kind=leftouter snapshots on SiteId, ComponentId, CheckId, Role
+        | where isnull(LastSeen)
+        | project JobName=CheckId;
+      let jobSnapshots = customEvents
+        | where name == "ProcessJobSnapshot" and timestamp > ago(15m)
+        | where cloud_RoleName == "Sync FuncApp"
+        | where tostring(customDimensions.siteId) == "xi" and tostring(customDimensions.contractVersion) == "1"
+        | extend JobName=tostring(customDimensions.jobName), LastSuccess=todatetime(customDimensions.lastSuccess)
+        | summarize arg_max(timestamp, LastSuccess) by JobName;
+      let overdueJobs = expectedJobs
+        | join kind=leftouter jobSnapshots on JobName
+        | where isnull(LastSuccess) or now() - LastSuccess > MaximumAge
+        | project JobName;
+      union missingFeeds, overdueJobs
     QUERY
 
     time_aggregation_method = "Count"

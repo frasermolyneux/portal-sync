@@ -22,6 +22,13 @@ terraform -chdir=terraform validate
 
 ## Synchronization and job constraints
 
+- `src/contract/` mirrors platform-monitoring's process-health policy/helper. Keep
+  original durable success/failure times, explicit partial failures and Unknown
+  for unobserved jobs. The read-only five-minute health projector is not a business
+  job and must not recursively wrap itself in job telemetry. Reuse existing host
+  storage, compute and alert identities; never make completed business side effects
+  retry solely because their telemetry persistence failed.
+
 - Scheduled jobs must run through `IJobTelemetry.ExecuteAsync()` and retain a corresponding HTTP trigger for controlled manual execution.
 - Preserve scheduling, pagination, retry/fail-fast, cancellation, and partial-failure semantics. Avoid duplicate side effects when a job is retried or manually re-run.
 - Forum synchronization regenerates system-owned identity and role claims from forum membership while preserving every claim where `SystemGenerated == false`. Merge and deduplicate before the atomic `SetUserProfileClaims` replacement.

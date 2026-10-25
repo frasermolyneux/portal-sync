@@ -16,7 +16,9 @@ using MX.Observability.ApplicationInsights.Auditing;
 using MX.Observability.ApplicationInsights.Auditing.Models;
 using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
@@ -66,110 +68,138 @@ public class MapImageSync(
             [GameType.UnrealTournament2004] = "ut2k4",
             [GameType.Insurgency] = "ins"
         };
-        await repositoryApiClient.DataMaintenance.V1.ValidateMapImages().ConfigureAwait(false);
+        var validation = await repositoryApiClient.DataMaintenance.V1.ValidateMapImages().ConfigureAwait(false);
+        if (!validation.IsSuccess)
+        {
+            throw new HttpRequestException("Unable to validate existing map images.");
+        }
+        var attempted = 0;
+        var failures = new List<Exception>();
 
         foreach (var game in gamesToSync)
         {
-            var skip = 0;
-            var mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null).ConfigureAwait(false);
-
-            if (mapsResponseDto is null || !mapsResponseDto.IsSuccess || mapsResponseDto.Result?.Data?.Items is null)
+            // Uploads remove maps from the filtered result, so enumerate before writing.
+            var maps = new List<MapDto>();
+            var identities = new HashSet<Guid>();
+            while (true)
             {
-                throw new ApplicationException("Failed to retrieve maps from the repository");
+                var response = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage,
+                    null, maps.Count, TakeEntries, null).ConfigureAwait(false);
+                if (response?.IsSuccess != true || response.Result?.Data?.Items is null)
+                {
+                    throw new HttpRequestException("Unable to complete map image enumeration.");
+                }
+                var page = response.Result.Data.Items.ToArray();
+                if (page.Length > TakeEntries || page.Any(map => map.MapId == Guid.Empty || !identities.Add(map.MapId)))
+                {
+                    throw new InvalidDataException("Invalid or repeated map identities prevent complete image enumeration.");
+                }
+                maps.AddRange(page);
+                if (page.Length < TakeEntries)
+                {
+                    break;
+                }
             }
 
+            logger.LogInformation($"Processing '{maps.Count}' maps for '{game.Key}'");
+
+            foreach (var mapDto in maps)
             {
-                logger.LogInformation($"Processing '{mapsResponseDto.Result.Data.Items.Count()}' maps for '{game.Key}'");
+                attempted++;
+                var gameTrackerImageUrl = $"{gameTrackerMapImageBaseUrl}{game.Value}/{mapDto.MapName}.jpg";
 
-                foreach (var mapDto in mapsResponseDto.Result.Data.Items)
+                string? tempFilePath = null;
+                try
                 {
-                    var gameTrackerImageUrl = $"{gameTrackerMapImageBaseUrl}{game.Value}/{mapDto.MapName}.jpg";
-
-                    string? tempFilePath = null;
-                    try
+                    using var response = await httpClient.GetAsync(gameTrackerImageUrl, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
                     {
-                        using var response = await httpClient.GetAsync(gameTrackerImageUrl, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-                        if (!response.IsSuccessStatusCode)
+                        if (response.StatusCode != HttpStatusCode.NotFound)
                         {
-                            logger.LogDebug("Skipping map image for {MapName} - status code {StatusCode}", mapDto.MapName, response.StatusCode);
-                            continue;
+                            response.EnsureSuccessStatusCode();
                         }
+                        logger.LogDebug("Skipping map image for {MapName} - status code {StatusCode}", mapDto.MapName, response.StatusCode);
+                        continue;
+                    }
 
-                        var contentType = response.Content.Headers.ContentType?.MediaType;
-                        var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                        if (bytes.Length == 0)
-                        {
-                            logger.LogDebug("Empty response for {MapName}", mapDto.MapName);
-                            continue;
-                        }
+                    var contentType = response.Content.Headers.ContentType?.MediaType;
+                    var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                    if (bytes.Length == 0)
+                    {
+                        logger.LogDebug("Empty response for {MapName}", mapDto.MapName);
+                        continue;
+                    }
 
-                        bool looksLikeHtml = false;
-                        if (!string.IsNullOrEmpty(contentType) && contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase))
+                    bool looksLikeHtml = false;
+                    if (!string.IsNullOrEmpty(contentType) && contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase))
+                    {
+                        looksLikeHtml = true;
+                    }
+                    else
+                    {
+                        var sampleLength = Math.Min(256, bytes.Length);
+                        var prefix = Encoding.UTF8.GetString(bytes, 0, sampleLength).TrimStart();
+                        if (prefix.StartsWith("<!DOCTYPE html", StringComparison.OrdinalIgnoreCase) || prefix.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
                         {
                             looksLikeHtml = true;
                         }
-                        else
-                        {
-                            var sampleLength = Math.Min(256, bytes.Length);
-                            var prefix = Encoding.UTF8.GetString(bytes, 0, sampleLength).TrimStart();
-                            if (prefix.StartsWith("<!DOCTYPE html", StringComparison.OrdinalIgnoreCase) || prefix.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
-                            {
-                                looksLikeHtml = true;
-                            }
-                        }
-
-                        if (looksLikeHtml)
-                        {
-                            logger.LogDebug("HTML page detected instead of image for {MapName}; skipping.", mapDto.MapName);
-                            continue;
-                        }
-
-                        if (!string.IsNullOrEmpty(contentType) && !contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-                        {
-                            logger.LogDebug("Non-image content-type {ContentType} for {MapName}; skipping", contentType, mapDto.MapName);
-                            continue;
-                        }
-
-                        tempFilePath = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
-                        await File.WriteAllBytesAsync(tempFilePath, bytes).ConfigureAwait(false);
-                        await repositoryApiClient.Maps.V1.UpdateMapImage(mapDto.MapId, tempFilePath).ConfigureAwait(false);
-
-                        auditLogger.LogAudit(AuditEvent.SystemAction("MapImageUploaded", AuditAction.Update)
-                            .WithService("MapImageSync")
-                            .WithProperty("GameType", game.Key.ToString())
-                            .WithProperty("MapName", mapDto.MapName)
-                            .WithSource("MapImageSync")
-                            .Build());
                     }
-                    catch (Exception ex)
+
+                    if (looksLikeHtml)
                     {
-                        logger.LogWarning(ex, $"Failed to retrieve map image from {gameTrackerImageUrl}", mapDto.TelemetryProperties);
+                        logger.LogDebug("HTML page detected instead of image for {MapName}; skipping.", mapDto.MapName);
+                        continue;
                     }
-                    finally
+
+                    if (!string.IsNullOrEmpty(contentType) && !contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (!string.IsNullOrEmpty(tempFilePath))
+                        logger.LogDebug("Non-image content-type {ContentType} for {MapName}; skipping", contentType, mapDto.MapName);
+                        continue;
+                    }
+
+                    tempFilePath = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
+                    await File.WriteAllBytesAsync(tempFilePath, bytes).ConfigureAwait(false);
+                    var update = await repositoryApiClient.Maps.V1.UpdateMapImage(mapDto.MapId, tempFilePath).ConfigureAwait(false);
+                    if (!update.IsSuccess)
+                    {
+                        throw new HttpRequestException("Unable to persist the downloaded map image.");
+                    }
+
+                    auditLogger.LogAudit(AuditEvent.SystemAction("MapImageUploaded", AuditAction.Update)
+                        .WithService("MapImageSync")
+                        .WithProperty("GameType", game.Key.ToString())
+                        .WithProperty("MapName", mapDto.MapName)
+                        .WithSource("MapImageSync")
+                        .Build());
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, $"Failed to retrieve map image from {gameTrackerImageUrl}", mapDto.TelemetryProperties);
+                    failures.Add(ex);
+                }
+                finally
+                {
+                    if (!string.IsNullOrEmpty(tempFilePath))
+                    {
+                        try
                         {
-                            try
+                            if (File.Exists(tempFilePath))
                             {
-                                if (File.Exists(tempFilePath))
-                                {
-                                    File.Delete(tempFilePath);
-                                }
+                                File.Delete(tempFilePath);
                             }
-                            catch (Exception cleanupEx)
-                            {
-                                logger.LogDebug(cleanupEx, "Failed to delete temp file {TempFilePath}", tempFilePath);
-                            }
+                        }
+                        catch (Exception cleanupEx)
+                        {
+                            logger.LogDebug(cleanupEx, "Failed to delete temp file {TempFilePath}", tempFilePath);
                         }
                     }
                 }
-
-                skip += TakeEntries;
-                mapsResponseDto = await repositoryApiClient.Maps.V1.GetMaps(game.Key, null, MapsFilter.EmptyMapImage, null, skip, TakeEntries, null).ConfigureAwait(false);
-            } while (mapsResponseDto is not null && mapsResponseDto.IsSuccess && mapsResponseDto.Result is not null && mapsResponseDto.Result.Data is not null && mapsResponseDto.Result.Data.Items is not null && mapsResponseDto.Result.Data.Items.Any())
-            {
-                ;
             }
+
+        }
+        if (failures.Count > 0)
+        {
+            throw new PartialJobFailureException(attempted, failures);
         }
     }
 }

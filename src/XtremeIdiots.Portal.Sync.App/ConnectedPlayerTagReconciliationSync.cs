@@ -24,7 +24,11 @@ public class ConnectedPlayerTagReconciliationSync(
             nameof(RunConnectedPlayerTagReconciliationSync),
             async () =>
             {
-                await repositoryApiClient.DataMaintenance.V1.ReconcileConnectedPlayerTags().ConfigureAwait(false);
+                var result = await repositoryApiClient.DataMaintenance.V1.ReconcileConnectedPlayerTags().ConfigureAwait(false);
+                if (!result.IsSuccess)
+                {
+                    throw new InvalidOperationException($"Connected-player tag reconciliation failed: {result.StatusCode}.");
+                }
             }).ConfigureAwait(false);
     }
 }

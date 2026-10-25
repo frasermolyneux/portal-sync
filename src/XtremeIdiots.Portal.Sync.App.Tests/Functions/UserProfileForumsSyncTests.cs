@@ -69,7 +69,7 @@ public class UserProfileForumsSyncTests
     }
 
     [Fact]
-    public async Task RunUserProfileForumsSync_WhenApiReturnsFailure_CompletesWithWarning()
+    public async Task RunUserProfileForumsSync_WhenApiReturnsFailure_DoesNotReportSuccessfulCompletion()
     {
         var failResult = new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.InternalServerError);
 
@@ -85,8 +85,7 @@ public class UserProfileForumsSyncTests
 
         var sut = CreateSut();
 
-        // Should not throw - logs warning and breaks out of loop
-        await sut.RunUserProfileForumsSync(null);
+        await Assert.ThrowsAsync<HttpRequestException>(() => sut.RunUserProfileForumsSync(null));
     }
 
     [Fact]
