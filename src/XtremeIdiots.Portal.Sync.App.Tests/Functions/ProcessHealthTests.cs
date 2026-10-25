@@ -96,7 +96,7 @@ public class ProcessHealthTests
         var store = new Mock<IJobHealthStore>();
         inner.Setup(telemetry => telemetry.StartJob(Job, null)).Returns(operation.Object);
         store.Setup(target => target.RecordAsync(It.IsAny<JobHealthState>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new Azure.RequestFailedException(503, "Storage unavailable."));
+            .ThrowsAsync(new RequestFailedException(503, "Storage unavailable."));
         var telemetry = new PersistentJobTelemetry(inner.Object, store.Object, NullLogger<PersistentJobTelemetry>.Instance);
         var runs = 0;
         await telemetry.ExecuteAsync(Job, () => { runs++; return Task.CompletedTask; });

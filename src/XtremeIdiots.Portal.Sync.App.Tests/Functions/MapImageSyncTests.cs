@@ -172,11 +172,11 @@ public class MapImageSyncTests
     {
         Mock.Get(_repositoryApiClientMock.Object.DataMaintenance.V1)
             .Setup(x => x.ValidateMapImages(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
+            .ReturnsAsync(new ApiResult(HttpStatusCode.OK));
 
         var emptyCollection = new CollectionModel<MapDto>(new List<MapDto>());
         var response = new ApiResponse<CollectionModel<MapDto>>(emptyCollection);
-        var apiResult = new ApiResult<CollectionModel<MapDto>>(System.Net.HttpStatusCode.OK, response);
+        var apiResult = new ApiResult<CollectionModel<MapDto>>(HttpStatusCode.OK, response);
 
         Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
             .Setup(x => x.GetMaps(
