@@ -32,7 +32,26 @@ COD4 and COD4x share one source snapshot. Paging is per catalogue, not per map.
 Updates include file versions and explicitly replace even empty file lists;
 deleted source folders remove only their own legacy redirect references.
 
+## Process health
+
+The strategic policy mirrored under `src/contract/` classifies real durable job
+outcomes every five minutes. The existing host-storage identity writes a private
+`process-health` container using the nonsecret
+`ProcessHealth:StorageBlobEndpoint` setting supplied by Terraform. Optimistic
+merges preserve last-success/failure times when concurrent/manual runs finish out
+of order. Partial failures remain failures; unobserved jobs remain Unknown.
+
+`ProcessHealthSnapshot` publishes aggregate public capability counts;
+`ProcessJobSnapshot` retains private named-job outcomes and original completion
+times. Existing alert rules consume these snapshots without additional paid
+series, including weekly completion freshness. No public history is seeded.
+If telemetry persistence fails, it is logged, the active producer retains its
+pending real outcome, and completed business operations are not retried for that
+reason alone. A process loss before persistence can lose that pending outcome;
+existing failed-job alerts remain independently active.
+
 ## Contributing
+
 Please read the [contributing](CONTRIBUTING.md) guidance; this is a learning and development project.
 
 ## Security

@@ -41,6 +41,8 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="XtremeIdiots.Portal.Sync.App.Tests" />
+    <Compile Include="..\contract\ProcessHealthTelemetry.cs" Link="Observability\ProcessHealthTelemetry.cs" />
+    <Content Include="..\contract\process-health-policy.json" Link="process-health-policy.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XtremeIdiots.Portal.Forums.Integration\XtremeIdiots.Portal.Forums.Integration.csproj" />
@@ -55,7 +57,5 @@
     </None>
   </ItemGroup>
 </Project>
-
-
 
 

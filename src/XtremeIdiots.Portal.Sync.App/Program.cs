@@ -1,8 +1,9 @@
 using System.Reflection;
 
 using Azure.Identity;
+using Azure.Storage.Blobs;
+using Microsoft.ApplicationInsights;
 
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.AzureAppConfiguration;
@@ -13,6 +14,9 @@ using Microsoft.Identity.Web;
 using MX.Api.Client.Extensions;
 using MX.InvisionCommunity.Api.Client;
 using MX.Observability.ApplicationInsights.WorkerService;
+using MX.Observability.ApplicationInsights.Jobs;
+using MX.Observability.ApplicationInsights.Auditing;
+using MX.Platform.Monitoring;
 using XtremeIdiots.Portal.Forums.Integration.Extensions;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
@@ -20,6 +24,7 @@ using XtremeIdiots.Portal.Sync.App;
 using XtremeIdiots.Portal.Sync.App.Extensions;
 using XtremeIdiots.Portal.Sync.App.Redirect;
 using XtremeIdiots.Portal.Sync.App.Configuration;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 var host = new HostBuilder()
     .ConfigureAppConfiguration(builder =>
@@ -79,13 +84,18 @@ var host = new HostBuilder()
         services.AddLogging();
         services.AddMicrosoftIdentityWebApiAuthentication(configuration);
         services.AddAuthorization();
-        services.AddSingleton<ITelemetryInitializer, TelemetryInitializer>();
-        services.AddApplicationInsightsTelemetryWorkerService(options =>
-        {
-            options.EnableAdaptiveSampling = false;
-        });
-        services.ConfigureFunctionsApplicationInsights();
-        services.AddObservability();
+        services.AddSyncApplicationInsights();
+        services.AddObservability(ProcessHealthTelemetry.ConfigureFiltering);
+        services.AddSingleton<ProcessHealthTelemetry>();
+        services.AddSingleton<IJobHealthStore>(_ => new BlobJobHealthStore(new BlobContainerClient(
+            new Uri((configuration["ProcessHealth:StorageBlobEndpoint"]
+                ?? throw new InvalidOperationException("ProcessHealth:StorageBlobEndpoint is required.")).TrimEnd('/') + "/process-health"),
+            new DefaultAzureCredential())));
+        services.AddSingleton<IJobTelemetry>(provider => new PersistentJobTelemetry(
+            new ApplicationInsightsJobTelemetry(provider.GetRequiredService<IAuditLogger>(),
+                provider.GetRequiredService<TelemetryClient>()),
+            provider.GetRequiredService<IJobHealthStore>(),
+            provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PersistentJobTelemetry>>()));
 
         services.AddRepositoryApiClient(options => options
             .WithBaseUrl(configuration["RepositoryApi:BaseUrl"] ?? throw new InvalidOperationException("RepositoryApi:BaseUrl configuration is required"))
