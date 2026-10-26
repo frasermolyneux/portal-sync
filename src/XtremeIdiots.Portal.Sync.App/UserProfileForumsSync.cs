@@ -63,6 +63,12 @@ public class UserProfileForumsSync(
 
             foreach (var userProfileDto in items)
             {
+                if (userProfileDto.ArchivedAtUtc.HasValue)
+                {
+                    logger.LogDebug("Skipping archived portal profile {UserProfileId}", userProfileDto.UserProfileId);
+                    continue;
+                }
+
                 using (logger.BeginScope(userProfileDto.TelemetryProperties))
                 {
                     logger.LogInformation($"UserProfileSync for '{userProfileDto.DisplayName}' with XtremeIdiots ID '{userProfileDto.XtremeIdiotsForumId}'");
@@ -148,6 +154,13 @@ public class UserProfileForumsSync(
                         {
                             logger.LogError(httpEx, "Unauthorized access to forums API - invalid API key. Failing fast.");
                             throw;
+                        }
+                        catch (HttpRequestException httpEx) when (httpEx.StatusCode == HttpStatusCode.NotFound)
+                        {
+                            logger.LogWarning(
+                                "Forum member missing for portal profile {UserProfileId}, forum ID {ForumId}. Review and archive the portal profile if the forum account was deleted; existing claims have been retained.",
+                                userProfileDto.UserProfileId, userProfileDto.XtremeIdiotsForumId);
+                            failures.Add(httpEx);
                         }
                         catch (Exception ex)
                         {
