@@ -4,7 +4,6 @@ using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.ApplicationInsights;
 
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.AzureAppConfiguration;
@@ -85,12 +84,7 @@ var host = new HostBuilder()
         services.AddLogging();
         services.AddMicrosoftIdentityWebApiAuthentication(configuration);
         services.AddAuthorization();
-        services.AddSingleton<ITelemetryInitializer, TelemetryInitializer>();
-        services.AddApplicationInsightsTelemetryWorkerService(options =>
-        {
-            options.EnableAdaptiveSampling = false;
-        });
-        services.ConfigureFunctionsApplicationInsights();
+        services.AddSyncApplicationInsights();
         services.AddObservability(ProcessHealthTelemetry.ConfigureFiltering);
         services.AddSingleton<ProcessHealthTelemetry>();
         services.AddSingleton<IJobHealthStore>(_ => new BlobJobHealthStore(new BlobContainerClient(
