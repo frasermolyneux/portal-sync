@@ -39,8 +39,10 @@ public class UserProfileForumsSyncTests
         _jobTelemetryMock.Object,
         _auditLoggerMock.Object);
 
-    [Fact]
-    public async Task MissingForumMemberDoesNotPreventLaterProfilesFromSynchronizing()
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.NotFound)]
+    [InlineData(System.Net.HttpStatusCode.InternalServerError)]
+    public async Task FailedForumMemberDoesNotPreventLaterProfilesFromSynchronizing(System.Net.HttpStatusCode statusCode)
     {
         string[] forumIds = ["missing", "valid"];
         var profiles = forumIds.Select(forumId =>
@@ -59,7 +61,7 @@ public class UserProfileForumsSyncTests
             .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
                 new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>([]))));
         _invisionApiClientMock.Setup(client => client.Core.GetMember("missing", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ApiResult<MemberDto>(System.Net.HttpStatusCode.NotFound));
+            .ReturnsAsync(new ApiResult<MemberDto>(statusCode));
         _invisionApiClientMock.Setup(client => client.Core.GetMember("valid", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult<MemberDto>(System.Net.HttpStatusCode.OK,
                 new ApiResponse<MemberDto>(CreateMemberDto(123, CreateGroupDto(82, "Members")))));
@@ -77,6 +79,37 @@ public class UserProfileForumsSyncTests
             It.IsAny<List<CreateUserProfileClaimDto>>(), It.IsAny<CancellationToken>()), Times.Once);
         users.Verify(client => client.SetUserProfileClaims(profiles[0].UserProfileId,
             It.IsAny<List<CreateUserProfileClaimDto>>(), It.IsAny<CancellationToken>()), Times.Never);
+        users.Verify(client => client.ArchiveUserProfile(
+            It.IsAny<ArchiveUserProfileDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ArchivedProfile_IsNotSentToForumsOrMutated()
+    {
+        var profile = JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new
+        {
+            UserProfileId = Guid.NewGuid(),
+            XtremeIdiotsForumId = "42",
+            ArchivedAtUtc = DateTime.UtcNow,
+            UserProfileClaims = Array.Empty<object>()
+        }))!;
+        var users = Mock.Get(_repositoryApiClientMock.Object.UserProfiles.V1);
+        users.SetupSequence(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>([profile]))))
+            .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>([]))));
+
+        await CreateSut().RunUserProfileForumsSync(null);
+
+        _invisionApiClientMock.VerifyNoOtherCalls();
+        users.Verify(client => client.UpdateUserProfile(
+            It.IsAny<EditUserProfileDto>(), It.IsAny<CancellationToken>()), Times.Never);
+        users.Verify(client => client.SetUserProfileClaims(It.IsAny<Guid>(),
+            It.IsAny<List<CreateUserProfileClaimDto>>(), It.IsAny<CancellationToken>()), Times.Never);
+        users.Verify(client => client.ArchiveUserProfile(
+            It.IsAny<ArchiveUserProfileDto>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
