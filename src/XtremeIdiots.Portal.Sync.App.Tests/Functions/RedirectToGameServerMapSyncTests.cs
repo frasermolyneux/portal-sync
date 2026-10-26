@@ -9,6 +9,7 @@ using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.GameServers;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests.Functions;
 
@@ -117,7 +118,9 @@ public class RedirectToGameServerMapSyncTests
 
         var sut = CreateSut();
 
-        await sut.RunRedirectToGameServerMapSync(null);
+        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() => sut.RunRedirectToGameServerMapSync(null));
+        Assert.Equal(2, failure.Expected);
+        Assert.Equal(2, failure.Failed);
 
         Mock.Get(_serversApiClientMock.Object.Maps.V1)
             .Verify(x => x.GetLoadedServerMapsFromHost(ftpServerId), Times.Once);

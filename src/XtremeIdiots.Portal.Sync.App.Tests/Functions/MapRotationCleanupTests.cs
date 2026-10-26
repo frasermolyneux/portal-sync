@@ -8,6 +8,7 @@ using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.MapRotations;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App.MapRotations;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests.Functions;
 
@@ -21,8 +22,10 @@ public class MapRotationCleanupTests
     {
         var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
         var jobs = new Mock<IJobTelemetry>();
-        jobs.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<Func<Task>>(), It.IsAny<Dictionary<string, string>?>()))
-            .Returns<string, Func<Task>, Dictionary<string, string>?>((_, run, _) => run());
+        jobs.Setup(x => x.StartJob(nameof(MapRotationCleanup.RunMapRotationCleanup), null)).Returns(Mock.Of<IJobOperation>());
+        var outcomes = new Mock<IJobHealthStore>();
+        var telemetry = new PersistentJobTelemetry(jobs.Object, outcomes.Object,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PersistentJobTelemetry>.Instance);
         var audit = new Mock<IAuditLogger>();
         var failedId = Guid.NewGuid();
         var succeedingId = Guid.NewGuid();
@@ -46,11 +49,14 @@ public class MapRotationCleanupTests
         }
         api.Setup(x => x.DeleteServerAssignment(succeedingId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
-        var cleanup = new MapRotationCleanup(Mock.Of<ILogger<MapRotationCleanup>>(), repository.Object, jobs.Object, audit.Object);
+        var cleanup = new MapRotationCleanup(Mock.Of<ILogger<MapRotationCleanup>>(), repository.Object, telemetry, audit.Object);
 
-        var error = await Assert.ThrowsAsync<AggregateException>(() => cleanup.RunMapRotationCleanup(null));
+        var error = await Assert.ThrowsAsync<PartialJobFailureException>(() => cleanup.RunMapRotationCleanup(null));
 
         Assert.Single(error.InnerExceptions);
+        outcomes.Verify(store => store.RecordAsync(It.Is<JobHealthState>(state =>
+            state.Outcome == "partial_failure" && state.Expected == 2 && state.Failed == 1),
+            It.IsAny<CancellationToken>()), Times.Once);
         api.Verify(x => x.DeleteServerAssignment(failedId, It.IsAny<CancellationToken>()), Times.Once);
         api.Verify(x => x.DeleteServerAssignment(succeedingId, It.IsAny<CancellationToken>()), Times.Once);
         audit.Verify(x => x.LogAudit(It.IsAny<AuditEvent>()), Times.Once);

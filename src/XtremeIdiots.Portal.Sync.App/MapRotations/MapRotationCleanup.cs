@@ -7,6 +7,7 @@ using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.MapRotations;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App.MapRotations;
 
@@ -49,6 +50,7 @@ public class MapRotationCleanup(
 
         var cutoff = DateTime.UtcNow.AddDays(-90);
         var failures = new List<Exception>();
+        var attempted = 0;
         foreach (var assignment in assignments)
         {
             if (assignment.DeploymentState == DeploymentState.Removing && assignment.UpdatedAt < DateTime.UtcNow.AddMinutes(-15))
@@ -64,6 +66,7 @@ public class MapRotationCleanup(
                 continue;
             }
 
+            attempted++;
             try
             {
                 var delete = await repositoryApiClient.MapRotations.V1
@@ -88,7 +91,7 @@ public class MapRotationCleanup(
         }
         if (failures.Count != 0)
         {
-            throw new AggregateException("Some retained rotation assignments could not be cleaned up.", failures);
+            throw new PartialJobFailureException(attempted, failures);
         }
     }
 }

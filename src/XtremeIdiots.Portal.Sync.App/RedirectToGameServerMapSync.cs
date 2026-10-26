@@ -5,6 +5,7 @@ using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
@@ -34,15 +35,29 @@ public class RedirectToGameServerMapSync(
     private async Task ProcessGameServerMaps()
     {
         GameType[] gameTypes = [GameType.CallOfDuty4, GameType.CallOfDuty4x];
-        var gameServersApiResponse = await repositoryApiClient.GameServers.V1.GetGameServers(gameTypes, null, null, 0, 50, null).ConfigureAwait(false);
-
-        if (!gameServersApiResponse.IsSuccess || gameServersApiResponse.Result?.Data?.Items is null)
+        var servers = new List<Portal.Repository.Abstractions.Models.V1.GameServers.GameServerDto>();
+        var identities = new HashSet<Guid>();
+        while (true)
         {
-            logger.LogCritical("Failed to retrieve game servers from repository");
-            throw new ApplicationException("Failed to retrieve game servers from repository");
+            var response = await repositoryApiClient.GameServers.V1.GetGameServers(gameTypes, null, null, servers.Count, 50, null).ConfigureAwait(false);
+            if (!response.IsSuccess || response.Result?.Data?.Items is null)
+            {
+                logger.LogCritical("Failed to retrieve the complete game server inventory from repository");
+                throw new ApplicationException("Failed to retrieve the complete game server inventory from repository");
+            }
+            var page = response.Result.Data.Items.ToArray();
+            if (page.Length > 50 || page.Any(server => !identities.Add(server.GameServerId)))
+            {
+                throw new InvalidDataException("Repeated game server identities prevent a complete map inventory.");
+            }
+            servers.AddRange(page);
+            if (page.Length < 50)
+            {
+                break;
+            }
         }
-
-        foreach (var gameServerDto in gameServersApiResponse.Result.Data.Items)
+        var failures = new List<Exception>();
+        foreach (var gameServerDto in servers)
         {
             using (logger.BeginScope(gameServerDto.TelemetryProperties))
             {
@@ -52,8 +67,7 @@ public class RedirectToGameServerMapSync(
 
                     if (!getLoadedServerMapsFronHostResult.IsSuccess || getLoadedServerMapsFronHostResult.Result?.Data?.Items is null)
                     {
-                        logger.LogError("Failed to retrieve maps for game server host");
-                        continue;
+                        throw new HttpRequestException("Failed to retrieve maps for game server host.");
                     }
 
                     logger.LogInformation(
@@ -64,8 +78,13 @@ public class RedirectToGameServerMapSync(
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Failed to process game server");
+                    failures.Add(ex);
                 }
             }
+        }
+        if (failures.Count > 0)
+        {
+            throw new PartialJobFailureException(servers.Count, failures);
         }
     }
 }

@@ -6,6 +6,7 @@ using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
 using XtremeIdiots.Portal.Sync.App.Repository;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
@@ -36,6 +37,7 @@ public class BanFileMonitor(
                 // CoD4x emits the cod4x simplebanlist v2 format (banlist_v2.dat) instead of the
                 // legacy ban.txt — the format branch lives inside BanFilesRepository.
                 GameType[] gameTypes = [GameType.CallOfDuty2, GameType.CallOfDuty4, GameType.CallOfDuty5, GameType.CallOfDuty4x];
+                var failures = new List<Exception>();
                 foreach (var gameType in gameTypes)
                 {
                     try
@@ -45,6 +47,7 @@ public class BanFileMonitor(
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "Failed to regenerate latest ban file for {Game}", gameType);
+                        failures.Add(ex);
 
                         // Surface the failure on the dashboard via CentralBanFileStatus.LastRegenerationError
                         // so admins do not need App Insights to spot a stuck game type.
@@ -62,6 +65,10 @@ public class BanFileMonitor(
                     }
                 }
 
+                if (failures.Count > 0)
+                {
+                    throw new PartialJobFailureException(gameTypes.Length, failures);
+                }
                 logger.LogDebug("Stop GenerateLatestBansFile @ {Now:o}", DateTime.UtcNow);
             }).ConfigureAwait(false);
     }

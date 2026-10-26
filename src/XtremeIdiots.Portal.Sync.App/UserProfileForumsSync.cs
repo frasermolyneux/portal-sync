@@ -12,6 +12,7 @@ using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.UserProfiles;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
@@ -47,6 +48,8 @@ public class UserProfileForumsSync(
     private async Task ProcessUserProfiles()
     {
         var skip = 0;
+        var attempted = 0;
+        var failures = new List<Exception>();
         var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null).ConfigureAwait(false);
 
         do
@@ -54,8 +57,8 @@ public class UserProfileForumsSync(
             var items = userProfileResponseDto?.IsSuccess == true ? userProfileResponseDto.Result?.Data?.Items : null;
             if (items is null)
             {
-                logger.LogWarning("User profiles response or result is null");
-                break;
+                logger.LogError("User profile enumeration failed; the job did not complete");
+                throw new HttpRequestException("Unable to enumerate user profiles.");
             }
 
             foreach (var userProfileDto in items)
@@ -66,6 +69,7 @@ public class UserProfileForumsSync(
 
                     if (!string.IsNullOrWhiteSpace(userProfileDto.XtremeIdiotsForumId))
                     {
+                        attempted++;
                         try
                         {
                             var memberResult = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId).ConfigureAwait(false);
@@ -73,7 +77,7 @@ public class UserProfileForumsSync(
                             if (!memberResult.IsSuccess)
                             {
                                 logger.LogWarning("Failed to retrieve member {ForumId} from forums API (HTTP {StatusCode})", userProfileDto.XtremeIdiotsForumId, memberResult.StatusCode);
-                                continue;
+                                throw new HttpRequestException("Unable to retrieve the forum member.", null, memberResult.StatusCode);
                             }
 
                             var member = memberResult.Result?.Data;
@@ -91,7 +95,11 @@ public class UserProfileForumsSync(
                                     TimeZone = member.TimeZone ?? userProfileDto.TimeZone
                                 };
 
-                                await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto).ConfigureAwait(false);
+                                var update = await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto).ConfigureAwait(false);
+                                if (!update.IsSuccess)
+                                {
+                                    throw new HttpRequestException("Unable to persist the synchronized user profile.");
+                                }
 
                                 List<CreateUserProfileClaimDto> nonSystemGeneratedClaims = [..userProfileDto.UserProfileClaims
                                     .Where(upc => !upc.SystemGenerated).Select(upc => new CreateUserProfileClaimDto(userProfileDto.UserProfileId, upc.ClaimType, upc.ClaimValue, upc.SystemGenerated))];
@@ -105,7 +113,11 @@ public class UserProfileForumsSync(
                                     .Select(g => g.First())
                                     .ToList();
 
-                                await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave).ConfigureAwait(false);
+                                var replacement = await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave).ConfigureAwait(false);
+                                if (!replacement.IsSuccess)
+                                {
+                                    throw new HttpRequestException("Unable to persist synchronized forum claims.");
+                                }
 
                                 var existingSystemClaims = userProfileDto.UserProfileClaims
                                     .Where(upc => upc.SystemGenerated)
@@ -129,7 +141,7 @@ public class UserProfileForumsSync(
                             }
                             else
                             {
-                                await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, []).ConfigureAwait(false);
+                                throw new InvalidDataException("The forum member payload is missing; existing claims have been retained.");
                             }
                         }
                         catch (HttpRequestException httpEx) when (httpEx.StatusCode == HttpStatusCode.Unauthorized)
@@ -140,7 +152,7 @@ public class UserProfileForumsSync(
                         catch (Exception ex)
                         {
                             logger.LogError(ex, $"Failed to sync forum profile for {userProfileDto.XtremeIdiotsForumId}");
-                            throw;
+                            failures.Add(ex);
                         }
 
                     }
@@ -148,7 +160,16 @@ public class UserProfileForumsSync(
             }
             skip += TakeEntries;
             userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null).ConfigureAwait(false);
+            if (userProfileResponseDto?.IsSuccess != true || userProfileResponseDto.Result?.Data?.Items is null)
+            {
+                logger.LogError("User profile enumeration failed on a subsequent page");
+                throw new HttpRequestException("Unable to complete user profile enumeration.");
+            }
         } while (userProfileResponseDto?.IsSuccess == true && userProfileResponseDto.Result?.Data?.Items?.Any() is true);
+        if (failures.Count > 0)
+        {
+            throw new PartialJobFailureException(attempted, failures);
+        }
     }
 
     private static List<CreateUserProfileClaimDto> GetClaimsForMember(Guid userProfileId, MemberDto member)

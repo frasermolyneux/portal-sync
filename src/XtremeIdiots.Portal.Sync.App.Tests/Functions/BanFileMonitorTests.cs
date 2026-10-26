@@ -3,6 +3,7 @@ using Moq;
 using MX.Observability.ApplicationInsights.Jobs;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Sync.App.Interfaces;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests.Functions;
 
@@ -36,6 +37,18 @@ public class BanFileMonitorTests
         _loggerMock.Object,
         _banFilesRepositoryMock.Object,
         _jobTelemetryMock.Object);
+
+    [Fact]
+    public async Task RegenerationFailureStillAttemptsOtherGamesAndCannotEmitSuccessfulJobCompletion()
+    {
+        _banFilesRepositoryMock.Setup(repository => repository.RegenerateBanFileForGame(GameType.CallOfDuty4, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException("Regeneration failed."));
+        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().GenerateLatestBansFile(null));
+        Assert.Equal(4, failure.Expected);
+        Assert.Equal(1, failure.Failed);
+        _banFilesRepositoryMock.Verify(repository => repository.RegenerateBanFileForGame(It.IsAny<GameType>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(4));
+    }
 
     [Fact]
     public void Constructor_WithValidDependencies_ShouldNotThrow()
