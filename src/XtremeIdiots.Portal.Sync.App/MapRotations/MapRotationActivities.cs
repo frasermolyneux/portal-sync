@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.RegularExpressions;
 using MX.Api.Abstractions;
+using System.Net;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
@@ -667,6 +668,92 @@ public class MapRotationActivities(
             await WriteAndVerifyConfigVariable(input with { Value = "" }).ConfigureAwait(false);
         }
     }
+
+    [Function(nameof(PreflightConfigVariableForWrite))]
+    public async Task<ConfigPreflightResult> PreflightConfigVariableForWrite([ActivityTrigger] ConfigPreflightInput input)
+    {
+        try
+        {
+            var target = input.Target;
+            var response = await serversApiClient.Config.V1.GetConfigFile(target.GameServerId, target.ConfigFilePath).ConfigureAwait(false);
+            if (input.AllowMissing && IsMissingConfigFile(response.StatusCode, response.Result?.Errors))
+            {
+                return new(false);
+            }
+            if (!response.IsSuccess || response.Result?.Errors?.Length > 0 || response.Result?.Data == null)
+            {
+                return new(false, $"Could not read configuration '{target.ConfigFilePath}': {response.StatusCode}.");
+            }
+            var content = response.Result.Data.Content;
+            var values = ConfigVariableValues(content, target.ConfigVariableName);
+            if (input.AllowMissing && values.Count == 0)
+            {
+                return new(false);
+            }
+            var declaration = new Regex($@"^\s*(?<command>set)\s+{Regex.Escape(target.ConfigVariableName)}\s+""[^""]*""",
+                RegexOptions.IgnoreCase | RegexOptions.Multiline, TimeSpan.FromSeconds(1));
+            var rawMatch = declaration.Match(content);
+            var activeMatch = declaration.Match(MaskConfigCommentsAndQuotedValues(content));
+            if (values.Count != 1 || !rawMatch.Success || !activeMatch.Success
+                || rawMatch.Groups["command"].Index != activeMatch.Groups["command"].Index)
+            {
+                return new(false,
+                    $"The file '{target.ConfigFilePath}' must contain exactly one active quoted 'set {target.ConfigVariableName}' declaration in a writable line format. Choose a different configuration file or correct the server file before retrying.");
+            }
+            return new(true);
+        }
+        catch (Exception ex)
+        {
+            return new(false, ex.Message);
+        }
+    }
+
+    [Function(nameof(TryWriteAndVerifyConfigVariable))]
+    public async Task<ConfigWriteResult> TryWriteAndVerifyConfigVariable([ActivityTrigger] WriteConfigInput input)
+    {
+        try
+        {
+            // The API client can retry internally; its final rejection cannot prove that an earlier attempt did not write.
+            var response = await serversApiClient.Config.V1.UpdateConfigVariable(input.GameServerId, input.ConfigFilePath,
+                input.ConfigVariableName, input.Value, input.CommentLines).ConfigureAwait(false);
+
+            if (!response.IsSuccess || response.Result?.Errors?.Length > 0)
+            {
+                return new(false,
+                    response.Result?.Errors?.FirstOrDefault()?.Message ?? $"Configuration write failed: {response.StatusCode}.");
+            }
+
+            var content = await ReadConfig(input).ConfigureAwait(false);
+            var values = ConfigVariableValues(content, input.ConfigVariableName);
+            return values.Count == 1 && string.Equals(values[0], input.Value, StringComparison.Ordinal)
+                ? new(true)
+                : new(false, $"Config read-back did not confirm a unique '{input.ConfigVariableName}' value.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Configuration write/read-back could not be confirmed for server {GameServerId}", input.GameServerId);
+            return new(false, ex.Message);
+        }
+    }
+
+    private static string MaskConfigCommentsAndQuotedValues(string content) =>
+        Regex.Replace(content, @"""(?:\\[\s\S]|[^""\\])*""|//[^\r\n]*|/\*[\s\S]*?(?:\*/|$)", match =>
+    {
+        var characters = match.Value.ToCharArray();
+        var quoted = characters[0] == '"';
+        for (var index = quoted ? 1 : 0; index < characters.Length - (quoted ? 1 : 0); index++)
+        {
+            if (characters[index] is not ('\r' or '\n'))
+            {
+                characters[index] = ' ';
+            }
+        }
+        return new string(characters);
+    }, RegexOptions.None, TimeSpan.FromSeconds(1));
+
+    private static bool IsMissingConfigFile(HttpStatusCode? status, ApiError[]? errors) =>
+        status == HttpStatusCode.NotFound && errors?.Length > 0
+        && errors.All(error => error.Code == "CONFIG_FILE_NOT_FOUND");
 
     private async Task<string> ReadConfig(WriteConfigInput input)
     {
