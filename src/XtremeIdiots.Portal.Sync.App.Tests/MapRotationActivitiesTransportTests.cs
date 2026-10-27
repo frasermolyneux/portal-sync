@@ -21,15 +21,19 @@ public class MapRotationActivitiesTransportTests
     {
         var serverId = Guid.NewGuid();
 
-        var synced = await _sut.SyncSingleMapToServer(new(serverId, "mp_bog", gameType));
-        var repaired = await _sut.RepairSingleMapToServer(new(serverId, "MP_BOG", gameType));
-        var removed = await _sut.RemoveSingleMapFromServer(new(serverId, "mp_bog", gameType));
-
-        Assert.All([synced, repaired, removed], result =>
+        string[] stockMaps = ["mp_bog", "mp_farm", "mp_convoy", "mp_citystreets", "mp_carentan", "mp_crash_snow"];
+        foreach (var mapName in stockMaps)
         {
-            Assert.True(result.Success);
-            Assert.Equal(SkipReasons.BuiltInMap, result.SkipReason);
-        });
+            var synced = await _sut.SyncSingleMapToServer(new(serverId, mapName, gameType));
+            var repaired = await _sut.RepairSingleMapToServer(new(serverId, mapName.ToUpperInvariant(), gameType));
+            var removed = await _sut.RemoveSingleMapFromServer(new(serverId, mapName, gameType));
+
+            Assert.All([synced, repaired, removed], result =>
+            {
+                Assert.True(result.Success);
+                Assert.Equal(SkipReasons.BuiltInMap, result.SkipReason);
+            });
+        }
         Mock.Get(_serversApiClientMock.Object.Maps.V1).VerifyNoOtherCalls();
     }
 

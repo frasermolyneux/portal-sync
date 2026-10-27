@@ -58,8 +58,14 @@ public class MapRotationWorkflowTests
         context.Setup(x => x.CreateTimer(It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
     }
 
-    [Fact]
-    public async Task Cod4xApplySkipsStockTransfersRepairsCustomMapsAndActivatesUsingNativeRcon()
+    [Theory]
+    [InlineData("mp_bog")]
+    [InlineData("mp_farm")]
+    [InlineData("mp_convoy")]
+    [InlineData("mp_citystreets")]
+    [InlineData("mp_carentan")]
+    [InlineData("mp_crash_snow")]
+    public async Task Cod4xApplySkipsStockTransfersRepairsCustomMapsAndActivatesUsingNativeRcon(string stockMap)
     {
         var servers = new Mock<IServersApiClient> { DefaultValue = DefaultValue.Mock };
         var activities = new MapRotationActivities(Mock.Of<ILogger<MapRotationActivities>>(), Mock.Of<IRepositoryApiClient>(), servers.Object);
@@ -69,7 +75,7 @@ public class MapRotationWorkflowTests
             .ReturnsAsync((Guid _, List<string> names, CancellationToken _) => new ApiResult<MapVerificationCollectionDto>(
                 System.Net.HttpStatusCode.OK, new ApiResponse<MapVerificationCollectionDto>(
                     new MapVerificationCollectionDto(names.Select(name => new MapVerificationResultDto(
-                        name, name == "mp_bog" || uploaded)).ToList()))));
+                        name, name == stockMap || uploaded)).ToList()))));
         servers.Setup(x => x.Maps.V1.PushServerMapToHost(serverId, "mp_custom"))
             .Callback(() => uploaded = true)
             .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK, new ApiResponse()));
@@ -78,7 +84,7 @@ public class MapRotationWorkflowTests
         context.Setup(x => x.CallActivityAsync<RotationDetails>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
             .ReturnsAsync(details with { GameType = GameType.CallOfDuty4x, ConfigVariableName = "sv_maprotation" });
         context.Setup(x => x.CallActivityAsync<List<string>>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
-            .ReturnsAsync(["mp_bog", "mp_custom"]);
+            .ReturnsAsync([stockMap, "mp_custom"]);
         context.Setup(x => x.CallActivityAsync<MapOperationResult>(
                 It.Is<TaskName>(name => name == nameof(MapRotationActivities.RepairSingleMapToServer)), It.IsAny<object>(), It.IsAny<TaskOptions>()))
             .Returns(async (TaskName _, object input, TaskOptions _) =>
@@ -98,17 +104,17 @@ public class MapRotationWorkflowTests
         var result = await Run("Apply");
 
         Assert.True(result.Success, result.Error);
-        Assert.Equal(SkipReasons.BuiltInMap, repairs.Single(repair => repair.MapName == "mp_bog").SkipReason);
+        Assert.Equal(SkipReasons.BuiltInMap, repairs.Single(repair => repair.MapName == stockMap).SkipReason);
         Assert.True(uploaded);
         servers.Verify(x => x.Maps.V1.PushServerMapToHost(serverId, "mp_custom"), Times.Once);
-        servers.Verify(x => x.Maps.V1.PushServerMapToHost(serverId, "mp_bog"), Times.Never);
+        servers.Verify(x => x.Maps.V1.PushServerMapToHost(serverId, stockMap), Times.Never);
         context.Verify(x => x.CallActivityAsync(
             It.Is<TaskName>(name => name == nameof(MapRotationActivities.WriteAndVerifyConfigVariable)),
-            It.Is<WriteConfigInput>(input => input.Value == "gametype tdm map mp_bog map mp_custom"),
+            It.Is<WriteConfigInput>(input => input.Value == $"gametype tdm map {stockMap} map mp_custom"),
             It.IsAny<TaskOptions>()), Times.Once);
         servers.Verify(x => x.CoD4xRcon.V1.Set(serverId,
             It.Is<CoD4xSetDvarRequestDto>(request => request.DvarName == "sv_maprotation" &&
-                request.Value == "gametype tdm map mp_bog map mp_custom"), It.IsAny<CancellationToken>()), Times.Once);
+                request.Value == $"gametype tdm map {stockMap} map mp_custom"), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Contains(updates, update => update.DeploymentState == DeploymentState.Synced);
         Assert.Contains(updates, update => update.ActivationState == ActivationState.Active);
     }
