@@ -5,6 +5,8 @@ using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.GameServers;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.MapRotations;
 using XtremeIdiots.Portal.Sync.App.MapRotations;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests;
@@ -12,6 +14,63 @@ namespace XtremeIdiots.Portal.Sync.App.Tests;
 [Trait("Category", "Unit")]
 public class MapRotationActivitiesTransportTests
 {
+    [Theory]
+    [InlineData(GameType.CallOfDuty4, GameType.CallOfDuty4x)]
+    [InlineData(GameType.CallOfDuty4x, GameType.CallOfDuty4)]
+    public async Task GetRotationDetails_UsesServerTypeForCompatibleRotationRouting(GameType rotationType, GameType serverType)
+    {
+        var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
+        var serverId = Guid.NewGuid();
+        var rotationId = Guid.NewGuid();
+        var assignmentId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var assignment = new MapRotationServerAssignmentDto(assignmentId, rotationId, serverId,
+            DeploymentState.Synced, ActivationState.Inactive, 1, null, "server.cfg", "sv_maprotation",
+            null, null, now, now, null);
+        var rotation = new MapRotationDto(rotationId, rotationType, "Compatible rotation", null, "war",
+            1, "content", now, now, [], [assignment]);
+        var server = Newtonsoft.Json.JsonConvert.DeserializeObject<GameServerDto>(
+            Newtonsoft.Json.JsonConvert.SerializeObject(new { GameServerId = serverId, GameType = serverType }));
+        repository.Setup(x => x.MapRotations.V1.GetServerAssignment(assignmentId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(System.Net.HttpStatusCode.OK, new ApiResponse<MapRotationServerAssignmentDto>(assignment)));
+        repository.Setup(x => x.MapRotations.V1.GetMapRotation(rotationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MapRotationDto>(System.Net.HttpStatusCode.OK, new ApiResponse<MapRotationDto>(rotation)));
+        repository.Setup(x => x.GameServers.V1.GetGameServer(serverId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<GameServerDto>(System.Net.HttpStatusCode.OK, new ApiResponse<GameServerDto>(server)));
+        var activities = new MapRotationActivities(_loggerMock.Object, repository.Object, _serversApiClientMock.Object);
+
+        var details = await activities.GetRotationDetails(new(assignmentId));
+
+        Assert.Equal(serverType, details.GameType);
+        Assert.Equal(serverId, details.GameServerId);
+        Assert.Equal("war", details.GameMode);
+        Assert.Equal(rotationId, details.MapRotationId);
+    }
+
+    [Fact]
+    public async Task GetRotationDetails_ServerLookupFailureDoesNotFallBackToRotationType()
+    {
+        var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
+        var id = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var assignment = new MapRotationServerAssignmentDto(id, id, id,
+            DeploymentState.Synced, ActivationState.Inactive, 1, null, "server.cfg", "sv_maprotation",
+            null, null, now, now, null);
+        repository.Setup(x => x.MapRotations.V1.GetServerAssignment(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(System.Net.HttpStatusCode.OK, new ApiResponse<MapRotationServerAssignmentDto>(assignment)));
+        repository.Setup(x => x.MapRotations.V1.GetMapRotation(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MapRotationDto>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<MapRotationDto>(new MapRotationDto(id, GameType.CallOfDuty4, "Rotation", null, "war", 1, null, now, now, [], []))));
+        repository.Setup(x => x.GameServers.V1.GetGameServer(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<GameServerDto>(System.Net.HttpStatusCode.ServiceUnavailable));
+        var activities = new MapRotationActivities(_loggerMock.Object, repository.Object, _serversApiClientMock.Object);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => activities.GetRotationDetails(new(id)));
+
+        Assert.Contains("Failed to get game server", error.Message);
+        _serversApiClientMock.VerifyNoOtherCalls();
+    }
+
     private readonly Mock<IServersApiClient> _serversApiClientMock = new(MockBehavior.Loose) { DefaultValue = DefaultValue.Mock };
     private readonly Mock<ILogger<MapRotationActivities>> _loggerMock = new();
     private readonly MapRotationActivities _sut;
