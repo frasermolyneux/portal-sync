@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'terraform/**'
   workflow_dispatch:
     # checkov:skip=CKV_GHA_7:Deployment entry point selects fixed jobs; build inputs are unchanged and user input never enters commands.
     inputs:
@@ -30,7 +33,6 @@ jobs:
     outputs:
       src: ${{ inputs.scope == 'maps-bootstrap' || steps.changes.outputs.src == 'true' }}
       terraform: ${{ steps.changes.outputs.terraform }}
-      workload: ${{ steps.workload.outputs.src }}
     steps:
       - name: Require approved main for maps bootstrap
         if: inputs.scope == 'maps-bootstrap' && github.ref != 'refs/heads/main'
@@ -44,19 +46,9 @@ jobs:
           filters: |
             src:src/**
             terraform:terraform/**
-      - name: Detect deployable workload inputs
-        id: workload
-        uses: frasermolyneux/actions/detect-changes@detect-changes/v1.0
-        with:
-          perform-checkout: 'false'
-          filters: |
-            src:src/**,terraform/**
 
   terraform-state-check-dev:
-    needs: [detect-changes]
-    if: |
-      (github.event_name != 'schedule' && inputs.scope != 'maps-bootstrap') &&
-      (github.event_name != 'push' || needs.detect-changes.outputs.workload == 'true')
+    if: github.event_name != 'schedule' && inputs.scope != 'maps-bootstrap'
     permissions:
       contents: read
       id-token: write
@@ -83,9 +75,7 @@ jobs:
     needs:
       - detect-changes
       - terraform-state-check-dev
-    if: |
-      (!failure() && !cancelled() && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')) &&
-      (github.event_name != 'push' || needs.detect-changes.outputs.workload == 'true')
+    if: "!failure() && !cancelled() && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')"
     runs-on: ubuntu-latest
     steps:
       - uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v2.1
@@ -96,9 +86,7 @@ jobs:
           src-folder: "src"
 
   terraform-plan-and-apply-dev:
-    if: |
-      (github.event_name != 'schedule' && inputs.scope != 'maps-bootstrap') &&
-      (github.event_name != 'push' || needs.detect-changes.outputs.workload == 'true')
+    if: github.event_name != 'schedule' && inputs.scope != 'maps-bootstrap'
     permissions:
       contents: read
       id-token: write
@@ -168,9 +156,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-dev
-    if: |
-      (!failure() && !cancelled() && inputs.scope != 'maps-bootstrap' && github.event_name != 'schedule' && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')) &&
-      (github.event_name != 'push' || needs.detect-changes.outputs.workload == 'true')
+    if: "!failure() && !cancelled() && inputs.scope != 'maps-bootstrap' && github.event_name != 'schedule' && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')"
     steps:
       - uses: frasermolyneux/actions/deploy-function-app@deploy-function-app/v1.2
         with:
@@ -186,13 +172,11 @@ jobs:
       contents: read
       id-token: write
     environment: Development
-    needs: [terraform-plan-and-apply-dev, function-app-deploy-dev, detect-changes]
+    needs: [terraform-plan-and-apply-dev, function-app-deploy-dev]
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-dev
-    if: |
-      (!failure() && !cancelled() && inputs.scope != 'maps-bootstrap' && needs.function-app-deploy-dev.result == 'success') &&
-      (github.event_name != 'push' || needs.detect-changes.outputs.workload == 'true')
+    if: "!failure() && !cancelled() && inputs.scope != 'maps-bootstrap' && needs.function-app-deploy-dev.result == 'success'"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
@@ -243,9 +227,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-prd
-    if: |
-      (!failure() && !cancelled() && (inputs.scope == 'maps-bootstrap' || needs.terraform-plan-and-apply-dev.result == 'success' || github.event_name == 'schedule')) &&
-      (github.event_name != 'push' || needs.detect-changes.outputs.workload == 'true')
+    if: "!failure() && !cancelled() && (inputs.scope == 'maps-bootstrap' || needs.terraform-plan-and-apply-dev.result == 'success' || github.event_name == 'schedule')"
     steps:
       - if: inputs.scope != 'maps-bootstrap' && needs.detect-changes.outputs.terraform == 'true'
         uses: frasermolyneux/actions/terraform-plan-and-apply@terraform-plan-and-apply/v2.0.0
@@ -305,9 +287,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-prd
-    if: |
-      (!failure() && !cancelled() && needs.terraform-plan-and-apply-prd.result == 'success' && needs.detect-changes.outputs.src == 'true') &&
-      (github.event_name != 'push' || needs.detect-changes.outputs.workload == 'true')
+    if: "!failure() && !cancelled() && needs.terraform-plan-and-apply-prd.result == 'success' && needs.detect-changes.outputs.src == 'true'"
     steps:
       - uses: frasermolyneux/actions/deploy-function-app@deploy-function-app/v1.2
         with:
@@ -323,13 +303,11 @@ jobs:
       contents: read
       id-token: write
     environment: Production
-    needs: [terraform-plan-and-apply-prd, function-app-deploy-prd, detect-changes]
+    needs: [terraform-plan-and-apply-prd, function-app-deploy-prd]
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository }}-prd
-    if: |
-      (!failure() && !cancelled() && inputs.scope != 'maps-bootstrap' && needs.function-app-deploy-prd.result == 'success') &&
-      (github.event_name != 'push' || needs.detect-changes.outputs.workload == 'true')
+    if: "!failure() && !cancelled() && inputs.scope != 'maps-bootstrap' && needs.function-app-deploy-prd.result == 'success'"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
