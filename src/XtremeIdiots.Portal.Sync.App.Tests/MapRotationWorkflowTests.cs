@@ -2,6 +2,11 @@ using Microsoft.DurableTask;
 using Microsoft.DurableTask.Entities;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MX.Api.Abstractions;
+using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Maps;
+using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
+using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Sync.App.MapRotations;
 
@@ -51,6 +56,61 @@ public class MapRotationWorkflowTests
                 }
             }).Returns(Task.CompletedTask);
         context.Setup(x => x.CreateTimer(It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+    }
+
+    [Fact]
+    public async Task Cod4xApplySkipsStockTransfersRepairsCustomMapsAndActivatesUsingNativeRcon()
+    {
+        var servers = new Mock<IServersApiClient> { DefaultValue = DefaultValue.Mock };
+        var activities = new MapRotationActivities(Mock.Of<ILogger<MapRotationActivities>>(), Mock.Of<IRepositoryApiClient>(), servers.Object);
+        var uploaded = false;
+        var repairs = new List<MapOperationResult>();
+        servers.Setup(x => x.Maps.V1.VerifyServerMaps(serverId, It.IsAny<List<string>>()))
+            .ReturnsAsync((Guid _, List<string> names, CancellationToken _) => new ApiResult<MapVerificationCollectionDto>(
+                System.Net.HttpStatusCode.OK, new ApiResponse<MapVerificationCollectionDto>(
+                    new MapVerificationCollectionDto(names.Select(name => new MapVerificationResultDto(
+                        name, name == "mp_bog" || uploaded)).ToList()))));
+        servers.Setup(x => x.Maps.V1.PushServerMapToHost(serverId, "mp_custom"))
+            .Callback(() => uploaded = true)
+            .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK, new ApiResponse()));
+        servers.Setup(x => x.CoD4xRcon.V1.Set(serverId, It.IsAny<CoD4xSetDvarRequestDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<string>(System.Net.HttpStatusCode.OK, new ApiResponse<string>("ok")));
+        context.Setup(x => x.CallActivityAsync<RotationDetails>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync(details with { GameType = GameType.CallOfDuty4x, ConfigVariableName = "sv_maprotation" });
+        context.Setup(x => x.CallActivityAsync<List<string>>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync(["mp_bog", "mp_custom"]);
+        context.Setup(x => x.CallActivityAsync<MapOperationResult>(
+                It.Is<TaskName>(name => name == nameof(MapRotationActivities.RepairSingleMapToServer)), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .Returns(async (TaskName _, object input, TaskOptions _) =>
+            {
+                var result = await activities.RepairSingleMapToServer((SyncMapInput)input);
+                repairs.Add(result);
+                return result;
+            });
+        context.Setup(x => x.CallActivityAsync<List<MapOperationResult>>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .Returns((TaskName _, object input, TaskOptions _) => activities.VerifyMapFiles((VerifyMapFilesInput)input));
+        context.Setup(x => x.CallActivityAsync<FormatRotationOutput>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .Returns((TaskName _, object input, TaskOptions _) => activities.FormatRotationString((FormatRotationInput)input));
+        context.Setup(x => x.CallActivityAsync<MapOperationResult>(
+                It.Is<TaskName>(name => name == nameof(MapRotationActivities.SetRconDvar)), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .Returns((TaskName _, object input, TaskOptions _) => activities.SetRconDvar((SetRconDvarInput)input));
+
+        var result = await Run("Apply");
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(SkipReasons.BuiltInMap, repairs.Single(repair => repair.MapName == "mp_bog").SkipReason);
+        Assert.True(uploaded);
+        servers.Verify(x => x.Maps.V1.PushServerMapToHost(serverId, "mp_custom"), Times.Once);
+        servers.Verify(x => x.Maps.V1.PushServerMapToHost(serverId, "mp_bog"), Times.Never);
+        context.Verify(x => x.CallActivityAsync(
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.WriteAndVerifyConfigVariable)),
+            It.Is<WriteConfigInput>(input => input.Value == "gametype tdm map mp_bog map mp_custom"),
+            It.IsAny<TaskOptions>()), Times.Once);
+        servers.Verify(x => x.CoD4xRcon.V1.Set(serverId,
+            It.Is<CoD4xSetDvarRequestDto>(request => request.DvarName == "sv_maprotation" &&
+                request.Value == "gametype tdm map mp_bog map mp_custom"), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Contains(updates, update => update.DeploymentState == DeploymentState.Synced);
+        Assert.Contains(updates, update => update.ActivationState == ActivationState.Active);
     }
 
     [Fact]
