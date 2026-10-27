@@ -390,9 +390,11 @@ public class MapRotationFileVerificationTests
     }
 
     [Theory]
-    [InlineData("expected", true)]
-    [InlineData("old", false)]
-    public async Task ConfigWriteRequiresExactReadBack(string retainedValue, bool success)
+    [InlineData("expected", true, false)]
+    [InlineData("old", false, false)]
+    [InlineData("expected", true, true)]
+    [InlineData("old", false, true)]
+    public async Task ConfigWriteRequiresExactReadBack(string retainedValue, bool success, bool recoverable)
     {
         var id = Guid.NewGuid();
         Mock.Get(servers.Object.Config.V1).Setup(x => x.UpdateConfigVariable(id, "server.cfg", "sv_maprotation", "expected", null))
@@ -401,7 +403,13 @@ public class MapRotationFileVerificationTests
             .ReturnsAsync(new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
                 new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg", $"set sv_maprotation \"{retainedValue}\""))));
         var input = new WriteConfigInput(id, "server.cfg", "sv_maprotation", "expected");
-        if (success)
+        if (recoverable)
+        {
+            var result = await Create().TryWriteAndVerifyConfigVariable(input);
+            Assert.Equal(success, result.Success);
+            Assert.True(result.MayHaveChanged);
+        }
+        else if (success)
         {
             await Create().WriteAndVerifyConfigVariable(input);
         }
