@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using MX.Api.Abstractions;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Maps;
+using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Config;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
@@ -44,7 +45,9 @@ public class MapRotationWorkflowTests
         context.Setup(x => x.CallActivityAsync<MapOperationResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
             .ReturnsAsync(new MapOperationResult("mp_custom", true));
         context.Setup(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
-            .ReturnsAsync(new ConfigWriteResult(true, true));
+            .ReturnsAsync(new ConfigWriteResult(true));
+        context.Setup(x => x.CallActivityAsync<ConfigPreflightResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync(new ConfigPreflightResult(true));
         context.Setup(x => x.CallActivityAsync(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
             .Callback<TaskName, object, TaskOptions>((_, input, _) =>
             {
@@ -476,12 +479,12 @@ public class MapRotationWorkflowTests
     [InlineData(ActivationState.Inactive)]
     [InlineData(ActivationState.Active)]
     [InlineData(ActivationState.Failed)]
-    public async Task DefinitiveFirstWriteRejectionPreservesActivationStateAndRecordsFailure(ActivationState state)
+    public async Task DefinitivePreflightRejectionPreservesActivationStateAndRecordsFailure(ActivationState state)
     {
         context.Setup(x => x.CallActivityAsync<RotationDetails>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
             .ReturnsAsync(details with { ActivationState = state });
-        context.Setup(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
-            .ReturnsAsync(new ConfigWriteResult(false, false, "Choose a file with an active rotation declaration."));
+        context.Setup(x => x.CallActivityAsync<ConfigPreflightResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync(new ConfigPreflightResult(false, "Choose a file with an active rotation declaration."));
 
         var result = await MapRotationWorkflow.RunLocked(context.Object, assignmentId, serverId, "Activate",
             new TaskCompletionSource().Task, preservePreWriteState: true);
@@ -492,7 +495,7 @@ public class MapRotationWorkflowTests
         Assert.Contains(updates, update => update.LastError == result.Error);
         Assert.Equal(AssignmentOperationStatus.Failed, Assert.Single(operations).Status);
         context.Verify(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(),
-            It.IsAny<TaskOptions>()), Times.Once);
+            It.IsAny<TaskOptions>()), Times.Never);
         context.Verify(x => x.CallActivityAsync<MapOperationResult>(
             It.Is<TaskName>(name => name == nameof(MapRotationActivities.SetRconDvar)),
             It.IsAny<object>(), It.IsAny<TaskOptions>()), Times.Never);
@@ -517,8 +520,8 @@ public class MapRotationWorkflowTests
     public async Task LaterDefinitiveRejectionCannotEraseAnEarlierUncertainWrite()
     {
         context.SetupSequence(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
-            .ReturnsAsync(new ConfigWriteResult(false, true, "Connection lost during upload."))
-            .ReturnsAsync(new ConfigWriteResult(false, false, "Declaration not found."));
+            .ReturnsAsync(new ConfigWriteResult(false, "Connection lost during upload."))
+            .ReturnsAsync(new ConfigWriteResult(false, "Declaration not found."));
 
         var result = await MapRotationWorkflow.RunLocked(context.Object, assignmentId, serverId, "Activate",
             new TaskCompletionSource().Task, preservePreWriteState: true);
@@ -527,6 +530,8 @@ public class MapRotationWorkflowTests
         Assert.Contains(updates, update => update.ActivationState == ActivationState.Failed);
         context.Verify(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(),
             It.IsAny<TaskOptions>()), Times.Exactly(2));
+        context.Verify(x => x.CallActivityAsync<ConfigPreflightResult>(It.IsAny<TaskName>(), It.IsAny<object>(),
+            It.IsAny<TaskOptions>()), Times.Once);
     }
 
     [Fact]
@@ -536,9 +541,9 @@ public class MapRotationWorkflowTests
             .ReturnsAsync(new FormatRotationOutput([
                 new RotationStringPart("scr_aacp_maps_1", "mp_custom"),
                 new RotationStringPart("scr_aacp_maps_2", "mp_more")]));
-        context.SetupSequence(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
-            .ReturnsAsync(new ConfigWriteResult(true, true))
-            .ReturnsAsync(new ConfigWriteResult(false, false, "Second declaration not found."));
+        context.SetupSequence(x => x.CallActivityAsync<ConfigPreflightResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync(new ConfigPreflightResult(true))
+            .ReturnsAsync(new ConfigPreflightResult(false, "Second declaration not found."));
 
         var result = await MapRotationWorkflow.RunLocked(context.Object, assignmentId, serverId, "Activate",
             new TaskCompletionSource().Task, preservePreWriteState: true);
@@ -563,15 +568,58 @@ public class MapRotationWorkflowTests
         Assert.Contains(updates, update => update.ActivationState == ActivationState.Failed);
     }
 
+    [Fact]
+    public async Task RedeliveryAfterAnUploadCannotMakeTheAssignmentEditable()
+    {
+        var servers = new Mock<IServersApiClient> { DefaultValue = DefaultValue.Mock };
+        var activities = new MapRotationActivities(Mock.Of<ILogger<MapRotationActivities>>(), Mock.Of<IRepositoryApiClient>(), servers.Object);
+        var writes = 0;
+        var reads = 0;
+        servers.Setup(x => x.Config.V1.UpdateConfigVariable(serverId, details.ConfigFilePath!,
+            details.ConfigVariableName!, It.IsAny<string>(), It.IsAny<string[]>()))
+            .ReturnsAsync(() => ++writes == 1
+                ? new ApiResult(System.Net.HttpStatusCode.OK)
+                : new ApiResult(System.Net.HttpStatusCode.BadRequest,
+                    new ApiResponse(new ApiError("CONFIG_VARIABLE_NOT_FOUND", "Declaration no longer available."))));
+        servers.Setup(x => x.Config.V1.GetConfigFile(serverId, details.ConfigFilePath!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ++reads == 1
+                ? new ApiResult<ConfigFileContentDto>(System.Net.HttpStatusCode.OK,
+                    new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto(details.ConfigFilePath!,
+                        $"set {details.ConfigVariableName} \"mp_custom\"")))
+                : throw new TimeoutException("Read unavailable after the upload."));
+        context.Setup(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .Returns(async (TaskName _, object input, TaskOptions _) =>
+            {
+                _ = await activities.TryWriteAndVerifyConfigVariable((WriteConfigInput)input);
+                return await activities.TryWriteAndVerifyConfigVariable((WriteConfigInput)input);
+            });
+
+        var result = await MapRotationWorkflow.RunLocked(context.Object, assignmentId, serverId, "Activate",
+            new TaskCompletionSource().Task, preservePreWriteState: true);
+
+        Assert.False(result.Success);
+        Assert.True(writes >= 2);
+        Assert.Contains(updates, update => update.ActivationState == ActivationState.Failed);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task CancellationPreservesStateOnlyWhenTheFinishedCallDefinitelyDidNotWrite(bool mayHaveChanged)
     {
         var cancellation = new TaskCompletionSource();
-        context.Setup(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
-            .Callback(() => cancellation.SetResult())
-            .ReturnsAsync(new ConfigWriteResult(mayHaveChanged, mayHaveChanged, "Rejected before write."));
+        if (mayHaveChanged)
+        {
+            context.Setup(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+                .Callback(() => cancellation.SetResult())
+                .ReturnsAsync(new ConfigWriteResult(true));
+        }
+        else
+        {
+            context.Setup(x => x.CallActivityAsync<ConfigPreflightResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+                .Callback(() => cancellation.SetResult())
+                .ReturnsAsync(new ConfigPreflightResult(false, "Rejected before write."));
+        }
 
         var result = await MapRotationWorkflow.RunLocked(context.Object, assignmentId, serverId, "Activate",
             cancellation.Task, preservePreWriteState: true);
@@ -586,17 +634,19 @@ public class MapRotationWorkflowTests
     {
         context.Setup(x => x.CallActivityAsync<RotationDetails>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
             .ReturnsAsync(details with { ActivationState = ActivationState.Failed, ConfigVariableName = "sv_maprotation" });
-        context.Setup(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
-            .ReturnsAsync(new ConfigWriteResult(true, false));
+        context.Setup(x => x.CallActivityAsync<ConfigPreflightResult>(It.IsAny<TaskName>(), It.IsAny<object>(), It.IsAny<TaskOptions>()))
+            .ReturnsAsync(new ConfigPreflightResult(false));
 
         var result = await MapRotationWorkflow.RunLocked(context.Object, assignmentId, serverId, "Deactivate",
             new TaskCompletionSource().Task, preservePreWriteState: true);
 
         Assert.True(result.Success, result.Error);
         Assert.Contains(updates, update => update.ActivationState == ActivationState.Inactive);
-        context.Verify(x => x.CallActivityAsync<ConfigWriteResult>(
-            It.Is<TaskName>(name => name == nameof(MapRotationActivities.TryClearConfigVariableIfPresent)),
-            It.IsAny<WriteConfigInput>(), It.IsAny<TaskOptions>()), Times.Once);
+        context.Verify(x => x.CallActivityAsync<ConfigPreflightResult>(
+            It.Is<TaskName>(name => name == nameof(MapRotationActivities.PreflightConfigVariableForWrite)),
+            It.Is<ConfigPreflightInput>(input => input.AllowMissing), It.IsAny<TaskOptions>()), Times.Once);
+        context.Verify(x => x.CallActivityAsync<ConfigWriteResult>(It.IsAny<TaskName>(), It.IsAny<object>(),
+            It.IsAny<TaskOptions>()), Times.Never);
         context.Verify(x => x.CallActivityAsync<MapOperationResult>(
             It.Is<TaskName>(name => name == nameof(MapRotationActivities.SetRconDvar)),
             It.Is<SetRconDvarInput>(input => input.DvarName == "sv_maprotation" && input.Value == ""),

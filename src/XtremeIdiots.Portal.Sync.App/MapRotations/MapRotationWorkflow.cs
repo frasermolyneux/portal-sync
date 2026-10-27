@@ -220,21 +220,29 @@ public static class MapRotationWorkflow
             Check();
             if (preservePreWriteState)
             {
-                var name = activity == nameof(MapRotationActivities.ClearConfigVariableIfPresent)
-                    ? nameof(MapRotationActivities.TryClearConfigVariableIfPresent)
-                    : nameof(MapRotationActivities.TryWriteAndVerifyConfigVariable);
+                var preflight = await context.CallActivityAsync<ConfigPreflightResult>(
+                    nameof(MapRotationActivities.PreflightConfigVariableForWrite),
+                    new ConfigPreflightInput(input, activity == nameof(MapRotationActivities.ClearConfigVariableIfPresent)));
+                Check();
+                if (preflight.Error != null)
+                {
+                    throw new InvalidOperationException(preflight.Error);
+                }
+                if (!preflight.WriteRequired)
+                {
+                    return;
+                }
+                configurationMayHaveChanged = true;
                 for (var attempt = 0; attempt < 2; attempt++)
                 {
-                    var previouslyChanged = configurationMayHaveChanged;
-                    configurationMayHaveChanged = true;
-                    var result = await context.CallActivityAsync<ConfigWriteResult>(name, input);
-                    configurationMayHaveChanged = previouslyChanged || result.MayHaveChanged;
+                    var result = await context.CallActivityAsync<ConfigWriteResult>(
+                        nameof(MapRotationActivities.TryWriteAndVerifyConfigVariable), input);
                     Check();
                     if (result.Success)
                     {
                         return;
                     }
-                    if (!result.MayHaveChanged || attempt == 1)
+                    if (attempt == 1)
                     {
                         throw new InvalidOperationException(result.Error ?? "The configuration change could not be confirmed.");
                     }

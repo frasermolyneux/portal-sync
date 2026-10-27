@@ -303,14 +303,16 @@ public class MapRotationFileVerificationTests
         var result = await Create().TryWriteAndVerifyConfigVariable(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"));
 
         Assert.False(result.Success);
-        Assert.True(result.MayHaveChanged);
-        api.Verify(x => x.GetConfigFile(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        api.Verify(x => x.GetConfigFile(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
     [InlineData("// set sv_maprotation \"example\"")]
     [InlineData("seta sv_maprotation \"example\"")]
     [InlineData("set sv_maprotation \"first\"\nset sv_maprotation \"second\"")]
+    [InlineData("/*\nset sv_maprotation \"example\"\n*/\nseta sv_maprotation \"old\"")]
+    [InlineData("/*\nset sv_maprotation \"example\"\n*/\nset sv_maprotation \"old\"")]
+    [InlineData("/*\nset sv_maprotation \"example\"\n*/\nset other \"value\"; set sv_maprotation \"old\"")]
     public async Task InvalidDeclarationIsRejectedBeforeAnyWriteAndRemainsEditable(string content)
     {
         var api = Mock.Get(servers.Object.Config.V1);
@@ -318,11 +320,32 @@ public class MapRotationFileVerificationTests
             .ReturnsAsync(new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
                 new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg", content))));
 
-        var result = await Create().TryWriteAndVerifyConfigVariable(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"));
+        var result = await Create().PreflightConfigVariableForWrite(
+            new(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"), false));
 
-        Assert.False(result.Success);
-        Assert.False(result.MayHaveChanged);
+        Assert.False(result.WriteRequired);
         Assert.Contains("Choose a different configuration file", result.Error);
+        api.Verify(x => x.UpdateConfigVariable(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<string[]>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("// example\nset SV_MapRotation \"old\" // comment")]
+    [InlineData("/* other example */\nset sv_maprotation \"old\"")]
+    [InlineData("set hostname \"// not a comment\"\nset sv_maprotation \"old\"")]
+    [InlineData("set sv_maprotation \"old\"\n/*\nset sv_maprotation \"example\"\n*/")]
+    public async Task PreflightAcceptsTheExecutableDeclarationWithoutPerformingAnyWrites(string content)
+    {
+        var api = Mock.Get(servers.Object.Config.V1);
+        api.Setup(x => x.GetConfigFile(It.IsAny<Guid>(), "server.cfg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
+                new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg", content))));
+
+        var result = await Create().PreflightConfigVariableForWrite(
+            new(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"), false));
+
+        Assert.True(result.WriteRequired, result.Error);
+        Assert.Null(result.Error);
         api.Verify(x => x.UpdateConfigVariable(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string[]>()), Times.Never);
     }
@@ -340,7 +363,6 @@ public class MapRotationFileVerificationTests
         var result = await Create().TryWriteAndVerifyConfigVariable(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"));
 
         Assert.False(result.Success);
-        Assert.True(result.MayHaveChanged);
     }
 
     [Theory]
@@ -365,7 +387,6 @@ public class MapRotationFileVerificationTests
         var result = await Create().TryWriteAndVerifyConfigVariable(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"));
 
         Assert.False(result.Success);
-        Assert.True(result.MayHaveChanged);
     }
 
     [Theory]
@@ -381,10 +402,11 @@ public class MapRotationFileVerificationTests
                 : new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
                     new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg", "// set sv_maprotation \"example\""))));
 
-        var result = await Create().TryClearConfigVariableIfPresent(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", ""));
+        var result = await Create().PreflightConfigVariableForWrite(
+            new(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", ""), true));
 
-        Assert.True(result.Success, result.Error);
-        Assert.False(result.MayHaveChanged);
+        Assert.Null(result.Error);
+        Assert.False(result.WriteRequired);
         api.Verify(x => x.UpdateConfigVariable(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string[]>()), Times.Never);
     }
@@ -407,7 +429,6 @@ public class MapRotationFileVerificationTests
         {
             var result = await Create().TryWriteAndVerifyConfigVariable(input);
             Assert.Equal(success, result.Success);
-            Assert.True(result.MayHaveChanged);
         }
         else if (success)
         {
