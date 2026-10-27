@@ -457,13 +457,20 @@ public class MapRotationActivities(
         }
 
         var rotation = rotationResult.Result.Data;
+        var serverResult = await repositoryApiClient.GameServers.V1
+            .GetGameServer(assignment.GameServerId).ConfigureAwait(false);
+        if (!serverResult.IsSuccess || serverResult.Result?.Data is null)
+        {
+            throw new InvalidOperationException($"Failed to get game server {assignment.GameServerId} for assignment {input.AssignmentId}");
+        }
+
         var mapIds = rotation.MapRotationMaps?.Select(m => m.MapId).ToList() ?? [];
 
         return new RotationDetails(
             AssignmentId: assignment.MapRotationServerAssignmentId,
             GameServerId: assignment.GameServerId,
             MapRotationId: assignment.MapRotationId,
-            GameType: rotation.GameType,
+            GameType: serverResult.Result.Data.GameType,
             DeploymentState: assignment.DeploymentState,
             ActivationState: assignment.ActivationState,
             DeployedVersion: assignment.DeployedVersion,
