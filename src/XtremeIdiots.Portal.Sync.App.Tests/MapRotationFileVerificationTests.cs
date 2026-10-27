@@ -2,7 +2,6 @@ using System.Net;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MX.Api.Abstractions;
-using MX.Api.Client;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Config;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
@@ -294,7 +293,7 @@ public class MapRotationFileVerificationTests
         var write = api.Setup(x => x.UpdateConfigVariable(It.IsAny<Guid>(), "server.cfg", "sv_maprotation", "expected", null));
         if (throwHttpError)
         {
-            write.ThrowsAsync(new ApiHttpRequestException("Rejected.", HttpStatusCode.BadRequest, response));
+            write.ThrowsAsync(new HttpRequestException("Rejected.", null, HttpStatusCode.BadRequest));
         }
         else
         {

@@ -3,10 +3,8 @@ using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.RegularExpressions;
 using MX.Api.Abstractions;
-using MX.Api.Client;
 using System.Net;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
-using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Config;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.MapRotations;
@@ -718,15 +716,7 @@ public class MapRotationActivities(
     {
         try
         {
-            ApiResult<ConfigFileContentDto> response;
-            try
-            {
-                response = await serversApiClient.Config.V1.GetConfigFile(input.GameServerId, input.ConfigFilePath).ConfigureAwait(false);
-            }
-            catch (ApiHttpRequestException ex) when (IsMissingConfigFile(ex.StatusCode, ex.ErrorResponse?.Errors))
-            {
-                return new(true, false);
-            }
+            var response = await serversApiClient.Config.V1.GetConfigFile(input.GameServerId, input.ConfigFilePath).ConfigureAwait(false);
             if (IsMissingConfigFile(response.StatusCode, response.Result?.Errors))
             {
                 return new(true, false);
