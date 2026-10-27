@@ -45,3 +45,6 @@ terraform -chdir=terraform validate
 - Deployments use GitHub environments, OIDC, Terraform, Function App deployment, and APIM synchronization. Commit each root's `.terraform-version` and `.terraform.lock.hcl`. Select the exact root CLI pin before invoking Terraform; normal initialization uses `-lockfile=readonly`. Regenerate provider selections only in a reviewed dependency-update PR; never commit state, plans, or `.terraform/`.
 
 Use the README and focused source tests for operational detail; keep this file centered on invariants that protect synchronized data and job behavior.
+
+
+CI-only main pushes are excluded by deployment push-path filters before workflow concurrency; they do not enqueue or displace cloud/backend deployments. Automatic deployment requires a change to the workload inputs already declared by the deployment filters; scheduled maintenance and explicit workflow dispatch retain their existing behavior. A deployment-workflow-only change requires explicit dispatch to exercise cloud operations.
