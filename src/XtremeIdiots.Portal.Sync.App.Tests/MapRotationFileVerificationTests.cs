@@ -73,6 +73,11 @@ public class MapRotationFileVerificationTests
         var custom = Assignment("scr_small_rotation", rotationId);
         var rotationDto = new MapRotationDto(rotationId, GameType.CallOfDuty5, "Synthetic", null, "dm", 1,
             null, now, now, [], [normal, picker, other, custom]);
+        var gameServer = Newtonsoft.Json.JsonConvert.DeserializeObject<Portal.Repository.Abstractions.Models.V1.GameServers.GameServerDto>(
+            Newtonsoft.Json.JsonConvert.SerializeObject(new { GameServerId = server, GameType = GameType.CallOfDuty5 }));
+        repository.Setup(x => x.GameServers.V1.GetGameServer(server, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<Portal.Repository.Abstractions.Models.V1.GameServers.GameServerDto>(
+                HttpStatusCode.OK, new ApiResponse<Portal.Repository.Abstractions.Models.V1.GameServers.GameServerDto>(gameServer)));
         api.Setup(x => x.GetMapRotation(rotationId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult<MapRotationDto>(HttpStatusCode.OK, new ApiResponse<MapRotationDto>(rotationDto)));
         foreach (var assignment in new[] { normal, picker, other, custom })
