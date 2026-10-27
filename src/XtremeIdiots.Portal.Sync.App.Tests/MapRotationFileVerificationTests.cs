@@ -333,6 +333,10 @@ public class MapRotationFileVerificationTests
     [InlineData("// example\nset SV_MapRotation \"old\" // comment")]
     [InlineData("/* other example */\nset sv_maprotation \"old\"")]
     [InlineData("set hostname \"// not a comment\"\nset sv_maprotation \"old\"")]
+    [InlineData("set hostname \"A \\\"B\"\nset sv_maprotation \"old\"")]
+    [InlineData("set hostname \"A \\\"B\\\" C\"\nset sv_maprotation \"old\"")]
+    [InlineData("set hostname \"A \\\"// not a comment\\\" C\"\nset sv_maprotation \"old\"")]
+    [InlineData("set hostname \"path \\\\\"\nset sv_maprotation \"old\"")]
     [InlineData("set sv_maprotation \"old\"\n/*\nset sv_maprotation \"example\"\n*/")]
     public async Task PreflightAcceptsTheExecutableDeclarationWithoutPerformingAnyWrites(string content)
     {

@@ -735,7 +735,7 @@ public class MapRotationActivities(
     }
 
     private static string MaskConfigCommentsAndQuotedValues(string content) =>
-        Regex.Replace(content, @"""[^""]*""|//[^\r\n]*|/\*[\s\S]*?(?:\*/|$)", match =>
+        Regex.Replace(content, @"""(?:\\[\s\S]|[^""\\])*""|//[^\r\n]*|/\*[\s\S]*?(?:\*/|$)", match =>
     {
         var characters = match.Value.ToCharArray();
         var quoted = characters[0] == '"';
