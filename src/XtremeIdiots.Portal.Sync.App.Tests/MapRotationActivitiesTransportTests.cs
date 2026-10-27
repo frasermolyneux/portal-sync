@@ -15,6 +15,25 @@ namespace XtremeIdiots.Portal.Sync.App.Tests;
 public class MapRotationActivitiesTransportTests
 {
     [Theory]
+    [InlineData(GameType.CallOfDuty4)]
+    [InlineData(GameType.CallOfDuty4x)]
+    public async Task StockMapSyncRepairAndRemovalNeverUseFileTransport(GameType gameType)
+    {
+        var serverId = Guid.NewGuid();
+
+        var synced = await _sut.SyncSingleMapToServer(new(serverId, "mp_bog", gameType));
+        var repaired = await _sut.RepairSingleMapToServer(new(serverId, "MP_BOG", gameType));
+        var removed = await _sut.RemoveSingleMapFromServer(new(serverId, "mp_bog", gameType));
+
+        Assert.All([synced, repaired, removed], result =>
+        {
+            Assert.True(result.Success);
+            Assert.Equal(SkipReasons.BuiltInMap, result.SkipReason);
+        });
+        Mock.Get(_serversApiClientMock.Object.Maps.V1).VerifyNoOtherCalls();
+    }
+
+    [Theory]
     [InlineData(GameType.CallOfDuty4, GameType.CallOfDuty4x)]
     [InlineData(GameType.CallOfDuty4x, GameType.CallOfDuty4)]
     public async Task GetRotationDetails_UsesServerTypeForCompatibleRotationRouting(GameType rotationType, GameType serverType)
