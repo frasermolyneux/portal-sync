@@ -8,6 +8,18 @@ namespace XtremeIdiots.Portal.Sync.App.MapRotations;
 
 public static class MapRotationGroupWorkflow
 {
+    [Function(nameof(ApplyMapRotationV4))]
+    public static Task<RotationWorkflowResult> ApplyMapRotationV4([OrchestrationTrigger] TaskOrchestrationContext context) =>
+        Run(context, context.GetInput<SyncOrchestrationInput>()!.AssignmentId, "Apply", preservePreWriteState: true);
+
+    [Function(nameof(ActivateMapRotationV4))]
+    public static Task<RotationWorkflowResult> ActivateMapRotationV4([OrchestrationTrigger] TaskOrchestrationContext context) =>
+        Run(context, context.GetInput<ActivateOrchestrationInput>()!.AssignmentId, "Activate", preservePreWriteState: true);
+
+    [Function(nameof(DeactivateMapRotationV4))]
+    public static Task<RotationWorkflowResult> DeactivateMapRotationV4([OrchestrationTrigger] TaskOrchestrationContext context) =>
+        Run(context, context.GetInput<DeactivateOrchestrationInput>()!.AssignmentId, "Deactivate", preservePreWriteState: true);
+
     [Function(nameof(ApplyMapRotationV3))]
     public static Task<RotationWorkflowResult> ApplyMapRotationV3([OrchestrationTrigger] TaskOrchestrationContext context) =>
         Run(context, context.GetInput<SyncOrchestrationInput>()!.AssignmentId, "Apply");
@@ -32,7 +44,8 @@ public static class MapRotationGroupWorkflow
     public static Task<RotationWorkflowResult> UnassignMapRotationV3([OrchestrationTrigger] TaskOrchestrationContext context) =>
         Run(context, context.GetInput<RemoveOrchestrationInput>()!.AssignmentId, "Unassign");
 
-    internal static async Task<RotationWorkflowResult> Run(TaskOrchestrationContext context, Guid assignmentId, string action)
+    internal static async Task<RotationWorkflowResult> Run(TaskOrchestrationContext context, Guid assignmentId, string action,
+        bool preservePreWriteState = false)
     {
         var cancellation = context.WaitForExternalEvent<object>(MapRotationWorkflow.CancellationEvent);
         var details = await context.CallActivityAsync<RotationDetails>(nameof(MapRotationActivities.GetRotationDetails),
@@ -60,7 +73,7 @@ public static class MapRotationGroupWorkflow
                 Progress(context, action, "Server unassigned; map files retained", "Completed");
                 return new RotationWorkflowResult(true);
             }
-            var result = await RunTargets(context, group, action, cancellation);
+            var result = await RunTargets(context, group, action, cancellation, preservePreWriteState);
             if (!result.Success)
             {
                 return result;
@@ -97,7 +110,7 @@ public static class MapRotationGroupWorkflow
     }
 
     private static async Task<RotationWorkflowResult> RunTargets(TaskOrchestrationContext context,
-        List<RotationDetails> group, string action, Task cancellation)
+        List<RotationDetails> group, string action, Task cancellation, bool preservePreWriteState)
     {
         for (var index = 0; index < group.Count; index++)
         {
@@ -116,7 +129,7 @@ public static class MapRotationGroupWorkflow
                 ? "AACP map picker" : "Rotation";
             Progress(context, action, $"{label}: {memberAction}", "InProgress");
             var result = await MapRotationWorkflow.RunLocked(context, member.AssignmentId,
-                member.GameServerId, memberAction, cancellation, member);
+                member.GameServerId, memberAction, cancellation, member, preservePreWriteState);
             if (!result.Success)
             {
                 var error = $"{label}: {result.Error} Other targets may already have completed; review both configuration results.";
