@@ -141,11 +141,12 @@ public static class MapRotationWorkflow
 
     internal static async Task<RotationWorkflowResult> RunLocked(
         TaskOrchestrationContext context, Guid assignmentId, Guid serverId, string action, Task cancellation,
-        RotationDetails? expected = null)
+        RotationDetails? expected = null, bool preservePreWriteState = false)
     {
         Guid? operationId = null;
         var targetValidated = false;
         var configuring = action is "Activate" or "Deactivate";
+        var configurationMayHaveChanged = false;
         var deadline = context.CurrentUtcDateTime.AddMinutes(30);
         var logger = context.CreateReplaySafeLogger(nameof(MapRotationWorkflow));
 
@@ -201,6 +202,7 @@ public static class MapRotationWorkflow
         async Task SetRuntime(SetRconDvarInput input)
         {
             Check();
+            configurationMayHaveChanged = true;
             var result = await context.CallActivityAsync<MapOperationResult>(nameof(MapRotationActivities.SetRconDvar), input);
             Check();
             if (!result.Success)
@@ -216,6 +218,30 @@ public static class MapRotationWorkflow
         async Task WriteConfig(string activity, WriteConfigInput input)
         {
             Check();
+            if (preservePreWriteState)
+            {
+                var name = activity == nameof(MapRotationActivities.ClearConfigVariableIfPresent)
+                    ? nameof(MapRotationActivities.TryClearConfigVariableIfPresent)
+                    : nameof(MapRotationActivities.TryWriteAndVerifyConfigVariable);
+                for (var attempt = 0; attempt < 2; attempt++)
+                {
+                    var previouslyChanged = configurationMayHaveChanged;
+                    configurationMayHaveChanged = true;
+                    var result = await context.CallActivityAsync<ConfigWriteResult>(name, input);
+                    configurationMayHaveChanged = previouslyChanged || result.MayHaveChanged;
+                    Check();
+                    if (result.Success)
+                    {
+                        return;
+                    }
+                    if (!result.MayHaveChanged || attempt == 1)
+                    {
+                        throw new InvalidOperationException(result.Error ?? "The configuration change could not be confirmed.");
+                    }
+                    await context.CreateTimer(context.CurrentUtcDateTime.AddSeconds(10), CancellationToken.None);
+                    Check();
+                }
+            }
             try
             {
                 await context.CallActivityAsync(activity, input);
@@ -350,8 +376,11 @@ public static class MapRotationWorkflow
                     DeployedVersion: details.RotationVersion));
             }
             await ConfirmSnapshot(details);
-            await SetState(new UpdateStatusInput(assignmentId,
-                ActivationState: action == "Deactivate" ? ActivationState.Deactivating : ActivationState.Activating));
+            if (!preservePreWriteState)
+            {
+                await SetState(new UpdateStatusInput(assignmentId,
+                    ActivationState: action == "Deactivate" ? ActivationState.Deactivating : ActivationState.Activating));
+            }
 
             var formatted = action == "Deactivate"
                 ? new FormatRotationOutput([new RotationStringPart(details.ConfigVariableName, "")])
@@ -392,7 +421,9 @@ public static class MapRotationWorkflow
             {
                 Check();
                 Progress(context, action, $"Write and read back {part.VariableName}", "InProgress");
-                await WriteConfig(nameof(MapRotationActivities.WriteAndVerifyConfigVariable),
+                await WriteConfig(preservePreWriteState && action == "Deactivate"
+                    ? nameof(MapRotationActivities.ClearConfigVariableIfPresent)
+                    : nameof(MapRotationActivities.WriteAndVerifyConfigVariable),
                     new WriteConfigInput(serverId, details.ConfigFilePath, part.VariableName, part.Value,
                         action == "Deactivate" ? [] :
                         [$"Managed by XtremeIdiots Portal - {details.Title ?? "Map Rotation"}",
@@ -436,7 +467,7 @@ public static class MapRotationWorkflow
             {
                 await SetState(new UpdateStatusInput(assignmentId,
                     DeploymentState: action == "Unassign" || (configuring && ex is not InvalidDataException) ? null : DeploymentState.Failed,
-                    ActivationState: configuring ? ActivationState.Failed : null,
+                    ActivationState: configuring && (!preservePreWriteState || configurationMayHaveChanged) ? ActivationState.Failed : null,
                     LastError: ex.Message, LastErrorAt: context.CurrentUtcDateTime));
             }
             if (operationId.HasValue)

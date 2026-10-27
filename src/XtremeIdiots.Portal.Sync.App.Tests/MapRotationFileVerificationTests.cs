@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MX.Api.Abstractions;
+using MX.Api.Client;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Config;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
@@ -18,6 +19,14 @@ public class MapRotationFileVerificationTests
     private readonly Mock<IServersApiClient> servers = new() { DefaultValue = DefaultValue.Mock };
     private MapRotationActivities Create() => new(Mock.Of<ILogger<MapRotationActivities>>(),
         Mock.Of<IRepositoryApiClient>(), servers.Object);
+
+    public MapRotationFileVerificationTests()
+    {
+        Mock.Get(servers.Object.Config.V1)
+            .Setup(x => x.GetConfigFile(It.IsAny<Guid>(), "server.cfg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
+                new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg", "set sv_maprotation \"expected\""))));
+    }
 
     [Theory]
     [InlineData(1)]
@@ -273,6 +282,112 @@ public class MapRotationFileVerificationTests
             new WriteConfigInput(server, "server.cfg", "sv_maprotation", "")));
 
         api.Verify(x => x.UpdateConfigVariable(server, "server.cfg", "sv_maprotation", "", null), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FinalWriteRejectionCannotDisproveAnOpaqueClientRetry(bool throwHttpError)
+    {
+        var api = Mock.Get(servers.Object.Config.V1);
+        var response = new ApiResponse(new ApiError("CONFIG_VARIABLE_NOT_FOUND", "Choose another configuration file."));
+        var write = api.Setup(x => x.UpdateConfigVariable(It.IsAny<Guid>(), "server.cfg", "sv_maprotation", "expected", null));
+        if (throwHttpError)
+        {
+            write.ThrowsAsync(new ApiHttpRequestException("Rejected.", HttpStatusCode.BadRequest, response));
+        }
+        else
+        {
+            write.ReturnsAsync(new ApiResult(HttpStatusCode.BadRequest, response));
+        }
+
+        var result = await Create().TryWriteAndVerifyConfigVariable(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"));
+
+        Assert.False(result.Success);
+        Assert.True(result.MayHaveChanged);
+        api.Verify(x => x.GetConfigFile(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("// set sv_maprotation \"example\"")]
+    [InlineData("seta sv_maprotation \"example\"")]
+    [InlineData("set sv_maprotation \"first\"\nset sv_maprotation \"second\"")]
+    public async Task InvalidDeclarationIsRejectedBeforeAnyWriteAndRemainsEditable(string content)
+    {
+        var api = Mock.Get(servers.Object.Config.V1);
+        api.Setup(x => x.GetConfigFile(It.IsAny<Guid>(), "server.cfg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
+                new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg", content))));
+
+        var result = await Create().TryWriteAndVerifyConfigVariable(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"));
+
+        Assert.False(result.Success);
+        Assert.False(result.MayHaveChanged);
+        Assert.Contains("Choose a different configuration file", result.Error);
+        api.Verify(x => x.UpdateConfigVariable(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<string[]>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, "CONFIG_VARIABLE_NOT_FOUND")]
+    [InlineData(HttpStatusCode.BadRequest, "CONFIG_WRITE_FAILED")]
+    [InlineData(HttpStatusCode.OK, "CONFIG_VARIABLE_NOT_FOUND")]
+    public async Task UncertainWriteResponsesNeverClaimThatNothingChanged(HttpStatusCode status, string code)
+    {
+        Mock.Get(servers.Object.Config.V1)
+            .Setup(x => x.UpdateConfigVariable(It.IsAny<Guid>(), "server.cfg", "sv_maprotation", "expected", null))
+            .ReturnsAsync(new ApiResult(status, new ApiResponse(new ApiError(code, "Write failed."))));
+
+        var result = await Create().TryWriteAndVerifyConfigVariable(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"));
+
+        Assert.False(result.Success);
+        Assert.True(result.MayHaveChanged);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WriteReadBackFailureOrTransportTimeoutRequiresRecovery(bool failReadBack)
+    {
+        var api = Mock.Get(servers.Object.Config.V1);
+        var write = api.Setup(x => x.UpdateConfigVariable(It.IsAny<Guid>(), "server.cfg", "sv_maprotation", "expected", null));
+        if (failReadBack)
+        {
+            write.ReturnsAsync(new ApiResult(HttpStatusCode.OK));
+            api.Setup(x => x.GetConfigFile(It.IsAny<Guid>(), "server.cfg", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
+                    new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg", "set sv_maprotation \"stale\""))));
+        }
+        else
+        {
+            write.ThrowsAsync(new TimeoutException("Upload timed out."));
+        }
+
+        var result = await Create().TryWriteAndVerifyConfigVariable(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", "expected"));
+
+        Assert.False(result.Success);
+        Assert.True(result.MayHaveChanged);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeactivationDoesNotRequireWritingADeclarationOrFileThatIsAlreadyAbsent(bool missingFile)
+    {
+        var api = Mock.Get(servers.Object.Config.V1);
+        api.Setup(x => x.GetConfigFile(It.IsAny<Guid>(), "server.cfg", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(missingFile
+                ? new ApiResult<ConfigFileContentDto>(HttpStatusCode.NotFound,
+                    new ApiResponse<ConfigFileContentDto>(new ApiError("CONFIG_FILE_NOT_FOUND", "Missing file.")))
+                : new ApiResult<ConfigFileContentDto>(HttpStatusCode.OK,
+                    new ApiResponse<ConfigFileContentDto>(new ConfigFileContentDto("server.cfg", "// set sv_maprotation \"example\""))));
+
+        var result = await Create().TryClearConfigVariableIfPresent(new(Guid.NewGuid(), "server.cfg", "sv_maprotation", ""));
+
+        Assert.True(result.Success, result.Error);
+        Assert.False(result.MayHaveChanged);
+        api.Verify(x => x.UpdateConfigVariable(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<string[]>()), Times.Never);
     }
 
     [Theory]

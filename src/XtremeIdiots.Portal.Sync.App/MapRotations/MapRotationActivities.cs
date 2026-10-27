@@ -3,7 +3,10 @@ using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.RegularExpressions;
 using MX.Api.Abstractions;
+using MX.Api.Client;
+using System.Net;
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Rcon;
+using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Models.V1.Config;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.MapRotations;
@@ -665,6 +668,89 @@ public class MapRotationActivities(
             await WriteAndVerifyConfigVariable(input with { Value = "" }).ConfigureAwait(false);
         }
     }
+
+    [Function(nameof(TryWriteAndVerifyConfigVariable))]
+    public async Task<ConfigWriteResult> TryWriteAndVerifyConfigVariable([ActivityTrigger] WriteConfigInput input)
+    {
+        try
+        {
+            var content = await ReadConfig(input).ConfigureAwait(false);
+            var writable = Regex.IsMatch(content, $@"^\s*set\s+{Regex.Escape(input.ConfigVariableName)}\s+""[^""]*""",
+                RegexOptions.IgnoreCase | RegexOptions.Multiline, TimeSpan.FromSeconds(1));
+            if (ConfigVariableValues(content, input.ConfigVariableName).Count != 1 || !writable)
+            {
+                return new(false, false,
+                    $"The file '{input.ConfigFilePath}' must contain exactly one active quoted 'set {input.ConfigVariableName}' declaration. Choose a different configuration file or correct the server file before retrying.");
+            }
+        }
+        catch (Exception ex)
+        {
+            return new(false, false, ex.Message);
+        }
+
+        try
+        {
+            // The API client can retry internally; its final rejection cannot prove that an earlier attempt did not write.
+            var response = await serversApiClient.Config.V1.UpdateConfigVariable(input.GameServerId, input.ConfigFilePath,
+                input.ConfigVariableName, input.Value, input.CommentLines).ConfigureAwait(false);
+
+            if (!response.IsSuccess || response.Result?.Errors?.Length > 0)
+            {
+                return new(false, true,
+                    response.Result?.Errors?.FirstOrDefault()?.Message ?? $"Configuration write failed: {response.StatusCode}.");
+            }
+
+            var content = await ReadConfig(input).ConfigureAwait(false);
+            var values = ConfigVariableValues(content, input.ConfigVariableName);
+            return values.Count == 1 && string.Equals(values[0], input.Value, StringComparison.Ordinal)
+                ? new(true, true)
+                : new(false, true, $"Config read-back did not confirm a unique '{input.ConfigVariableName}' value.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Configuration write/read-back could not be confirmed for server {GameServerId}", input.GameServerId);
+            return new(false, true, ex.Message);
+        }
+    }
+
+    [Function(nameof(TryClearConfigVariableIfPresent))]
+    public async Task<ConfigWriteResult> TryClearConfigVariableIfPresent([ActivityTrigger] WriteConfigInput input)
+    {
+        try
+        {
+            ApiResult<ConfigFileContentDto> response;
+            try
+            {
+                response = await serversApiClient.Config.V1.GetConfigFile(input.GameServerId, input.ConfigFilePath).ConfigureAwait(false);
+            }
+            catch (ApiHttpRequestException ex) when (IsMissingConfigFile(ex.StatusCode, ex.ErrorResponse?.Errors))
+            {
+                return new(true, false);
+            }
+            if (IsMissingConfigFile(response.StatusCode, response.Result?.Errors))
+            {
+                return new(true, false);
+            }
+            if (!response.IsSuccess || response.Result?.Errors?.Length > 0 || response.Result?.Data == null)
+            {
+                return new(false, false, $"Could not read configuration '{input.ConfigFilePath}': {response.StatusCode}.");
+            }
+            if (ConfigVariableValues(response.Result.Data.Content, input.ConfigVariableName).Count == 0)
+            {
+                return new(true, false);
+            }
+        }
+        catch (Exception ex)
+        {
+            return new(false, false, ex.Message);
+        }
+
+        return await TryWriteAndVerifyConfigVariable(input with { Value = "" }).ConfigureAwait(false);
+    }
+
+    private static bool IsMissingConfigFile(HttpStatusCode? status, ApiError[]? errors) =>
+        status == HttpStatusCode.NotFound && errors?.Length > 0
+        && errors.All(error => error.Code == "CONFIG_FILE_NOT_FOUND");
 
     private async Task<string> ReadConfig(WriteConfigInput input)
     {

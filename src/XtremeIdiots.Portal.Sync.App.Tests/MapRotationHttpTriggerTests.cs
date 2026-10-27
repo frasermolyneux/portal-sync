@@ -43,6 +43,9 @@ public class MapRotationHttpTriggerTests
     [Theory]
     [InlineData(nameof(MapRotationWorkflow.ApplyMapRotationV2))]
     [InlineData(nameof(MapRotationGroupWorkflow.ApplyMapRotationV3))]
+    [InlineData(nameof(MapRotationGroupWorkflow.ApplyMapRotationV4))]
+    [InlineData(nameof(MapRotationGroupWorkflow.ActivateMapRotationV4))]
+    [InlineData(nameof(MapRotationGroupWorkflow.DeactivateMapRotationV4))]
     public async Task CancellationAcknowledgmentDoesNotClaimTerminationOrAbandonInFlightTransfer(string workflow)
     {
         using var services = new ServiceCollection().Configure<WorkerOptions>(options =>

@@ -25,6 +25,7 @@ public record RemoveMapInput(Guid GameServerId, string MapName, GameType GameTyp
 public record GetLoadedMapsInput(Guid GameServerId);
 public record VerifyMapFilesInput(Guid GameServerId, List<string> MapNames);
 public record RotationWorkflowResult(bool Success, string? Error = null);
+public record ConfigWriteResult(bool Success, bool MayHaveChanged, string? Error = null);
 public record LinkedConfigurationInput(Guid GameServerId, Guid RotationId, Guid AssignmentId, string? Variable);
 public record LinkedConfigurationTarget(Guid AssignmentId, string? ConfigFilePath, string? ConfigVariableName);
 public record ConfigSlotInput(Guid GameServerId, Guid AssignmentId, string ConfigVariableName);
