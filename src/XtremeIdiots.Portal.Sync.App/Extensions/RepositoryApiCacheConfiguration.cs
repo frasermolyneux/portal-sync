@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using MX.Api.Abstractions;
 using MX.Api.Client.Configuration;
 
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Interfaces.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
 
@@ -90,5 +91,10 @@ internal static class RepositoryApiCacheConfiguration
                 default);
 
         cache.NotCached(getMapExpression);
+
+        Expression<Func<IMapsApi, Task<ApiResult<MapDto>>>> getMapByNameExpression =
+            api => api.GetMap(GameType.Unknown, string.Empty, default);
+
+        cache.NotCached(getMapByNameExpression);
     }
 }

@@ -81,6 +81,14 @@ public class MapImageSyncTests
 
         Assert.Empty(maps);
         Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
+            .Verify(client => client.GetMaps(GameType.CallOfDuty4, It.IsAny<string[]?>(), MapsFilter.EmptyMapImage,
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<MapsOrder?>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
+            .Verify(client => client.GetMaps(GameType.CallOfDuty4x, It.IsAny<string[]?>(), It.IsAny<MapsFilter?>(),
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<MapsOrder?>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
             .Verify(client => client.UpdateMapImage(It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<CancellationToken>()), Times.Exactly(51));
     }
