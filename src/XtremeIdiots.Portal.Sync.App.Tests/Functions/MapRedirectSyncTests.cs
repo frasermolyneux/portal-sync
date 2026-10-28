@@ -78,7 +78,7 @@ public class MapRedirectSyncTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EmptySnapshotsKeepTimerManualParityAndReuseTheCod4Alias(bool manual)
+    public async Task EmptySnapshotsKeepTimerManualParityAndOnlyReadCanonicalCatalogues(bool manual)
     {
         if (manual)
         {
@@ -91,6 +91,9 @@ public class MapRedirectSyncTests
 
         _mapRedirectRepositoryMock.Verify(x => x.GetSnapshotForGame("cod4", It.IsAny<CancellationToken>()), Times.Once);
         _mapRedirectRepositoryMock.Verify(x => x.GetSnapshotForGame("cod5", It.IsAny<CancellationToken>()), Times.Once);
+        Maps.Verify(x => x.GetMaps(GameType.CallOfDuty4x, It.IsAny<string[]?>(), It.IsAny<MapsFilter?>(),
+            It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<MapsOrder?>(),
+            It.IsAny<CancellationToken>()), Times.Never);
         Maps.Verify(x => x.CreateMaps(It.IsAny<List<CreateMapDto>>(), It.IsAny<CancellationToken>()), Times.Never);
         Maps.Verify(x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Empty(_auditLoggerMock.Invocations);
@@ -109,8 +112,8 @@ public class MapRedirectSyncTests
             updates.Count == 1 && updates[0].ReplaceMapFiles && updates[0].MapFiles.Count == 1 &&
             updates[0].MapFiles[0].FileName == "nested/map name.ff" &&
             updates[0].MapFiles[0].Url == file.DirectUrl &&
-            updates[0].MapFiles[0].RedirectVersion == "new-version"), It.IsAny<CancellationToken>()), Times.Exactly(2));
-        Assert.Equal(2, _auditLoggerMock.Invocations.Count);
+            updates[0].MapFiles[0].RedirectVersion == "new-version"), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Single(_auditLoggerMock.Invocations);
     }
 
     [Theory]
@@ -142,9 +145,10 @@ public class MapRedirectSyncTests
         _mapRedirectRepositoryMock.Verify(x => x.GetSnapshotForGame("cod5", token), Times.Once);
         Maps.Verify(x => x.GetMaps(It.IsAny<GameType?>(), It.IsAny<string[]?>(), It.IsAny<MapsFilter?>(),
             It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<MapsOrder?>(), token),
-            Times.Exactly(update ? 5 : 3));
-        Maps.Verify(x => x.CreateMaps(It.IsAny<List<CreateMapDto>>(), token), update ? Times.Never() : Times.Exactly(2));
-        Maps.Verify(x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), token), update ? Times.Exactly(2) : Times.Never());
+            Times.Exactly(update ? 3 : 2));
+        Maps.Verify(x => x.CreateMaps(It.Is<List<CreateMapDto>>(maps =>
+            maps.All(map => map.GameType == GameType.CallOfDuty4)), token), update ? Times.Never() : Times.Once());
+        Maps.Verify(x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), token), update ? Times.Once() : Times.Never());
     }
 
     [Theory]
@@ -203,7 +207,7 @@ public class MapRedirectSyncTests
 
         Maps.Verify(x => x.UpdateMaps(It.Is<List<EditMapDto>>(updates =>
             updates.Count == 1 && updates[0].ReplaceMapFiles && updates[0].MapFiles.Count == 0),
-            It.IsAny<CancellationToken>()), Times.Exactly(2));
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -222,7 +226,7 @@ public class MapRedirectSyncTests
 
         await CreateSut().RunMapRedirectSync(null);
 
-        Assert.Equal(2, saved.Count);
+        Assert.Single(saved);
         Assert.All(saved, update =>
         {
             Assert.True(update.ReplaceMapFiles);
@@ -235,7 +239,7 @@ public class MapRedirectSyncTests
         await CreateSut().RunMapRedirectSync(null);
 
         Maps.Verify(x => x.UpdateMaps(It.IsAny<List<EditMapDto>>(), It.IsAny<CancellationToken>()), Times.Never);
-        Assert.Equal(2, _auditLoggerMock.Invocations.Count);
+        Assert.Single(_auditLoggerMock.Invocations);
     }
 
     [Fact]
@@ -249,7 +253,7 @@ public class MapRedirectSyncTests
 
         Maps.Verify(x => x.UpdateMaps(It.Is<List<EditMapDto>>(updates =>
             updates.Count == 1 && updates[0].ReplaceMapFiles && updates[0].MapFiles.Count == 1 &&
-            updates[0].MapFiles[0].FileName == "external.ff"), It.IsAny<CancellationToken>()), Times.Exactly(2));
+            updates[0].MapFiles[0].FileName == "external.ff"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

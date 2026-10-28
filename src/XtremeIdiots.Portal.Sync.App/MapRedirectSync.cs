@@ -45,7 +45,6 @@ public class MapRedirectSync(
                 Dictionary<GameType, string> gamesToSync = new()
                 {
                     [GameType.CallOfDuty4] = "cod4",
-                    [GameType.CallOfDuty4x] = "cod4",
                     [GameType.CallOfDuty5] = "cod5"
                 };
 
