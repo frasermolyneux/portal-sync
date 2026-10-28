@@ -186,7 +186,8 @@ public class MapRotationActivities(
             return [];
         }
         var linked = new List<LinkedConfigurationTarget>();
-        for (var skip = 0; ; skip += 100)
+        var skip = 0;
+        while (true)
         {
             var result = await repositoryApiClient.MapRotations.V1
                 .GetServerAssignments(null, input.GameServerId, null, skip, 100).ConfigureAwait(false);
@@ -205,6 +206,7 @@ public class MapRotationActivities(
             {
                 return linked;
             }
+            skip += 100;
         }
     }
 
