@@ -146,9 +146,8 @@ public class MapRotationLinkedConfigurationPaginationTests
         var selectedId = Guid.NewGuid();
         if (failureOffset == 100)
         {
-            SetupPage(repository, serverId, 0, Enumerable.Range(0, PageSize)
-                .Select(_ => Assignment(Guid.NewGuid(), rotationId, "unrelated_variable"))
-                .ToList());
+            SetupPage(repository, serverId, 0, [.. Enumerable.Range(0, PageSize)
+                .Select(_ => Assignment(Guid.NewGuid(), rotationId, "unrelated_variable"))]);
         }
         SetupFailure(repository, serverId, failureOffset, missingData);
         var activities = Create(repository);
@@ -163,16 +162,20 @@ public class MapRotationLinkedConfigurationPaginationTests
         VerifyRequests(repository, serverId, failureOffset == 100 ? [0, 100] : [0]);
     }
 
-    private static MapRotationActivities Create(Mock<IRepositoryApiClient> repository) =>
-        new(Mock.Of<ILogger<MapRotationActivities>>(), repository.Object, Mock.Of<IServersApiClient>());
+    private static MapRotationActivities Create(Mock<IRepositoryApiClient> repository)
+    {
+        return new(Mock.Of<ILogger<MapRotationActivities>>(), repository.Object, Mock.Of<IServersApiClient>());
+    }
 
     private static MapRotationServerAssignmentDto Assignment(
         Guid id,
         Guid rotationId,
         string variable,
-        DeploymentState state = DeploymentState.Synced) =>
-        new(id, rotationId, Guid.NewGuid(), state, ActivationState.Active, 1, 1, "server.cfg", variable,
+        DeploymentState state = DeploymentState.Synced)
+    {
+        return new(id, rotationId, Guid.NewGuid(), state, ActivationState.Active, 1, 1, "server.cfg", variable,
             null, null, Timestamp, Timestamp, null);
+    }
 
     private static void SetupPage(
         Mock<IRepositoryApiClient> repository,
@@ -181,10 +184,10 @@ public class MapRotationLinkedConfigurationPaginationTests
         IReadOnlyCollection<MapRotationServerAssignmentDto> items)
     {
         var api = Mock.Get(repository.Object.MapRotations.V1);
-        api.Setup(x => x.GetServerAssignments(null, serverId, null, skip, PageSize, It.IsAny<CancellationToken>()))
+        _ = api.Setup(x => x.GetServerAssignments(null, serverId, null, skip, PageSize, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(HttpStatusCode.OK,
                 new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(
-                    new CollectionModel<MapRotationServerAssignmentDto>(items.ToList()))));
+                    new CollectionModel<MapRotationServerAssignmentDto>([.. items]))));
     }
 
     private static void SetupFailure(
@@ -199,7 +202,7 @@ public class MapRotationLinkedConfigurationPaginationTests
                 new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(
                     (CollectionModel<MapRotationServerAssignmentDto>?)null))
             : new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(HttpStatusCode.ServiceUnavailable);
-        api.Setup(x => x.GetServerAssignments(null, serverId, null, skip, PageSize, It.IsAny<CancellationToken>()))
+        _ = api.Setup(x => x.GetServerAssignments(null, serverId, null, skip, PageSize, It.IsAny<CancellationToken>()))
             .ReturnsAsync(result);
     }
 
