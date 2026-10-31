@@ -328,7 +328,9 @@ public class MapRotationActivities(
     public async Task<List<string>> GetReservedConfigVariables([ActivityTrigger] ConfigSlotInput input)
     {
         var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (var skip = 0; ; skip += 100)
+        var skip = 0;
+        var hasMorePages = true;
+        while (hasMorePages)
         {
             var result = await repositoryApiClient.MapRotations.V1
                 .GetServerAssignments(null, input.GameServerId, null, skip, 100).ConfigureAwait(false);
@@ -344,11 +346,13 @@ public class MapRotationActivities(
             {
                 reserved.Add(assignment.ConfigVariableName!);
             }
-            if (items.Count() < 100)
+            hasMorePages = items.Count() == 100;
+            if (hasMorePages)
             {
-                return reserved.ToList();
+                skip += 100;
             }
         }
+        return reserved.ToList();
     }
 
     [Function(nameof(UpdateAssignmentStatus))]
