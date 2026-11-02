@@ -100,7 +100,7 @@ public class MapImageSync(
                 }
             }
 
-            logger.LogInformation($"Processing '{maps.Count}' maps for '{game.Key}'");
+            logger.LogInformation("Processing '{MapCount}' maps for '{GameType}'", maps.Count, game.Key);
 
             foreach (var mapDto in maps)
             {

@@ -178,6 +178,8 @@ public class MapImageSyncTests
     [Fact]
     public async Task RunMapImageSync_WhenMapsReturnEmpty_CompletesSuccessfully()
     {
+        _loggerMock.Setup(x => x.IsEnabled(LogLevel.Information)).Returns(true);
+
         Mock.Get(_repositoryApiClientMock.Object.DataMaintenance.V1)
             .Setup(x => x.ValidateMapImages(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult(HttpStatusCode.OK));
@@ -203,5 +205,42 @@ public class MapImageSyncTests
 
         Mock.Get(_repositoryApiClientMock.Object.DataMaintenance.V1)
             .Verify(x => x.ValidateMapImages(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RunMapImageSync_LogsStableTemplateAndStructuredValues()
+    {
+        _loggerMock.Setup(x => x.IsEnabled(LogLevel.Information)).Returns(true);
+
+        Mock.Get(_repositoryApiClientMock.Object.DataMaintenance.V1)
+            .Setup(x => x.ValidateMapImages(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(HttpStatusCode.OK));
+
+        var response = new ApiResponse<CollectionModel<MapDto>>(new CollectionModel<MapDto>([]));
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
+            .Setup(x => x.GetMaps(
+                It.IsAny<GameType>(),
+                It.IsAny<string[]?>(),
+                It.IsAny<MapsFilter?>(),
+                It.IsAny<string?>(),
+                It.IsAny<int>(),
+                It.IsAny<int>(),
+                It.IsAny<MapsOrder?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapDto>>(HttpStatusCode.OK, response));
+
+        await CreateSut().RunMapImageSync(null);
+
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Information,
+            It.Is<EventId>(eventId => eventId.Id == 0),
+            It.Is<It.IsAnyType>((state, _) =>
+                state is IReadOnlyList<KeyValuePair<string, object?>> values
+                && values.Single(value => value.Key == "{OriginalFormat}").Value
+                    ?.ToString() == "Processing '{MapCount}' maps for '{GameType}'"
+                && values.Single(value => value.Key == "MapCount").Value is 0
+                && values.Single(value => value.Key == "GameType").Value is GameType.CallOfDuty2),
+            It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 }
