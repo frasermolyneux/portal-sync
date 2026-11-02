@@ -52,6 +52,19 @@ public class MapImageSyncTests
         _configuration,
         _auditLoggerMock.Object);
 
+    private static bool IsExpectedMapProcessingLogState(object? state)
+    {
+        if (state is not IReadOnlyList<KeyValuePair<string, object?>> values)
+        {
+            return false;
+        }
+
+        return values.Single(value => value.Key == "{OriginalFormat}").Value?.ToString()
+                   == "Processing '{MapCount}' maps for '{GameType}'"
+               && values.Single(value => value.Key == "MapCount").Value is 0
+               && values.Single(value => value.Key == "GameType").Value is GameType.CallOfDuty2;
+    }
+
     [Fact]
     public async Task SuccessfulUploadsDoNotSkipLaterPagesOfTheShrinkingMissingImageInventory()
     {
@@ -234,12 +247,7 @@ public class MapImageSyncTests
         _loggerMock.Verify(x => x.Log(
             LogLevel.Information,
             It.Is<EventId>(eventId => eventId.Id == 0),
-            It.Is<It.IsAnyType>((state, _) =>
-                state is IReadOnlyList<KeyValuePair<string, object?>> values
-                && values.Single(value => value.Key == "{OriginalFormat}").Value
-                    ?.ToString() == "Processing '{MapCount}' maps for '{GameType}'"
-                && values.Single(value => value.Key == "MapCount").Value is 0
-                && values.Single(value => value.Key == "GameType").Value is GameType.CallOfDuty2),
+            It.Is<It.IsAnyType>((state, _) => IsExpectedMapProcessingLogState(state)),
             It.IsAny<Exception?>(),
             It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
