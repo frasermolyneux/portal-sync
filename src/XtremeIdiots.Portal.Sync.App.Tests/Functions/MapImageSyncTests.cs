@@ -52,7 +52,7 @@ public class MapImageSyncTests
         _configuration,
         _auditLoggerMock.Object);
 
-    private static bool IsExpectedMapProcessingLogState(object? state)
+    private static bool IsExpectedMapProcessingLogState(object? state, int count, GameType game, string message)
     {
         if (state is not IReadOnlyList<KeyValuePair<string, object?>> values)
         {
@@ -61,8 +61,9 @@ public class MapImageSyncTests
 
         return values.Single(value => value.Key == "{OriginalFormat}").Value?.ToString()
                    == "Processing '{MapCount}' maps for '{GameType}'"
-               && values.Single(value => value.Key == "MapCount").Value is 0
-               && values.Single(value => value.Key == "GameType").Value is GameType.CallOfDuty2;
+               && Equals(values.Single(value => value.Key == "MapCount").Value, count)
+               && Equals(values.Single(value => value.Key == "GameType").Value, game)
+               && state.ToString() == message;
     }
 
     [Fact]
@@ -104,6 +105,12 @@ public class MapImageSyncTests
         Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
             .Verify(client => client.UpdateMapImage(It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<CancellationToken>()), Times.Exactly(51));
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Information,
+            It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((state, _) => IsExpectedMapProcessingLogState(state, 51, GameType.CallOfDuty2, "Processing '51' maps for 'CallOfDuty2'")),
+            It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 
     private sealed class ImageHandler : HttpMessageHandler
@@ -247,8 +254,35 @@ public class MapImageSyncTests
         _loggerMock.Verify(x => x.Log(
             LogLevel.Information,
             It.Is<EventId>(eventId => eventId.Id == 0),
-            It.Is<It.IsAnyType>((state, _) => IsExpectedMapProcessingLogState(state)),
+            It.Is<It.IsAnyType>((state, _) => IsExpectedMapProcessingLogState(state, 0, GameType.CallOfDuty2, "Processing '0' maps for 'CallOfDuty2'")),
             It.IsAny<Exception?>(),
             It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Information,
+            It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((state, _) => IsExpectedMapProcessingLogState(state, 0, GameType.CallOfDuty4, "Processing '0' maps for 'CallOfDuty4'")),
+            It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RunMapImageSync_WhenValidationFails_DoesNotEnumerateOrLogProcessing()
+    {
+        Mock.Get(_repositoryApiClientMock.Object.DataMaintenance.V1)
+            .Setup(x => x.ValidateMapImages(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(HttpStatusCode.InternalServerError));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => CreateSut().RunMapImageSync(null));
+
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
+            .Verify(x => x.GetMaps(It.IsAny<GameType?>(), It.IsAny<string[]?>(), It.IsAny<MapsFilter?>(),
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<MapsOrder?>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Information,
+            It.IsAny<EventId>(),
+            It.IsAny<It.IsAnyType>(),
+            It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Never);
     }
 }
