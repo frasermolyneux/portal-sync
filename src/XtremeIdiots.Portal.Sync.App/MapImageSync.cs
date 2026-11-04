@@ -173,7 +173,7 @@ public class MapImageSync(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, $"Failed to retrieve map image from {gameTrackerImageUrl}", mapDto.TelemetryProperties);
+                    logger.LogWarning(ex, "Failed to retrieve map image from {GameTrackerImageUrl}", gameTrackerImageUrl);
                     failures.Add(ex);
                 }
                 finally
