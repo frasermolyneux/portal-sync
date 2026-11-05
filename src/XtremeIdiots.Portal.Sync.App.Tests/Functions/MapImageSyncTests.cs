@@ -12,6 +12,7 @@ using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
 using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.Maps;
 using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App.Configuration;
+using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests.Functions;
 
@@ -64,6 +65,52 @@ public class MapImageSyncTests
                && Equals(values.Single(value => value.Key == "MapCount").Value, count)
                && Equals(values.Single(value => value.Key == "GameType").Value, game)
                && state.ToString() == message;
+    }
+
+    private static bool IsExpectedImageFailureLogState(object? state, string url)
+    {
+        return state is IReadOnlyList<KeyValuePair<string, object?>> values
+               && Equals(values.Single(value => value.Key == "{OriginalFormat}").Value, "Failed to retrieve map image from {GameTrackerImageUrl}")
+               && Equals(values.Single(value => value.Key == "GameTrackerImageUrl").Value, url)
+               && state.ToString() == $"Failed to retrieve map image from {url}";
+    }
+
+    [Fact]
+    public async Task RunMapImageSync_WhenImageRetrievalFails_LogsStructuredWarning()
+    {
+        var map = JsonConvert.DeserializeObject<MapDto>(
+            JsonConvert.SerializeObject(new { MapId = Guid.NewGuid(), MapName = "mp_test", GameType = GameType.CallOfDuty2 }))
+            ?? throw new InvalidOperationException("Invalid map fixture.");
+        var exception = new HttpRequestException("Image retrieval failed.");
+        const string url = "https://image.gametracker.com/images/maps/160x120/cod2/mp_test.jpg";
+        Mock.Get(_repositoryApiClientMock.Object.DataMaintenance.V1)
+            .Setup(client => client.ValidateMapImages(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(HttpStatusCode.OK));
+        Mock.Get(_repositoryApiClientMock.Object.Maps.V1)
+            .Setup(client => client.GetMaps(It.IsAny<GameType?>(), It.IsAny<string[]?>(), It.IsAny<MapsFilter?>(),
+                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<MapsOrder?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GameType? game, string[]? _, MapsFilter? _, string? _, int _, int _,
+                MapsOrder? _, CancellationToken _) => new ApiResult<CollectionModel<MapDto>>(HttpStatusCode.OK,
+                    new ApiResponse<CollectionModel<MapDto>>(new CollectionModel<MapDto>(
+                        game == GameType.CallOfDuty2 ? [map] : []))));
+        using var http = new HttpClient(new FailingImageHandler(exception));
+        var sut = new MapImageSync(_loggerMock.Object, _repositoryApiClientMock.Object, http,
+            _mapImagesStorageOptions, _jobTelemetryMock.Object, _configuration, _auditLoggerMock.Object);
+
+        await Assert.ThrowsAsync<PartialJobFailureException>(() => sut.RunMapImageSync(null));
+
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Warning,
+            It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((state, _) => IsExpectedImageFailureLogState(state, url)),
+            exception,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+    }
+
+    private sealed class FailingImageHandler(Exception exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromException<HttpResponseMessage>(exception);
     }
 
     [Fact]
