@@ -39,6 +39,64 @@ public class UserProfileForumsSyncTests
         _jobTelemetryMock.Object,
         _auditLoggerMock.Object);
 
+    [Fact]
+    public async Task RunUserProfileForumsSync_LogsStructuredProfileAndUnexpectedFailure()
+    {
+        var profiles = new[] { (Name: "Alice", ForumId: "42"), (Name: "Bob", ForumId: "broken"), (Name: "No forum", ForumId: (string?)null) }
+            .Select(profile => JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new
+            {
+                UserProfileId = Guid.NewGuid(),
+                DisplayName = profile.Name,
+                XtremeIdiotsForumId = profile.ForumId,
+                UserProfileClaims = Array.Empty<object>()
+            }))!).ToArray();
+        var users = Mock.Get(_repositoryApiClientMock.Object.UserProfiles.V1);
+        users.SetupSequence(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>(profiles))))
+            .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>([]))));
+        _invisionApiClientMock.Setup(client => client.Core.GetMember("42", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MemberDto>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<MemberDto>(CreateMemberDto(42, CreateGroupDto(82, "Members")))));
+        var exception = new InvalidOperationException("Unexpected forum failure");
+        _invisionApiClientMock.Setup(client => client.Core.GetMember("broken", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(exception);
+        users.Setup(client => client.UpdateUserProfile(It.IsAny<EditUserProfileDto>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
+        users.Setup(client => client.SetUserProfileClaims(It.IsAny<Guid>(), It.IsAny<List<CreateUserProfileClaimDto>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
+
+        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null));
+
+        Assert.Equal(2, failure.Expected);
+        Assert.Equal(1, failure.Failed);
+        var logs = _loggerMock.Invocations.Where(invocation => invocation.Method.Name == nameof(ILogger.Log)).ToArray();
+        Assert.Equal(4, logs.Length);
+        AssertProfileLog(logs[0].Arguments, "Alice", "42");
+        AssertProfileLog(logs[1].Arguments, "Bob", "broken");
+        Assert.Equal(LogLevel.Error, logs[2].Arguments[0]);
+        var errorState = Assert.IsAssignableFrom<IReadOnlyList<KeyValuePair<string, object?>>>(logs[2].Arguments[2]);
+        Assert.Equal("Failed to sync forum profile for {ForumId}", errorState.Single(value => value.Key == "{OriginalFormat}").Value);
+        Assert.Equal("broken", errorState.Single(value => value.Key == "ForumId").Value);
+        Assert.Equal("Failed to sync forum profile for broken", logs[2].Arguments[2]?.ToString());
+        Assert.Same(exception, logs[2].Arguments[3]);
+        AssertProfileLog(logs[3].Arguments, "No forum", string.Empty);
+    }
+
+    private static void AssertProfileLog(IReadOnlyList<object?> arguments, string displayName, string forumId)
+    {
+        Assert.Equal(LogLevel.Information, arguments[0]);
+        var state = Assert.IsAssignableFrom<IReadOnlyList<KeyValuePair<string, object?>>>(arguments[2]);
+        Assert.Equal("UserProfileSync for '{DisplayName}' with XtremeIdiots ID '{ForumId}'", state.Single(value => value.Key == "{OriginalFormat}").Value);
+        Assert.Equal(displayName, state.Single(value => value.Key == "DisplayName").Value);
+        Assert.Equal(forumId, state.Single(value => value.Key == "ForumId").Value);
+        Assert.Equal($"UserProfileSync for '{displayName}' with XtremeIdiots ID '{forumId}'", arguments[2]?.ToString());
+        Assert.Null(arguments[3]);
+    }
+
     [Theory]
     [InlineData(System.Net.HttpStatusCode.NotFound)]
     [InlineData(System.Net.HttpStatusCode.InternalServerError)]

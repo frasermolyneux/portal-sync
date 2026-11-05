@@ -71,7 +71,7 @@ public class UserProfileForumsSync(
 
                 using (logger.BeginScope(userProfileDto.TelemetryProperties))
                 {
-                    logger.LogInformation($"UserProfileSync for '{userProfileDto.DisplayName}' with XtremeIdiots ID '{userProfileDto.XtremeIdiotsForumId}'");
+                    logger.LogInformation("UserProfileSync for '{DisplayName}' with XtremeIdiots ID '{ForumId}'", userProfileDto.DisplayName ?? string.Empty, userProfileDto.XtremeIdiotsForumId ?? string.Empty);
 
                     if (!string.IsNullOrWhiteSpace(userProfileDto.XtremeIdiotsForumId))
                     {
@@ -164,7 +164,7 @@ public class UserProfileForumsSync(
                         }
                         catch (Exception ex)
                         {
-                            logger.LogError(ex, $"Failed to sync forum profile for {userProfileDto.XtremeIdiotsForumId}");
+                            logger.LogError(ex, "Failed to sync forum profile for {ForumId}", userProfileDto.XtremeIdiotsForumId);
                             failures.Add(ex);
                         }
 
