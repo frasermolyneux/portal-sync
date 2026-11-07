@@ -20,7 +20,7 @@ jobs:
       test_report: ${{ steps.shared-tests-1.outputs.test-report }}
     steps:
       - id: shared-tests-1
-        uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v2.1
+        uses: frasermolyneux/actions/dotnet-func-ci@a6271c58ed8e8f3b6fbdb738ac7566863fdc38c8 # dotnet-func-ci/v2.1.2
         with:
           test-reporting: "true"
           dotnet-project: "XtremeIdiots.Portal.Sync.App"
@@ -43,8 +43,9 @@ jobs:
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     steps:
-      - uses: frasermolyneux/actions/terraform-plan@terraform-plan/v2.0.1
+      - uses: frasermolyneux/actions/terraform-plan@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-plan/v5.0.0
         with:
+          terraform-version: "1.17.0"
           terraform-folder: "terraform"
           terraform-var-file: "tfvars/dev.tfvars"
           terraform-backend-file: "backends/dev.backend.hcl"
@@ -64,8 +65,9 @@ jobs:
     concurrency:
       group: ${{ github.repository }}-dev
     steps:
-      - uses: frasermolyneux/actions/terraform-plan-and-apply@terraform-plan-and-apply/v2.0.1
+      - uses: frasermolyneux/actions/terraform-plan-and-apply@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-plan-and-apply/v5.0.0
         with:
+          terraform-version: "1.17.0"
           terraform-folder: "terraform"
           terraform-var-file: "tfvars/dev.tfvars"
           terraform-backend-file: "backends/dev.backend.hcl"
@@ -102,7 +104,7 @@ jobs:
     concurrency:
       group: ${{ github.repository }}-dev
     steps:
-      - uses: frasermolyneux/actions/deploy-function-app@deploy-function-app/v1.2
+      - uses: frasermolyneux/actions/deploy-function-app@027d7e31bb32b734090aaed01b36d74f1d658b61 # deploy-function-app/v1.2.7
         with:
           function-app-artifact-name: "XtremeIdiots.Portal.Sync.App"
           function-app-name: ${{ needs.terraform-plan-and-apply-dev.outputs.function_app_name }}
@@ -127,8 +129,9 @@ jobs:
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     steps:
-      - uses: frasermolyneux/actions/terraform-plan@terraform-plan/v2.0.1
+      - uses: frasermolyneux/actions/terraform-plan@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-plan/v5.0.0
         with:
+          terraform-version: "1.17.0"
           terraform-folder: "terraform"
           terraform-var-file: "tfvars/prd.tfvars"
           terraform-backend-file: "backends/prd.backend.hcl"
@@ -147,6 +150,6 @@ jobs:
       group: test-results-${{ github.repository }}-${{ github.event.pull_request.number }}
       cancel-in-progress: false
     steps:
-      - uses: frasermolyneux/actions/test-results-summary@test-results-summary/v1
+      - uses: frasermolyneux/actions/test-results-summary@28f6613d746ec836d245f10259ea124897d8254a # test-results-summary/v1.1.0
         with:
           jobs: ${{ toJSON(needs) }}
