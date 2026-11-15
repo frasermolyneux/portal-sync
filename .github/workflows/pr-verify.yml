@@ -43,7 +43,7 @@ jobs:
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     steps:
-      - uses: frasermolyneux/actions/terraform-plan@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-plan/v5.0.0
+      - uses: frasermolyneux/actions/terraform-plan@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # terraform-plan/v6.0.0
         with:
           terraform-version: "1.17.0"
           terraform-folder: "terraform"
@@ -65,7 +65,7 @@ jobs:
     concurrency:
       group: ${{ github.repository }}-dev
     steps:
-      - uses: frasermolyneux/actions/terraform-plan-and-apply@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-plan-and-apply/v5.0.0
+      - uses: frasermolyneux/actions/terraform-plan-and-apply@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # terraform-plan-and-apply/v6.0.0
         with:
           terraform-version: "1.17.0"
           terraform-folder: "terraform"
@@ -104,7 +104,7 @@ jobs:
     concurrency:
       group: ${{ github.repository }}-dev
     steps:
-      - uses: frasermolyneux/actions/deploy-function-app@027d7e31bb32b734090aaed01b36d74f1d658b61 # deploy-function-app/v1.2.7
+      - uses: frasermolyneux/actions/deploy-function-app@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # deploy-function-app/v6.0.0
         with:
           function-app-artifact-name: "XtremeIdiots.Portal.Sync.App"
           function-app-name: ${{ needs.terraform-plan-and-apply-dev.outputs.function_app_name }}
@@ -129,7 +129,7 @@ jobs:
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     steps:
-      - uses: frasermolyneux/actions/terraform-plan@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-plan/v5.0.0
+      - uses: frasermolyneux/actions/terraform-plan@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # terraform-plan/v6.0.0
         with:
           terraform-version: "1.17.0"
           terraform-folder: "terraform"

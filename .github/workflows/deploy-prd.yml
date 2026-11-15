@@ -41,7 +41,7 @@ jobs:
           exit 1
 
       - id: changes
-        uses: frasermolyneux/actions/detect-changes@8e7ca58b7821e01192ee4f23756c55e4ee057496 # detect-changes/v1.0.4
+        uses: frasermolyneux/actions/detect-changes@f335f9f14d0062304978193d016f4a43a2e797f4 # detect-changes/v3.0.0
         with:
           filters: |
             src:src/**
@@ -59,7 +59,7 @@ jobs:
       state_tainted: ${{ steps.state-check.outputs.state_tainted }}
     steps:
       - id: state-check
-        uses: frasermolyneux/actions/terraform-state-check@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-state-check/v2.0.2
+        uses: frasermolyneux/actions/terraform-state-check@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # terraform-state-check/v6.0.0
         with:
           terraform-version: "1.17.0"
           terraform-folder: "terraform"
@@ -100,7 +100,7 @@ jobs:
       group: ${{ github.repository }}-dev
     steps:
       - if: inputs.scope != 'maps-bootstrap' && (needs.detect-changes.outputs.terraform == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')
-        uses: frasermolyneux/actions/terraform-plan-and-apply@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-plan-and-apply/v5.0.0
+        uses: frasermolyneux/actions/terraform-plan-and-apply@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # terraform-plan-and-apply/v6.0.0
         with:
           terraform-version: "1.17.0"
           terraform-folder: "terraform"
@@ -111,7 +111,7 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - if: inputs.scope == 'maps-bootstrap' || (needs.detect-changes.outputs.terraform != 'true' && needs.terraform-state-check-dev.outputs.state_tainted != 'true')
-        uses: frasermolyneux/actions/terraform-output@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-output/v2.0.2
+        uses: frasermolyneux/actions/terraform-output@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # terraform-output/v6.0.0
         with:
           terraform-version: "1.17.0"
           terraform-folder: "terraform"
@@ -161,7 +161,7 @@ jobs:
       group: ${{ github.repository }}-dev
     if: "!failure() && !cancelled() && inputs.scope != 'maps-bootstrap' && github.event_name != 'schedule' && (needs.detect-changes.outputs.src == 'true' || needs.terraform-state-check-dev.outputs.state_tainted == 'true')"
     steps:
-      - uses: frasermolyneux/actions/deploy-function-app@027d7e31bb32b734090aaed01b36d74f1d658b61 # deploy-function-app/v1.2.7
+      - uses: frasermolyneux/actions/deploy-function-app@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # deploy-function-app/v6.0.0
         with:
           function-app-artifact-name: "XtremeIdiots.Portal.Sync.App"
           function-app-name: ${{ needs.terraform-plan-and-apply-dev.outputs.function_app_name }}
@@ -233,7 +233,7 @@ jobs:
     if: "!failure() && !cancelled() && (inputs.scope == 'maps-bootstrap' || needs.terraform-plan-and-apply-dev.result == 'success' || github.event_name == 'schedule')"
     steps:
       - if: inputs.scope != 'maps-bootstrap' && needs.detect-changes.outputs.terraform == 'true'
-        uses: frasermolyneux/actions/terraform-plan-and-apply@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-plan-and-apply/v5.0.0
+        uses: frasermolyneux/actions/terraform-plan-and-apply@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # terraform-plan-and-apply/v6.0.0
         with:
           terraform-version: "1.17.0"
           terraform-folder: "terraform"
@@ -244,7 +244,7 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - if: inputs.scope == 'maps-bootstrap' || needs.detect-changes.outputs.terraform != 'true'
-        uses: frasermolyneux/actions/terraform-output@027d7e31bb32b734090aaed01b36d74f1d658b61 # terraform-output/v2.0.2
+        uses: frasermolyneux/actions/terraform-output@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # terraform-output/v6.0.0
         with:
           terraform-version: "1.17.0"
           terraform-folder: "terraform"
@@ -294,7 +294,7 @@ jobs:
       group: ${{ github.repository }}-prd
     if: "!failure() && !cancelled() && needs.terraform-plan-and-apply-prd.result == 'success' && needs.detect-changes.outputs.src == 'true'"
     steps:
-      - uses: frasermolyneux/actions/deploy-function-app@027d7e31bb32b734090aaed01b36d74f1d658b61 # deploy-function-app/v1.2.7
+      - uses: frasermolyneux/actions/deploy-function-app@977ddbedf7f5c6e2fae98ff1d6ec6a9c7669d778 # deploy-function-app/v6.0.0
         with:
           function-app-artifact-name: "XtremeIdiots.Portal.Sync.App"
           function-app-name: ${{ needs.terraform-plan-and-apply-prd.outputs.function_app_name }}
