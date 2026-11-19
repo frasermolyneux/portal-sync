@@ -19,15 +19,15 @@ public sealed class PartialJobFailureException : AggregateException
     public PartialJobFailureException(
         int expected,
         IReadOnlyCollection<Exception> failures,
-        int deferredWorkCount = 0)
+        bool hasDeferredWork = false)
         : base("Some scheduled job operations failed.", failures)
     {
         Expected = expected;
-        DeferredWorkCount = deferredWorkCount;
+        HasDeferredWork = hasDeferredWork;
     }
 
     public int Expected { get; }
-    public int DeferredWorkCount { get; }
+    public bool HasDeferredWork { get; }
     public int Failed => InnerExceptions.Count;
 }
 

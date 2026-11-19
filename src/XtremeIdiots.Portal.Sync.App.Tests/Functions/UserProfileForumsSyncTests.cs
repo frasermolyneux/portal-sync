@@ -145,20 +145,35 @@ public class UserProfileForumsSyncTests
     [Fact]
     public async Task RateLimitedForumMemberDefersRemainingProfilesAndReportsPartialFailure()
     {
-        string[] forumIds = ["limited", "not-requested"];
-        var profiles = forumIds.Select(forumId =>
-            JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new
+        var archivedProfiles = Enumerable.Range(0, 19)
+            .Select(index => JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new
             {
                 UserProfileId = Guid.NewGuid(),
-                DisplayName = forumId,
-                XtremeIdiotsForumId = forumId,
+                ArchivedAtUtc = DateTime.UtcNow,
                 UserProfileClaims = Array.Empty<object>()
-            }))!).ToArray();
+            }))!)
+            .ToArray();
+        var limitedProfile = JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new
+        {
+            UserProfileId = Guid.NewGuid(),
+            DisplayName = "limited",
+            XtremeIdiotsForumId = "limited",
+            UserProfileClaims = Array.Empty<object>()
+        }))!;
+        var laterPageProfile = JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new
+        {
+            UserProfileId = Guid.NewGuid(),
+            DisplayName = "not-requested",
+            XtremeIdiotsForumId = "not-requested",
+            UserProfileClaims = Array.Empty<object>()
+        }))!;
         var users = Mock.Get(_repositoryApiClientMock.Object.UserProfiles.V1);
-        users.Setup(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
+        users.SetupSequence(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
-                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>(profiles))));
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>([.. archivedProfiles, limitedProfile]))))
+            .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>([laterPageProfile]))));
         _invisionApiClientMock.Setup(client => client.Core.GetMember("limited", It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ForumMemberRequestDeferredException(DateTimeOffset.UtcNow.AddSeconds(5)));
 
@@ -185,7 +200,7 @@ public class UserProfileForumsSyncTests
 
         Assert.Equal(1, failure.Expected);
         Assert.Equal(1, failure.Failed);
-        Assert.Equal(1, failure.DeferredWorkCount);
+        Assert.True(failure.HasDeferredWork);
         healthStore.Verify(store => store.RecordAsync(
             It.Is<JobHealthState>(state =>
                 state.Outcome == "partial_failure" && state.Expected == 2 && state.Failed == 1),
