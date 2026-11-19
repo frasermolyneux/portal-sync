@@ -59,9 +59,10 @@ public sealed class PersistentJobTelemetry(IJobTelemetry inner, IJobHealthStore 
             }
             var now = DateTimeOffset.UtcNow;
             var partial = exception as PartialJobFailureException;
+            var expected = partial is null ? 1 : partial.Expected + (partial.HasDeferredWork ? 1 : 0);
             state = new(name, now, null, now,
-                partial is not null && partial.Failed < partial.Expected ? "partial_failure" : "failed",
-                partial?.Expected ?? 1, partial?.Failed ?? 1);
+                partial is not null && partial.Failed < expected ? "partial_failure" : "failed",
+                expected, partial?.Failed ?? 1);
             await inner.FailAsync(exception, additionalProperties).ConfigureAwait(false);
         }
 

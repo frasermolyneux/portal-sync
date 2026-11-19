@@ -29,28 +29,33 @@ public class UserProfileForumsSync(
     private const string RegisteredUserClaimType = "RegisteredUser";
 
     [Function(nameof(RunUserProfileForumsSyncManual))]
-    public async Task RunUserProfileForumsSyncManual([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
+    public async Task RunUserProfileForumsSyncManual(
+        [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
+        CancellationToken cancellationToken)
     {
-        await RunUserProfileForumsSync(null).ConfigureAwait(false);
+        await RunUserProfileForumsSync(null, cancellationToken).ConfigureAwait(false);
     }
 
     [Function(nameof(RunUserProfileForumsSync))]
-    public async Task RunUserProfileForumsSync([TimerTrigger("0 0 */1 * * *")] TimerInfo? myTimer)
+    public async Task RunUserProfileForumsSync(
+        [TimerTrigger("0 0 */1 * * *")] TimerInfo? myTimer,
+        CancellationToken cancellationToken)
     {
         await jobTelemetry.ExecuteAsync(
             nameof(RunUserProfileForumsSync),
             async () =>
             {
-                await ProcessUserProfiles().ConfigureAwait(false);
+                await ProcessUserProfiles(cancellationToken).ConfigureAwait(false);
             }).ConfigureAwait(false);
     }
 
-    private async Task ProcessUserProfiles()
+    private async Task ProcessUserProfiles(CancellationToken cancellationToken)
     {
         var skip = 0;
         var attempted = 0;
         var failures = new List<Exception>();
-        var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null).ConfigureAwait(false);
+        var requestDeferred = false;
+        var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null, cancellationToken).ConfigureAwait(false);
 
         do
         {
@@ -63,6 +68,8 @@ public class UserProfileForumsSync(
 
             foreach (var userProfileDto in items)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (userProfileDto.ArchivedAtUtc.HasValue)
                 {
                     logger.LogDebug("Skipping archived portal profile {UserProfileId}", userProfileDto.UserProfileId);
@@ -78,7 +85,7 @@ public class UserProfileForumsSync(
                         attempted++;
                         try
                         {
-                            var memberResult = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId).ConfigureAwait(false);
+                            var memberResult = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId, cancellationToken).ConfigureAwait(false);
 
                             if (!memberResult.IsSuccess)
                             {
@@ -101,7 +108,7 @@ public class UserProfileForumsSync(
                                     TimeZone = member.TimeZone ?? userProfileDto.TimeZone
                                 };
 
-                                var update = await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto).ConfigureAwait(false);
+                                var update = await repositoryApiClient.UserProfiles.V1.UpdateUserProfile(editUserProfileDto, cancellationToken).ConfigureAwait(false);
                                 if (!update.IsSuccess)
                                 {
                                     throw new HttpRequestException("Unable to persist the synchronized user profile.");
@@ -119,7 +126,7 @@ public class UserProfileForumsSync(
                                     .Select(g => g.First())
                                     .ToList();
 
-                                var replacement = await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave).ConfigureAwait(false);
+                                var replacement = await repositoryApiClient.UserProfiles.V1.SetUserProfileClaims(userProfileDto.UserProfileId, claimsToSave, cancellationToken).ConfigureAwait(false);
                                 if (!replacement.IsSuccess)
                                 {
                                     throw new HttpRequestException("Unable to persist synchronized forum claims.");
@@ -162,6 +169,22 @@ public class UserProfileForumsSync(
                                 userProfileDto.UserProfileId, userProfileDto.XtremeIdiotsForumId);
                             failures.Add(httpEx);
                         }
+                        catch (ForumMemberRequestDeferredException ex)
+                        {
+                            logger.LogWarning(
+                                ex,
+                                "Forum member requests were rate-limited; deferring remaining profile sync work until {DeferredUntilUtc}",
+                                ex.DeferredUntilUtc);
+                            failures.Add(new HttpRequestException(
+                                "Forum member requests were rate-limited; remaining profile sync work was deferred.",
+                                null,
+                                HttpStatusCode.TooManyRequests));
+                            requestDeferred = true;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
                         catch (Exception ex)
                         {
                             logger.LogError(ex, "Failed to sync forum profile for {ForumId}", userProfileDto.XtremeIdiotsForumId);
@@ -170,9 +193,20 @@ public class UserProfileForumsSync(
 
                     }
                 }
+
+                if (requestDeferred)
+                {
+                    break;
+                }
             }
+
+            if (requestDeferred)
+            {
+                break;
+            }
+
             skip += TakeEntries;
-            userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null).ConfigureAwait(false);
+            userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null, cancellationToken).ConfigureAwait(false);
             if (userProfileResponseDto?.IsSuccess != true || userProfileResponseDto.Result?.Data?.Items is null)
             {
                 logger.LogError("User profile enumeration failed on a subsequent page");
@@ -181,7 +215,7 @@ public class UserProfileForumsSync(
         } while (userProfileResponseDto?.IsSuccess == true && userProfileResponseDto.Result?.Data?.Items?.Any() is true);
         if (failures.Count > 0)
         {
-            throw new PartialJobFailureException(attempted, failures);
+            throw new PartialJobFailureException(attempted, failures, requestDeferred);
         }
     }
 
