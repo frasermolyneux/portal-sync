@@ -17,6 +17,12 @@
 ## Overview
 Azure Functions app that synchronizes portal data with external game telemetry and platform services. Handles scheduled and on-demand sync pipelines, ensuring DTO contracts stay aligned with portal APIs and repository data. Integrates with Azure Storage and Application Insights for durable execution and observability. CI/CD uses OIDC-authenticated GitHub Actions and Terraform-provisioned App Service and supporting resources.
 
+Forum member lookups during profile synchronization are paced at 90 requests per
+minute. A forum rate limit stops the current pass before more profiles are fetched;
+the job records a partial failure and retries that work on a later invocation.
+`Retry-After` is honored when present, with bounded jittered backoff used when the
+response omits it.
+
 ## Redirect catalogue integration
 
 Map synchronization uses the shared redirect client with `RedirectApi:BaseUrl`

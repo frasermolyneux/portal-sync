@@ -50,6 +50,7 @@ public class UserProfileForumsSync(
         var skip = 0;
         var attempted = 0;
         var failures = new List<Exception>();
+        var requestDeferred = false;
         var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null).ConfigureAwait(false);
 
         do
@@ -162,6 +163,18 @@ public class UserProfileForumsSync(
                                 userProfileDto.UserProfileId, userProfileDto.XtremeIdiotsForumId);
                             failures.Add(httpEx);
                         }
+                        catch (ForumMemberRequestDeferredException ex)
+                        {
+                            logger.LogWarning(
+                                ex,
+                                "Forum member requests were rate-limited; deferring remaining profile sync work until {DeferredUntilUtc}",
+                                ex.DeferredUntilUtc);
+                            failures.Add(new HttpRequestException(
+                                "Forum member requests were rate-limited; remaining profile sync work was deferred.",
+                                null,
+                                HttpStatusCode.TooManyRequests));
+                            requestDeferred = true;
+                        }
                         catch (Exception ex)
                         {
                             logger.LogError(ex, "Failed to sync forum profile for {ForumId}", userProfileDto.XtremeIdiotsForumId);
@@ -170,7 +183,18 @@ public class UserProfileForumsSync(
 
                     }
                 }
+
+                if (requestDeferred)
+                {
+                    break;
+                }
             }
+
+            if (requestDeferred)
+            {
+                break;
+            }
+
             skip += TakeEntries;
             userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null).ConfigureAwait(false);
             if (userProfileResponseDto?.IsSuccess != true || userProfileResponseDto.Result?.Data?.Items is null)

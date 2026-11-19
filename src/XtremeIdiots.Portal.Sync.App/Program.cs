@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Identity.Web;
 
+using MX.Api.Client;
 using MX.Api.Client.Extensions;
 using MX.InvisionCommunity.Api.Client;
 using MX.Observability.ApplicationInsights.WorkerService;
@@ -119,6 +120,12 @@ var host = new HostBuilder()
             .WithApiKeyAuthentication(configuration["XtremeIdiots:Forums:ApiKey"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:ApiKey configuration is required"), "key", MX.Api.Client.Configuration.ApiKeyLocation.QueryParameter)
             .WithCachePartition("portal-sync")
             .WithCaching(cache => cache.UseLibraryDefaults()));
+
+        services.AddSingleton<ForumMemberRequestPacer>();
+        services.AddScoped<IRestClientService>(provider => new ForumMemberPacingRestClientService(
+            new RestClientService(),
+            provider.GetRequiredService<ForumMemberRequestPacer>(),
+            configuration["XtremeIdiots:Forums:BaseUrl"] ?? throw new InvalidOperationException("XtremeIdiots:Forums:BaseUrl configuration is required")));
 
         services.AddAdminActionTopics();
 

@@ -142,6 +142,35 @@ public class UserProfileForumsSyncTests
     }
 
     [Fact]
+    public async Task RateLimitedForumMemberDefersRemainingProfilesAndReportsPartialFailure()
+    {
+        string[] forumIds = ["limited", "not-requested"];
+        var profiles = forumIds.Select(forumId =>
+            JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new
+            {
+                UserProfileId = Guid.NewGuid(),
+                DisplayName = forumId,
+                XtremeIdiotsForumId = forumId,
+                UserProfileClaims = Array.Empty<object>()
+            }))!).ToArray();
+        var users = Mock.Get(_repositoryApiClientMock.Object.UserProfiles.V1);
+        users.Setup(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>(profiles))));
+        _invisionApiClientMock.Setup(client => client.Core.GetMember("limited", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ForumMemberRequestDeferredException(DateTimeOffset.UtcNow.AddSeconds(5)));
+
+        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null));
+
+        Assert.Equal(1, failure.Expected);
+        Assert.Equal(1, failure.Failed);
+        _invisionApiClientMock.Verify(client => client.Core.GetMember("not-requested", It.IsAny<CancellationToken>()), Times.Never);
+        users.Verify(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ArchivedProfile_IsNotSentToForumsOrMutated()
     {
         var profile = JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new

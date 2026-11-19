@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
+using MX.Api.Client;
 using MX.Api.Client.Configuration;
 using MX.Api.Client.Extensions;
 
@@ -9,6 +10,7 @@ using MX.InvisionCommunity.Api.Client;
 
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Interfaces.V1;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
+using XtremeIdiots.Portal.Sync.App;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests;
 
@@ -66,6 +68,17 @@ public class ExternalApiClientRegistrationTests
         var client = scope.ServiceProvider.GetRequiredService<IInvisionApiClient>();
 
         Assert.NotNull(client);
+    }
+
+    [Fact]
+    public void AddInvisionApiClient_ProductionShape_ResolvesPacedRestClientService()
+    {
+        using var provider = BuildInvisionServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var restClientService = scope.ServiceProvider.GetRequiredService<IRestClientService>();
+
+        Assert.IsType<ForumMemberPacingRestClientService>(restClientService);
     }
 
     [Theory]
@@ -130,11 +143,18 @@ public class ExternalApiClientRegistrationTests
         // + UseLibraryDefaults(). The exact set of methods covered by UseLibraryDefaults() is
         // owned by the MX.InvisionCommunity.Api.Client package; see the PR body for the decision
         // rationale on why enabling defaults is safe for portal-sync's read paths.
+        const string forumsBaseUrl = "https://forums.invalid";
         services.AddInvisionApiClient(options => options
-            .WithBaseUrl("https://forums.invalid")
+            .WithBaseUrl(forumsBaseUrl)
             .WithApiKeyAuthentication("test-api-key", "key", ApiKeyLocation.QueryParameter)
             .WithCachePartition("portal-sync")
             .WithCaching(cache => cache.UseLibraryDefaults()));
+
+        services.AddSingleton<ForumMemberRequestPacer>();
+        services.AddScoped<IRestClientService>(provider => new ForumMemberPacingRestClientService(
+            new RestClientService(),
+            provider.GetRequiredService<ForumMemberRequestPacer>(),
+            forumsBaseUrl));
 
         return services.BuildServiceProvider(new ServiceProviderOptions
         {
