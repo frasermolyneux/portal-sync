@@ -66,6 +66,33 @@ public class ForumMemberPacingRestClientServiceTests
     }
 
     [Fact]
+    public async Task ExecuteWithNamedOptionsAsync_PassesThroughAndDisposesInnerTransport()
+    {
+        var response = new RestResponse { StatusCode = HttpStatusCode.OK };
+        var request = new RestRequest("api/core/profiles", Method.Get);
+        var inner = new Mock<IRestClientService>();
+        inner.Setup(client => client.ExecuteWithNamedOptionsAsync(
+                "repository-client",
+                request,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(response);
+        var sut = new ForumMemberPacingRestClientService(
+            inner.Object,
+            new ForumMemberRequestPacer(),
+            "https://forums.example");
+
+        var result = await sut.ExecuteWithNamedOptionsAsync("repository-client", request, CancellationToken.None);
+        sut.Dispose();
+
+        Assert.Same(response, result);
+        inner.Verify(client => client.ExecuteWithNamedOptionsAsync(
+            "repository-client",
+            request,
+            It.IsAny<CancellationToken>()), Times.Once);
+        inner.Verify(client => client.Dispose(), Times.Once);
+    }
+
+    [Fact]
     public async Task GetMember_RateLimitedResponseIsInterceptedOnceThroughRegisteredClientPipeline()
     {
         const string forumsBaseUrl = "https://forums.example";

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 using MX.Api.Client;
 using MX.Api.Client.Configuration;
@@ -10,7 +11,9 @@ using MX.InvisionCommunity.Api.Client;
 
 using XtremeIdiots.Portal.Integrations.Servers.Abstractions.Interfaces.V1;
 using XtremeIdiots.Portal.Integrations.Servers.Api.Client.V1;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 using XtremeIdiots.Portal.Sync.App;
+using XtremeIdiots.Portal.Sync.App.Redirect;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests;
 
@@ -117,6 +120,19 @@ public class ExternalApiClientRegistrationTests
         Assert.NotNull(client);
     }
 
+    [Fact]
+    public void CombinedApiClients_ProductionShape_ResolveWithPacedTransportAndNamedOptions()
+    {
+        using var provider = BuildCombinedServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IInvisionApiClient>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IServersApiClient>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IRepositoryApiClient>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IMapRedirectRepository>());
+        Assert.IsType<ForumMemberPacingRestClientService>(scope.ServiceProvider.GetRequiredService<IRestClientService>());
+    }
+
     [Theory]
     [InlineData(typeof(IMapsApi))]
     [InlineData(typeof(IConfigApi))]
@@ -152,7 +168,7 @@ public class ExternalApiClientRegistrationTests
 
         services.AddSingleton<ForumMemberRequestPacer>();
         services.AddScoped<IRestClientService>(provider => new ForumMemberPacingRestClientService(
-            new RestClientService(),
+            new RestClientService(provider.GetRequiredService<IOptionsSnapshot<ApiClientOptions>>()),
             provider.GetRequiredService<ForumMemberRequestPacer>(),
             forumsBaseUrl));
 
@@ -174,6 +190,42 @@ public class ExternalApiClientRegistrationTests
         services.AddServersApiClient(options => options
             .WithBaseUrl("https://servers.invalid")
             .WithEntraIdAuthentication("api://servers.invalid"));
+
+        return services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true,
+        });
+    }
+
+    private static ServiceProvider BuildCombinedServiceProvider()
+    {
+        const string forumsBaseUrl = "https://forums.invalid";
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        services.AddRepositoryApiClient(options => options
+            .WithBaseUrl("https://repository.invalid")
+            .WithEntraIdAuthentication("api://repository.invalid")
+            .WithCaching(true)
+            .WithCachePartition("portal-sync"));
+        services.AddServersApiClient(options => options
+            .WithBaseUrl("https://servers.invalid")
+            .WithEntraIdAuthentication("api://servers.invalid"));
+        services.AddMapRedirectRepository(options => options
+            .WithBaseUrl("https://redirect.invalid")
+            .WithEntraIdAuthentication("api://redirect.invalid"));
+        services.AddInvisionApiClient(options => options
+            .WithBaseUrl(forumsBaseUrl)
+            .WithApiKeyAuthentication("test-api-key", "key", ApiKeyLocation.QueryParameter)
+            .WithCachePartition("portal-sync")
+            .WithCaching(cache => cache.UseLibraryDefaults()));
+
+        services.AddSingleton<ForumMemberRequestPacer>();
+        services.AddScoped<IRestClientService>(provider => new ForumMemberPacingRestClientService(
+            new RestClientService(provider.GetRequiredService<IOptionsSnapshot<ApiClientOptions>>()),
+            provider.GetRequiredService<ForumMemberRequestPacer>(),
+            forumsBaseUrl));
 
         return services.BuildServiceProvider(new ServiceProviderOptions
         {
