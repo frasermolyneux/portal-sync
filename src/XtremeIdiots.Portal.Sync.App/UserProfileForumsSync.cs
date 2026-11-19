@@ -55,6 +55,7 @@ public class UserProfileForumsSync(
         var attempted = 0;
         var failures = new List<Exception>();
         var requestDeferred = false;
+        var deferredWorkCount = 0;
         var userProfileResponseDto = await repositoryApiClient.UserProfiles.V1.GetUserProfiles(null, null, skip, TakeEntries, null, cancellationToken).ConfigureAwait(false);
 
         do
@@ -65,6 +66,9 @@ public class UserProfileForumsSync(
                 logger.LogError("User profile enumeration failed; the job did not complete");
                 throw new HttpRequestException("Unable to enumerate user profiles.");
             }
+
+            var remainingForumMembers = items.Count(profile =>
+                !profile.ArchivedAtUtc.HasValue && !string.IsNullOrWhiteSpace(profile.XtremeIdiotsForumId));
 
             foreach (var userProfileDto in items)
             {
@@ -83,6 +87,7 @@ public class UserProfileForumsSync(
                     if (!string.IsNullOrWhiteSpace(userProfileDto.XtremeIdiotsForumId))
                     {
                         attempted++;
+                        remainingForumMembers--;
                         try
                         {
                             var memberResult = await invisionApiClient.Core.GetMember(userProfileDto.XtremeIdiotsForumId, cancellationToken).ConfigureAwait(false);
@@ -179,6 +184,7 @@ public class UserProfileForumsSync(
                                 "Forum member requests were rate-limited; remaining profile sync work was deferred.",
                                 null,
                                 HttpStatusCode.TooManyRequests));
+                            deferredWorkCount = remainingForumMembers;
                             requestDeferred = true;
                         }
                         catch (OperationCanceledException)
@@ -215,7 +221,7 @@ public class UserProfileForumsSync(
         } while (userProfileResponseDto?.IsSuccess == true && userProfileResponseDto.Result?.Data?.Items?.Any() is true);
         if (failures.Count > 0)
         {
-            throw new PartialJobFailureException(attempted, failures);
+            throw new PartialJobFailureException(attempted, failures, deferredWorkCount);
         }
     }
 

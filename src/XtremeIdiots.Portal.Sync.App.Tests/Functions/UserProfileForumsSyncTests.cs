@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using MX.Api.Abstractions;
 using MX.Observability.ApplicationInsights.Auditing;
@@ -161,10 +162,34 @@ public class UserProfileForumsSyncTests
         _invisionApiClientMock.Setup(client => client.Core.GetMember("limited", It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ForumMemberRequestDeferredException(DateTimeOffset.UtcNow.AddSeconds(5)));
 
-        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null, CancellationToken.None));
+        var innerTelemetry = new Mock<IJobTelemetry>();
+        var innerOperation = new Mock<IJobOperation>();
+        innerTelemetry.Setup(telemetry => telemetry.StartJob(nameof(UserProfileForumsSync.RunUserProfileForumsSync), null))
+            .Returns(innerOperation.Object);
+        var healthStore = new Mock<IJobHealthStore>();
+        healthStore.Setup(store => store.RecordAsync(It.IsAny<JobHealthState>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var telemetry = new PersistentJobTelemetry(
+            innerTelemetry.Object,
+            healthStore.Object,
+            NullLogger<PersistentJobTelemetry>.Instance);
+        var sut = new UserProfileForumsSync(
+            _loggerMock.Object,
+            _repositoryApiClientMock.Object,
+            _invisionApiClientMock.Object,
+            telemetry,
+            _auditLoggerMock.Object);
+
+        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() =>
+            sut.RunUserProfileForumsSync(null, CancellationToken.None));
 
         Assert.Equal(1, failure.Expected);
         Assert.Equal(1, failure.Failed);
+        Assert.Equal(1, failure.DeferredWorkCount);
+        healthStore.Verify(store => store.RecordAsync(
+            It.Is<JobHealthState>(state =>
+                state.Outcome == "partial_failure" && state.Expected == 2 && state.Failed == 1),
+            It.IsAny<CancellationToken>()), Times.Once);
         _invisionApiClientMock.Verify(client => client.Core.GetMember("not-requested", It.IsAny<CancellationToken>()), Times.Never);
         users.Verify(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()), Times.Once);
