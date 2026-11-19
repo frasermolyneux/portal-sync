@@ -6,6 +6,7 @@ using RestSharp;
 
 namespace XtremeIdiots.Portal.Sync.App;
 
+// The Invision client preserves cancellation exceptions, but maps other HTTP failures to 500 responses.
 internal sealed class ForumMemberRequestDeferredException(DateTimeOffset deferredUntilUtc)
     : OperationCanceledException($"Forum member synchronization was deferred until {deferredUntilUtc:O}.")
 {
@@ -26,6 +27,7 @@ internal sealed class ForumMemberRequestPacer
     private readonly Func<double> _getRandomValue;
 
     private long _nextRequestTimestamp;
+    private long _deferredUntilTimestamp;
     private int _consecutiveRateLimits;
 
     public ForumMemberRequestPacer()
@@ -60,6 +62,14 @@ internal sealed class ForumMemberRequestPacer
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var deferralTimestamp = _deferredUntilTimestamp - _getTimestamp();
+            if (deferralTimestamp > 0)
+            {
+                var deferredUntilUtc = _getUtcNow() + TimeSpan.FromSeconds((double)deferralTimestamp / _timestampFrequency);
+                throw new ForumMemberRequestDeferredException(deferredUntilUtc);
+            }
+
             while (true)
             {
                 var waitTimestamp = _nextRequestTimestamp - _getTimestamp();
@@ -81,7 +91,8 @@ internal sealed class ForumMemberRequestPacer
                 var nowUtc = _getUtcNow();
                 var retryAfter = GetRetryAfter(response, nowUtc);
                 var deferFor = retryAfter ?? GetFallbackDelay();
-                _nextRequestTimestamp = Max(_nextRequestTimestamp, _getTimestamp() + ToTimestampTicks(deferFor));
+                _deferredUntilTimestamp = Max(_deferredUntilTimestamp, _getTimestamp() + ToTimestampTicks(deferFor));
+                _nextRequestTimestamp = Max(_nextRequestTimestamp, _deferredUntilTimestamp);
                 var remainingTicks = _nextRequestTimestamp - _getTimestamp();
                 var deferredUntilUtc = _getUtcNow() + TimeSpan.FromSeconds((double)remainingTicks / _timestampFrequency);
 

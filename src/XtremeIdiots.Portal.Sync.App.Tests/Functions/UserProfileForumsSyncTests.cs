@@ -69,7 +69,7 @@ public class UserProfileForumsSyncTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
 
-        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null));
+        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null, CancellationToken.None));
 
         Assert.Equal(2, failure.Expected);
         Assert.Equal(1, failure.Failed);
@@ -129,7 +129,7 @@ public class UserProfileForumsSyncTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult(System.Net.HttpStatusCode.OK));
 
-        var error = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null));
+        var error = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null, CancellationToken.None));
 
         Assert.Equal(2, error.Expected);
         Assert.Equal(1, error.Failed);
@@ -161,13 +161,45 @@ public class UserProfileForumsSyncTests
         _invisionApiClientMock.Setup(client => client.Core.GetMember("limited", It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ForumMemberRequestDeferredException(DateTimeOffset.UtcNow.AddSeconds(5)));
 
-        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null));
+        var failure = await Assert.ThrowsAsync<PartialJobFailureException>(() => CreateSut().RunUserProfileForumsSync(null, CancellationToken.None));
 
         Assert.Equal(1, failure.Expected);
         Assert.Equal(1, failure.Failed);
         _invisionApiClientMock.Verify(client => client.Core.GetMember("not-requested", It.IsAny<CancellationToken>()), Times.Never);
         users.Verify(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RunUserProfileForumsSync_PropagatesInvocationCancellationFromMemberLookup()
+    {
+        using var cancellationSource = new CancellationTokenSource();
+        var profile = JsonConvert.DeserializeObject<UserProfileDto>(JsonConvert.SerializeObject(new
+        {
+            UserProfileId = Guid.NewGuid(),
+            XtremeIdiotsForumId = "42",
+            UserProfileClaims = Array.Empty<object>()
+        }))!;
+        var users = Mock.Get(_repositoryApiClientMock.Object.UserProfiles.V1);
+        users.Setup(client => client.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>([profile]))));
+        _invisionApiClientMock.Setup(client => client.Core.GetMember("42", It.IsAny<CancellationToken>()))
+            .Returns((string _, CancellationToken token) =>
+            {
+                cancellationSource.Cancel();
+                return Task.FromCanceled<ApiResult<MemberDto>>(token);
+            });
+
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            CreateSut().RunUserProfileForumsSync(null, cancellationSource.Token));
+
+        Assert.True(cancellationSource.IsCancellationRequested);
+        Assert.IsNotType<ForumMemberRequestDeferredException>(exception);
+        users.Verify(client => client.UpdateUserProfile(It.IsAny<EditUserProfileDto>(), It.IsAny<CancellationToken>()), Times.Never);
+        users.Verify(client => client.SetUserProfileClaims(It.IsAny<Guid>(),
+            It.IsAny<List<CreateUserProfileClaimDto>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -188,7 +220,7 @@ public class UserProfileForumsSyncTests
             .ReturnsAsync(new ApiResult<CollectionModel<UserProfileDto>>(System.Net.HttpStatusCode.OK,
                 new ApiResponse<CollectionModel<UserProfileDto>>(new CollectionModel<UserProfileDto>([]))));
 
-        await CreateSut().RunUserProfileForumsSync(null);
+        await CreateSut().RunUserProfileForumsSync(null, CancellationToken.None);
 
         _invisionApiClientMock.VerifyNoOtherCalls();
         users.Verify(client => client.UpdateUserProfile(
@@ -224,7 +256,7 @@ public class UserProfileForumsSyncTests
             .ReturnsAsync(apiResult);
 
         var sut = CreateSut();
-        await sut.RunUserProfileForumsSync(null);
+        await sut.RunUserProfileForumsSync(null, CancellationToken.None);
 
         Mock.Get(_repositoryApiClientMock.Object.UserProfiles.V1)
             .Verify(x => x.GetUserProfiles(It.IsAny<string?>(), It.IsAny<UserProfileFilter?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<UserProfilesOrder?>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
@@ -247,7 +279,7 @@ public class UserProfileForumsSyncTests
 
         var sut = CreateSut();
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => sut.RunUserProfileForumsSync(null));
+        await Assert.ThrowsAsync<HttpRequestException>(() => sut.RunUserProfileForumsSync(null, CancellationToken.None));
     }
 
     [Fact]

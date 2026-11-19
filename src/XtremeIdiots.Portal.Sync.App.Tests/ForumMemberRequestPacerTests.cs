@@ -49,6 +49,33 @@ public class ForumMemberRequestPacerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ActiveRateLimitDeferralReturnsWithoutWaitingOrRetrying()
+    {
+        var clock = new TestClock();
+        var pacer = clock.CreatePacer();
+        var response = new RestResponse
+        {
+            StatusCode = HttpStatusCode.TooManyRequests,
+            Headers = [new HeaderParameter("Retry-After", "12", false)]
+        };
+        var calls = 0;
+        Task<RestResponse> Execute(CancellationToken _)
+        {
+            calls++;
+            return Task.FromResult(response);
+        }
+
+        var firstDeferral = await Assert.ThrowsAsync<ForumMemberRequestDeferredException>(
+            () => pacer.ExecuteAsync(Execute, CancellationToken.None));
+        var secondDeferral = await Assert.ThrowsAsync<ForumMemberRequestDeferredException>(
+            () => pacer.ExecuteAsync(Execute, CancellationToken.None));
+
+        Assert.Equal(1, calls);
+        Assert.Equal(TimeSpan.Zero, clock.Elapsed);
+        Assert.Equal(firstDeferral.DeferredUntilUtc, secondDeferral.DeferredUntilUtc);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_RateLimitDefersUsingRetryAfterDate()
     {
         var clock = new TestClock();
@@ -91,6 +118,10 @@ public class ForumMemberRequestPacerTests
         {
             lastException = await Assert.ThrowsAsync<ForumMemberRequestDeferredException>(
                 () => pacer.ExecuteAsync(_ => Task.FromResult(response), CancellationToken.None));
+            if (attempt < 5)
+            {
+                clock.Advance(lastException.DeferredUntilUtc - clock.Now);
+            }
         }
 
         Assert.NotNull(lastException);
@@ -101,6 +132,8 @@ public class ForumMemberRequestPacerTests
     {
         public DateTimeOffset Now { get; private set; } = new(2026, 11, 19, 20, 0, 0, TimeSpan.Zero);
         public TimeSpan Elapsed { get; private set; }
+
+        public void Advance(TimeSpan duration) => Now += duration;
 
         public ForumMemberRequestPacer CreatePacer(Func<double>? randomValue = null) =>
             new(
