@@ -16,11 +16,11 @@ using XtremeIdiots.Portal.Sync.App.Observability;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests.Functions;
 
-public class MapImageSyncTests
+public class MapImageSyncTests : IDisposable
 {
     private readonly Mock<ILogger<MapImageSync>> _loggerMock = new();
     private readonly Mock<IRepositoryApiClient> _repositoryApiClientMock = new(MockBehavior.Loose) { DefaultValue = DefaultValue.Mock };
-    private readonly HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient = new(new ImageHandler());
     private readonly IOptions<MapImagesStorageOptions> _mapImagesStorageOptions = Options.Create(new MapImagesStorageOptions
     {
         StorageBlobEndpoint = "https://test.blob.core.windows.net",
@@ -52,6 +52,27 @@ public class MapImageSyncTests
         _jobTelemetryMock.Object,
         _configuration,
         _auditLoggerMock.Object);
+
+    public void Dispose()
+    {
+        _httpClient.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task Dispose_DisposesHttpClient_AndCanBeCalledRepeatedly()
+    {
+        var fixture = new MapImageSyncTests();
+
+        using var response = await fixture._httpClient.GetAsync("https://test");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        fixture.Dispose();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => fixture._httpClient.GetAsync("https://test"));
+
+        fixture.Dispose();
+    }
 
     private static bool IsExpectedMapProcessingLogState(object? state, int count, GameType game, string message)
     {
