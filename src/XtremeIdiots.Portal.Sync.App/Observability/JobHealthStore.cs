@@ -14,10 +14,20 @@ public interface IJobHealthStore
     Task RecordAsync(JobHealthState state, CancellationToken ct);
 }
 
-public sealed class PartialJobFailureException(int expected, IReadOnlyCollection<Exception> failures)
-    : AggregateException("Some scheduled job operations failed.", failures)
+public sealed class PartialJobFailureException : AggregateException
 {
-    public int Expected { get; } = expected;
+    public PartialJobFailureException(
+        int expected,
+        IReadOnlyCollection<Exception> failures,
+        bool hasDeferredWork = false)
+        : base("Some scheduled job operations failed.", failures)
+    {
+        Expected = expected;
+        HasDeferredWork = hasDeferredWork;
+    }
+
+    public int Expected { get; }
+    public bool HasDeferredWork { get; }
     public int Failed => InnerExceptions.Count;
 }
 
