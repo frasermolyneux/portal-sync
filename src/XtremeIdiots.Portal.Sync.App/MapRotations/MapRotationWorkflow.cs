@@ -393,7 +393,7 @@ public static class MapRotationWorkflow
             var formatted = action == "Deactivate"
                 ? new FormatRotationOutput([new RotationStringPart(details.ConfigVariableName, "")])
                 : await context.CallActivityAsync<FormatRotationOutput>(nameof(MapRotationActivities.FormatRotationString),
-                    new FormatRotationInput(names, details.GameMode ?? "war", details.ConfigVariableName));
+                    new FormatRotationInput(names, details.GameMode ?? "war", details.ConfigVariableName, details.MapGameModes));
             var isAacp = details.ConfigVariableName.StartsWith("scr_aacp_maps_", StringComparison.OrdinalIgnoreCase);
             var aacpVariables = Enumerable.Range(1, 10).Select(index => $"scr_aacp_maps_{index}")
                 .ToList();

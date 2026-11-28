@@ -44,7 +44,7 @@ public record UpdateStatusInput(
 public record RecordOperationInput(Guid AssignmentId, AssignmentOperationType OperationType, string? DurableFunctionInstanceId = null);
 public record CompleteOperationInput(Guid OperationId, AssignmentOperationStatus Status, string? Error = null);
 public record GetRotationDetailsInput(Guid AssignmentId);
-public record FormatRotationInput(List<string> MapNames, string GameMode, string ConfigVariableName);
+public record FormatRotationInput(List<string> MapNames, string GameMode, string ConfigVariableName, List<string?>? GameModes = null);
 public record FormatRotationOutput(List<RotationStringPart> Parts);
 public record RotationStringPart(string VariableName, string Value);
 public record ResolveMapNamesInput(List<Guid> MapIds);
@@ -118,6 +118,7 @@ public static class SkipReasons
 {
     public const string AlreadyVerified = "Required map files and sizes already verified";
     public const string BuiltInMap = "Built-in map";
+    public const string ObservedRotationMap = "Map referenced by observed rotation";
     public const string NoMapFiles = "No map files available";
     public const string AacpSharedMaps = "AACP — maps shared with main rotation";
 }
@@ -135,4 +136,5 @@ public record RotationDetails(
     string? ConfigVariableName,
     string? GameMode,
     List<Guid> MapIds,
-    string? Title = null);
+    string? Title = null,
+    List<string?>? MapGameModes = null);

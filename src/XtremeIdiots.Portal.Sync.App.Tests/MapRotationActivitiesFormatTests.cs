@@ -39,6 +39,33 @@ public class MapRotationActivitiesFormatTests
     }
 
     [Fact]
+    public async Task StandardFormattingPreservesRepeatedEntriesAndReturnsToInheritedMode()
+    {
+        var result = await _activities.FormatRotationString(new(
+            ["mp_crash", "mp_crash", "mp_backlot", "mp_crash"], "war", "sv_maprotation",
+            ["sd", "sd", null, "ftag"]));
+
+        Assert.Equal("gametype sd map mp_crash map mp_crash gametype war map mp_backlot gametype ftag map mp_crash",
+            Assert.Single(result.Parts).Value);
+    }
+
+    [Fact]
+    public async Task NullEntryModesRetainExistingUniformFormat()
+    {
+        var result = await _activities.FormatRotationString(new(
+            ["mp_backlot", "mp_crash", "mp_backlot"], "ftag", "sv_maprotation", [null, null, null]));
+
+        Assert.Equal("gametype ftag map mp_backlot map mp_crash map mp_backlot", Assert.Single(result.Parts).Value);
+    }
+
+    [Fact]
+    public async Task IncompleteEntryModesCannotSilentlyProduceAUniformRotation()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _activities.FormatRotationString(new(
+            ["mp_crash", "mp_backlot"], "war", "sv_maprotation", ["sd"])));
+    }
+
+    [Fact]
     public async Task FormatRotationString_AacpFormat_ProducesSemicolonSeparated()
     {
         // Arrange

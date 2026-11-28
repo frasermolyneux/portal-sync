@@ -38,6 +38,29 @@ COD4 and COD4x share one source snapshot. Paging is per catalogue, not per map.
 Updates include file versions and explicitly replace even empty file lists;
 deleted source folders remove only their own legacy redirect references.
 
+## Observed CoD rotations
+
+The hourly observed-rotation collector reads `sv_mapRotation` through the existing
+CoD2, CoD4, CoD4x and CoD5 RCON clients for servers without a Portal-managed
+assignment. It never activates a rotation, updates runtime settings, transfers
+maps or writes configuration files. Repository performs the atomic ownership
+re-check, catalogue resolution and observed-assignment replacement.
+
+Observed entries retain order, repeated maps and per-entry gametype changes.
+Entries before the first gametype declaration remain unspecified. Unchanged
+observations refresh the timestamp without replacing the rotation; only a valid
+explicit empty response records an empty snapshot/watermark. Failed or malformed
+reads retain the last snapshot and surface as job failures.
+
+Managed standard rotations also preserve sorted repeated entries and per-entry
+gametype overrides; a null override inherits the rotation's configured gametype.
+The AACP map picker retains its existing map-name-only format.
+
+Observed rotations cannot be used by managed deployment or configuration
+operations. Their assigned maps remain protected from removal. Daily cleanup
+delegates unassigned observed-rotation deletion to Repository, which enforces
+assignment and evidence-retention constraints; managed rotations are not deleted.
+
 ## Process health
 
 The strategic policy mirrored under `src/contract/` classifies real durable job
