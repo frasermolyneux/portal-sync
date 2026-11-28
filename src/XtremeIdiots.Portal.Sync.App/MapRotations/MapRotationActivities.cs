@@ -184,6 +184,15 @@ public class MapRotationActivities(
 
             foreach (var rotationMap in maps)
             {
+                if (assignment.Source == RotationSource.ServerObserved && rotationMap.MapName is not null)
+                {
+                    if (string.IsNullOrWhiteSpace(rotationMap.MapName))
+                    {
+                        throw new InvalidOperationException($"Observed rotation {assignment.MapRotationId} contains an invalid map name. Cannot safely determine shared maps.");
+                    }
+                    sharedMapNames.Add(rotationMap.MapName);
+                    continue;
+                }
                 var mapResult = await repositoryApiClient.Maps.V1.GetMap(rotationMap.MapId).ConfigureAwait(false);
                 if (!mapResult.IsSuccess || mapResult.Result?.Errors?.Length > 0
                     || mapResult.Result?.Data is not { } map || string.IsNullOrWhiteSpace(map.MapName))

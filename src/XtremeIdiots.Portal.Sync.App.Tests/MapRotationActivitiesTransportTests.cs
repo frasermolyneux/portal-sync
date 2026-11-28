@@ -164,8 +164,10 @@ public class MapRotationActivitiesTransportTests
             .Verify(x => x.DeleteServerMapFromHost(sftpServerId, "custom_map_bravo"), Times.Once);
     }
 
-    [Fact]
-    public async Task RemovalProtectsObservedMapOnLaterAssignmentPage()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RemovalProtectsObservedMapOnLaterAssignmentPage(bool hasObservedName)
     {
         var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
         var serverId = Guid.NewGuid();
@@ -190,10 +192,10 @@ public class MapRotationActivitiesTransportTests
             Newtonsoft.Json.JsonConvert.SerializeObject(new
             {
                 MapRotationId = rotationId,
-                MapRotationMaps = new[] { new { MapId = mapId } }
+                MapRotationMaps = new[] { new { MapId = mapId, MapName = hasObservedName ? "mp_observed" : null } }
             }))!;
         var map = Newtonsoft.Json.JsonConvert.DeserializeObject<Portal.Repository.Abstractions.Models.V1.Maps.MapDto>(
-            Newtonsoft.Json.JsonConvert.SerializeObject(new { MapId = mapId, MapName = "mp_observed" }))!;
+            Newtonsoft.Json.JsonConvert.SerializeObject(new { MapId = mapId, MapName = hasObservedName ? "mp_observed " : "mp_observed" }))!;
         repository.Setup(x => x.MapRotations.V1.GetMapRotation(rotationId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApiResult<MapRotationDto>(System.Net.HttpStatusCode.OK, new ApiResponse<MapRotationDto>(rotation)));
         repository.Setup(x => x.Maps.V1.GetMap(mapId, It.IsAny<CancellationToken>()))
@@ -207,6 +209,7 @@ public class MapRotationActivitiesTransportTests
         Assert.Equal(SkipReasons.ObservedRotationMap, removed.SkipReason);
         repository.Verify(x => x.MapRotations.V1.GetServerAssignments(null, serverId, null,
             RotationSource.ServerObserved, 100, 100, It.IsAny<CancellationToken>()), Times.Once);
+        repository.Verify(x => x.Maps.V1.GetMap(mapId, It.IsAny<CancellationToken>()), hasObservedName ? Times.Never : Times.Once);
         Mock.Get(_serversApiClientMock.Object.Maps.V1).VerifyNoOtherCalls();
     }
 
