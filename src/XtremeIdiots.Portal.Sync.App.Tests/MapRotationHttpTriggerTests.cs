@@ -9,6 +9,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using XtremeIdiots.Portal.Sync.App.MapRotations;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Abstractions.Models.V1.MapRotations;
+using MX.Api.Abstractions;
 
 namespace XtremeIdiots.Portal.Sync.App.Tests;
 
@@ -63,7 +67,7 @@ public class MapRotationHttpTriggerTests
             });
         client.Setup(x => x.RaiseEventAsync(instance, MapRotationWorkflow.CancellationEvent,
             It.IsAny<object>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        var trigger = new MapRotationHttpTriggers(Mock.Of<ILogger<MapRotationHttpTriggers>>());
+        var trigger = new MapRotationHttpTriggers(Mock.Of<ILogger<MapRotationHttpTriggers>>(), Mock.Of<IRepositoryApiClient>());
 
         var response = await trigger.TerminateMapRotationOrchestration(request.Object, client.Object, instance);
 
@@ -94,7 +98,7 @@ public class MapRotationHttpTriggerTests
         {
             RuntimeStatus = OrchestrationRuntimeStatus.Running
         });
-        var trigger = new MapRotationHttpTriggers(Mock.Of<ILogger<MapRotationHttpTriggers>>());
+        var trigger = new MapRotationHttpTriggers(Mock.Of<ILogger<MapRotationHttpTriggers>>(), Mock.Of<IRepositoryApiClient>());
 
         var response = pushMap
             ? await trigger.TriggerPushMapToServer(request.Object, client.Object, Guid.NewGuid(), "CallOfDuty5", "mp_custom")
@@ -120,12 +124,55 @@ public class MapRotationHttpTriggerTests
             {
                 RuntimeStatus = OrchestrationRuntimeStatus.Running
             });
-        var trigger = new MapRotationHttpTriggers(Mock.Of<ILogger<MapRotationHttpTriggers>>());
+        var trigger = new MapRotationHttpTriggers(Mock.Of<ILogger<MapRotationHttpTriggers>>(), Mock.Of<IRepositoryApiClient>());
 
         var response = await trigger.TerminateMapRotationOrchestration(request.Object, client.Object, "maprot-legacy");
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.DoesNotContain(client.Invocations, invocation => invocation.Method.Name == nameof(DurableTaskClient.TerminateInstanceAsync));
+    }
+
+    [Theory]
+    [InlineData("Apply")]
+    [InlineData("Sync")]
+    [InlineData("Remove")]
+    [InlineData("Activate")]
+    [InlineData("Deactivate")]
+    [InlineData("Verify")]
+    public async Task ObservedAssignmentsAreRejectedBeforeOrchestrationScheduling(string action)
+    {
+        using var services = new ServiceCollection().Configure<WorkerOptions>(options =>
+            options.Serializer = new JsonObjectSerializer()).BuildServiceProvider();
+        var function = new Mock<FunctionContext>();
+        function.SetupGet(x => x.InstanceServices).Returns(services);
+        var request = new Mock<HttpRequestData>(function.Object);
+        request.Setup(x => x.CreateResponse()).Returns(() => new TestResponse(function.Object));
+        var client = LegacyMapRotationDrainTests.CreateClient();
+        var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
+        var id = Guid.NewGuid();
+        var assignment = new MapRotationServerAssignmentDto(id, Guid.NewGuid(), Guid.NewGuid(),
+            DeploymentState.NotApplicable, ActivationState.Inactive, null, null, null, null,
+            null, null, DateTime.UtcNow, DateTime.UtcNow, null)
+        { Source = RotationSource.ServerObserved };
+        repository.Setup(x => x.MapRotations.V1.GetServerAssignment(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MapRotationServerAssignmentDto>(HttpStatusCode.OK,
+                new ApiResponse<MapRotationServerAssignmentDto>(assignment)));
+        var trigger = new MapRotationHttpTriggers(Mock.Of<ILogger<MapRotationHttpTriggers>>(), repository.Object);
+
+        var response = await (action switch
+        {
+            "Apply" => trigger.TriggerApplyMapRotation(request.Object, client.Object, id),
+            "Sync" => trigger.TriggerSyncMapRotation(request.Object, client.Object, id),
+            "Remove" => trigger.TriggerRemoveMapRotation(request.Object, client.Object, id),
+            "Activate" => trigger.TriggerActivateMapRotation(request.Object, client.Object, id),
+            "Deactivate" => trigger.TriggerDeactivateMapRotation(request.Object, client.Object, id),
+            "Verify" => trigger.TriggerVerifyMapRotation(request.Object, client.Object, id),
+            _ => throw new InvalidOperationException("Unknown test action")
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.DoesNotContain(client.Invocations, invocation => invocation.Method.Name is
+            nameof(DurableTaskClient.PurgeInstanceAsync) or nameof(DurableTaskClient.ScheduleNewOrchestrationInstanceAsync));
     }
 
     private sealed class TestResponse(FunctionContext context) : HttpResponseData(context)

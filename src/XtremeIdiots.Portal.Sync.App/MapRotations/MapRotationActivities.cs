@@ -98,6 +98,15 @@ public class MapRotationActivities(
 
         try
         {
+            var observedAssignments = await ReadServerAssignments(input.GameServerId, RotationSource.ServerObserved).ConfigureAwait(false);
+            var observedMaps = await ResolveAssignedMapNames(observedAssignments.Where(assignment =>
+                assignment.UnassignedAt is null && assignment.DeploymentState != DeploymentState.Removed)).ConfigureAwait(false);
+            if (observedMaps.Contains(input.MapName, StringComparer.OrdinalIgnoreCase))
+            {
+                logger.LogWarning("Retaining map {MapName} on server {GameServerId} because its observed rotation still references it.",
+                    input.MapName, input.GameServerId);
+                return new MapOperationResult(input.MapName, true, SkipReason: SkipReasons.ObservedRotationMap);
+            }
             logger.LogInformation("Removing map {MapName} from server {GameServerId}", input.MapName, input.GameServerId);
             var result = await serversApiClient.Maps.V1.DeleteServerMapFromHost(input.GameServerId, input.MapName).ConfigureAwait(false);
             return new MapOperationResult(input.MapName, result.IsSuccess);
@@ -126,52 +135,67 @@ public class MapRotationActivities(
     public async Task<List<string>> GetMapsInOtherActiveRotations(
         [ActivityTrigger] GetSharedMapsInput input)
     {
-        var assignmentsResult = await repositoryApiClient.MapRotations.V1
-            .GetServerAssignments(null, input.GameServerId, null, 0, 100).ConfigureAwait(false);
+        var assignments = await ReadServerAssignments(input.GameServerId, RotationSource.PortalManaged).ConfigureAwait(false);
+        assignments.AddRange(await ReadServerAssignments(input.GameServerId, RotationSource.ServerObserved).ConfigureAwait(false));
+        return await ResolveAssignedMapNames(assignments.Where(assignment =>
+            assignment.MapRotationServerAssignmentId != input.ExcludeAssignmentId &&
+            assignment.DeploymentState != DeploymentState.Removed)).ConfigureAwait(false);
+    }
 
-        if (!assignmentsResult.IsSuccess || assignmentsResult.Result?.Data?.Items is null)
+    private async Task<List<MapRotationServerAssignmentDto>> ReadServerAssignments(Guid serverId, RotationSource source)
+    {
+        var assignments = new List<MapRotationServerAssignmentDto>();
+        var identities = new HashSet<Guid>();
+        for (var skip = 0; ; skip += 100)
         {
-            throw new InvalidOperationException($"Failed to query server assignments for server {input.GameServerId}. Cannot safely determine shared maps.");
+            var assignmentsResult = await repositoryApiClient.MapRotations.V1
+                .GetServerAssignments(null, serverId, null, source, skip, 100).ConfigureAwait(false);
+            if (!assignmentsResult.IsSuccess || assignmentsResult.Result?.Errors?.Length > 0
+                || assignmentsResult.Result?.Data?.Items is not { } items)
+            {
+                throw new InvalidOperationException($"Failed to query {source} assignments for server {serverId}. Cannot safely determine shared maps.");
+            }
+            var page = items.ToArray();
+            if (page.Length > 100 || page.Any(assignment => !identities.Add(assignment.MapRotationServerAssignmentId)))
+            {
+                throw new InvalidDataException("Repeated or oversized assignment pages prevent safe map removal.");
+            }
+            assignments.AddRange(page);
+            if (page.Length < 100)
+            {
+                return assignments;
+            }
         }
+    }
 
+    private async Task<List<string>> ResolveAssignedMapNames(IEnumerable<MapRotationServerAssignmentDto> assignments)
+    {
         var sharedMapNames = new List<string>();
-
-        foreach (var assignment in assignmentsResult.Result.Data.Items)
+        foreach (var assignment in assignments)
         {
-            if (assignment.MapRotationServerAssignmentId == input.ExcludeAssignmentId)
-            {
-                continue;
-            }
-
-            if (assignment.DeploymentState == DeploymentState.Removed)
-            {
-                continue;
-            }
-
             var rotationResult = await repositoryApiClient.MapRotations.V1
                 .GetMapRotation(assignment.MapRotationId).ConfigureAwait(false);
 
-            if (!rotationResult.IsSuccess || rotationResult.Result?.Data is null)
+            if (!rotationResult.IsSuccess || rotationResult.Result?.Errors?.Length > 0
+                || rotationResult.Result?.Data?.MapRotationMaps is not { } maps)
             {
                 throw new InvalidOperationException($"Failed to get rotation {assignment.MapRotationId} for active assignment {assignment.MapRotationServerAssignmentId}. Cannot safely determine shared maps.");
             }
 
-            if (rotationResult.Result.Data.MapRotationMaps is not null)
+            foreach (var rotationMap in maps)
             {
-                foreach (var rotationMap in rotationResult.Result.Data.MapRotationMaps)
+                var mapResult = await repositoryApiClient.Maps.V1.GetMap(rotationMap.MapId).ConfigureAwait(false);
+                if (!mapResult.IsSuccess || mapResult.Result?.Errors?.Length > 0
+                    || mapResult.Result?.Data is not { } map || string.IsNullOrWhiteSpace(map.MapName))
                 {
-                    var mapResult = await repositoryApiClient.Maps.V1.GetMap(rotationMap.MapId).ConfigureAwait(false);
-                    if (!mapResult.IsSuccess || mapResult.Result?.Data is null)
-                    {
-                        throw new InvalidOperationException($"Failed to resolve map {rotationMap.MapId} in rotation {assignment.MapRotationId}. Cannot safely determine shared maps.");
-                    }
-
-                    sharedMapNames.Add(mapResult.Result.Data.MapName);
+                    throw new InvalidOperationException($"Failed to resolve map {rotationMap.MapId} in rotation {assignment.MapRotationId}. Cannot safely determine shared maps.");
                 }
+
+                sharedMapNames.Add(map.MapName);
             }
         }
 
-        return sharedMapNames.Distinct().ToList();
+        return sharedMapNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     [Function(nameof(GetLinkedConfigurationAssignments))]
@@ -301,6 +325,7 @@ public class MapRotationActivities(
             {
                 throw new InvalidOperationException("A configuration target changed or could not be read before unassignment.");
             }
+            RequireManaged(assignment.Source, assignment.MapRotationServerAssignmentId);
             currentAssignments.Add(assignment);
         }
         if (currentAssignments.All(assignment => assignment.DeploymentState == DeploymentState.Removed
@@ -361,6 +386,7 @@ public class MapRotationActivities(
     {
         try
         {
+            await RequireManagedAssignment(input.AssignmentId).ConfigureAwait(false);
             var updateDto = new UpdateMapRotationServerAssignmentDto(input.AssignmentId)
             {
                 DeploymentState = input.DeploymentState,
@@ -394,6 +420,7 @@ public class MapRotationActivities(
     {
         try
         {
+            await RequireManagedAssignment(input.AssignmentId).ConfigureAwait(false);
             var createDto = new CreateMapRotationAssignmentOperationDto(input.AssignmentId, input.OperationType)
             {
                 DurableFunctionInstanceId = input.DurableFunctionInstanceId
@@ -452,6 +479,7 @@ public class MapRotationActivities(
         }
 
         var assignment = assignmentResult.Result.Data;
+        RequireManaged(assignment.Source, input.AssignmentId);
 
         var rotationResult = await repositoryApiClient.MapRotations.V1
             .GetMapRotation(assignment.MapRotationId).ConfigureAwait(false);
@@ -462,6 +490,7 @@ public class MapRotationActivities(
         }
 
         var rotation = rotationResult.Result.Data;
+        RequireManaged(rotation.Source, input.AssignmentId);
         var serverResult = await repositoryApiClient.GameServers.V1
             .GetGameServer(assignment.GameServerId).ConfigureAwait(false);
         if (!serverResult.IsSuccess || serverResult.Result?.Data is null)
@@ -469,7 +498,8 @@ public class MapRotationActivities(
             throw new InvalidOperationException($"Failed to get game server {assignment.GameServerId} for assignment {input.AssignmentId}");
         }
 
-        var mapIds = rotation.MapRotationMaps?.Select(m => m.MapId).ToList() ?? [];
+        var entries = rotation.MapRotationMaps?.OrderBy(map => map.SortOrder).ToList() ?? [];
+        var mapIds = entries.Select(map => map.MapId).ToList();
 
         return new RotationDetails(
             AssignmentId: assignment.MapRotationServerAssignmentId,
@@ -485,7 +515,27 @@ public class MapRotationActivities(
             ConfigVariableName: assignment.ConfigVariableName,
             GameMode: rotation.GameMode,
             MapIds: mapIds,
-            Title: rotation.Title);
+            Title: rotation.Title,
+            MapGameModes: entries.Select(map => map.GameMode).ToList());
+    }
+
+    private async Task RequireManagedAssignment(Guid assignmentId)
+    {
+        var response = await repositoryApiClient.MapRotations.V1.GetServerAssignment(assignmentId).ConfigureAwait(false);
+        if (!response.IsSuccess || response.Result?.Errors?.Length > 0 || response.Result?.Data is not { } assignment)
+        {
+            throw new InvalidOperationException($"Could not verify managed ownership for assignment {assignmentId}: {response.StatusCode}.");
+        }
+        RequireManaged(assignment.Source, assignmentId);
+    }
+
+    private void RequireManaged(RotationSource source, Guid assignmentId)
+    {
+        if (source != RotationSource.PortalManaged)
+        {
+            logger.LogWarning("Rejecting managed operation for {Source} rotation assignment {AssignmentId}.", source, assignmentId);
+            throw new InvalidOperationException("Server-observed rotations are read-only and cannot be deployed, activated, configured or unassigned through managed operations.");
+        }
     }
 
     [Function(nameof(ResolveMapNames))]
@@ -516,6 +566,10 @@ public class MapRotationActivities(
     public Task<FormatRotationOutput> FormatRotationString(
         [ActivityTrigger] FormatRotationInput input)
     {
+        if (input.GameModes is not null && input.GameModes.Count != input.MapNames.Count)
+        {
+            throw new InvalidOperationException("The rotation's map names and per-entry gametypes do not match.");
+        }
         var isAacp = input.ConfigVariableName.StartsWith("scr_aacp_maps_", StringComparison.OrdinalIgnoreCase);
 
         if (isAacp)
@@ -523,18 +577,27 @@ public class MapRotationActivities(
             return Task.FromResult(FormatAacpRotation(input.MapNames, input.ConfigVariableName));
         }
 
-        return Task.FromResult(FormatStandardRotation(input.MapNames, input.GameMode, input.ConfigVariableName));
+        return Task.FromResult(FormatStandardRotation(input.MapNames, input.GameMode, input.ConfigVariableName, input.GameModes));
     }
 
-    private static FormatRotationOutput FormatStandardRotation(List<string> mapNames, string gameMode, string baseVariable)
+    private static FormatRotationOutput FormatStandardRotation(List<string> mapNames, string gameMode, string baseVariable,
+        List<string?>? gameModes)
     {
         if (mapNames.Count == 0)
         {
             return new FormatRotationOutput([new RotationStringPart(baseVariable, $"gametype {gameMode}")]);
         }
 
-        var prefix = $"gametype {gameMode} ";
-        var mapEntries = mapNames.Select(m => $"map {m}").ToList();
+        var currentMode = gameModes?[0] ?? gameMode;
+        var prefix = $"gametype {currentMode} ";
+        var mapEntries = new List<string>();
+        for (var index = 0; index < mapNames.Count; index++)
+        {
+            var mode = gameModes?[index] ?? gameMode;
+            var entry = mode == currentMode ? $"map {mapNames[index]}" : $"gametype {mode} map {mapNames[index]}";
+            mapEntries.Add(entry);
+            currentMode = mode;
+        }
 
         var parts = new List<RotationStringPart>();
         var currentChunk = prefix;

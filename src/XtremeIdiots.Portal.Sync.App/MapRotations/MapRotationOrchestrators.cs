@@ -482,7 +482,7 @@ public static class MapRotationOrchestrators
 
             var rotationOutput = await context.CallActivityAsync<FormatRotationOutput>(
                 nameof(MapRotationActivities.FormatRotationString),
-                new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation"),
+                new FormatRotationInput(mapNames, details.GameMode ?? "war", details.ConfigVariableName ?? "sv_maprotation", details.MapGameModes),
                 MapRotationOrchestrationPolicies.ActivationActivityRetryOptions);
 
             if (HasTimedOut(context, activationDeadline))

@@ -105,7 +105,7 @@ public class ProcessHealthTests
 
         await projection.PublishProcessHealth(new(), default);
 
-        Assert.Equal(9, events.Count);
+        Assert.Equal(11, events.Count);
         Assert.Equal("unknown", Assert.Single(events, item =>
             item.Name == "ProcessJobSnapshot" && item.Properties["jobName"] == Job).Properties["status"]);
         Assert.Equal("operational", Assert.Single(events, item => item.Name == "ProcessHealthSnapshot"

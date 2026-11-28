@@ -50,8 +50,15 @@ public class MapRotationActivitiesTransportTests
         var assignment = new MapRotationServerAssignmentDto(assignmentId, rotationId, serverId,
             DeploymentState.Synced, ActivationState.Inactive, 1, null, "server.cfg", "sv_maprotation",
             null, null, now, now, null);
+        var firstMapId = Guid.NewGuid();
+        var secondMapId = Guid.NewGuid();
         var rotation = new MapRotationDto(rotationId, rotationType, "Compatible rotation", null, "war",
-            1, "content", now, now, [], [assignment]);
+            1, "content", now, now,
+            [
+                new() { MapId = firstMapId, SortOrder = 30, GameMode = "sd" },
+                new() { MapId = firstMapId, SortOrder = 10 },
+                new() { MapId = secondMapId, SortOrder = 20, GameMode = "war" }
+            ], [assignment]);
         var server = Newtonsoft.Json.JsonConvert.DeserializeObject<GameServerDto>(
             Newtonsoft.Json.JsonConvert.SerializeObject(new { GameServerId = serverId, GameType = serverType }));
         repository.Setup(x => x.MapRotations.V1.GetServerAssignment(assignmentId, It.IsAny<CancellationToken>()))
@@ -68,6 +75,8 @@ public class MapRotationActivitiesTransportTests
         Assert.Equal(serverId, details.GameServerId);
         Assert.Equal("war", details.GameMode);
         Assert.Equal(rotationId, details.MapRotationId);
+        Assert.Equal([firstMapId, secondMapId, firstMapId], details.MapIds);
+        Assert.Equal([null, "war", "sd"], details.MapGameModes);
     }
 
     [Fact]
@@ -100,9 +109,14 @@ public class MapRotationActivitiesTransportTests
 
     public MapRotationActivitiesTransportTests()
     {
+        var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
+        repository.Setup(x => x.MapRotations.V1.GetServerAssignments(null, It.IsAny<Guid?>(), null,
+                RotationSource.ServerObserved, 0, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(new CollectionModel<MapRotationServerAssignmentDto>([]))));
         _sut = new MapRotationActivities(
             _loggerMock.Object,
-            Mock.Of<IRepositoryApiClient>(),
+            repository.Object,
             _serversApiClientMock.Object);
     }
 
@@ -148,6 +162,52 @@ public class MapRotationActivitiesTransportTests
             .Verify(x => x.DeleteServerMapFromHost(ftpServerId, "custom_map_bravo"), Times.Once);
         Mock.Get(_serversApiClientMock.Object.Maps.V1)
             .Verify(x => x.DeleteServerMapFromHost(sftpServerId, "custom_map_bravo"), Times.Once);
+    }
+
+    [Fact]
+    public async Task RemovalProtectsObservedMapOnLaterAssignmentPage()
+    {
+        var repository = new Mock<IRepositoryApiClient> { DefaultValue = DefaultValue.Mock };
+        var serverId = Guid.NewGuid();
+        var rotationId = Guid.NewGuid();
+        var mapId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        MapRotationServerAssignmentDto Assignment(bool removed = false) => new(Guid.NewGuid(), rotationId, serverId,
+            removed ? DeploymentState.Removed : DeploymentState.NotApplicable, ActivationState.Inactive, null, null, null, null,
+            null, null, now, now, null)
+        { Source = RotationSource.ServerObserved };
+        var firstPage = Enumerable.Range(0, 100).Select(_ => Assignment(removed: true)).ToList();
+        var last = Assignment();
+        repository.Setup(x => x.MapRotations.V1.GetServerAssignments(null, serverId, null,
+                RotationSource.ServerObserved, 0, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(new CollectionModel<MapRotationServerAssignmentDto>(firstPage))));
+        repository.Setup(x => x.MapRotations.V1.GetServerAssignments(null, serverId, null,
+                RotationSource.ServerObserved, 100, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<CollectionModel<MapRotationServerAssignmentDto>>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<CollectionModel<MapRotationServerAssignmentDto>>(new CollectionModel<MapRotationServerAssignmentDto>([last]))));
+        var rotation = Newtonsoft.Json.JsonConvert.DeserializeObject<MapRotationDto>(
+            Newtonsoft.Json.JsonConvert.SerializeObject(new
+            {
+                MapRotationId = rotationId,
+                MapRotationMaps = new[] { new { MapId = mapId } }
+            }))!;
+        var map = Newtonsoft.Json.JsonConvert.DeserializeObject<Portal.Repository.Abstractions.Models.V1.Maps.MapDto>(
+            Newtonsoft.Json.JsonConvert.SerializeObject(new { MapId = mapId, MapName = "mp_observed" }))!;
+        repository.Setup(x => x.MapRotations.V1.GetMapRotation(rotationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<MapRotationDto>(System.Net.HttpStatusCode.OK, new ApiResponse<MapRotationDto>(rotation)));
+        repository.Setup(x => x.Maps.V1.GetMap(mapId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApiResult<Portal.Repository.Abstractions.Models.V1.Maps.MapDto>(System.Net.HttpStatusCode.OK,
+                new ApiResponse<Portal.Repository.Abstractions.Models.V1.Maps.MapDto>(map)));
+        var activities = new MapRotationActivities(_loggerMock.Object, repository.Object, _serversApiClientMock.Object);
+
+        var removed = await activities.RemoveSingleMapFromServer(new(serverId, "MP_OBSERVED", GameType.CallOfDuty4));
+
+        Assert.True(removed.Success);
+        Assert.Equal(SkipReasons.ObservedRotationMap, removed.SkipReason);
+        repository.Verify(x => x.MapRotations.V1.GetServerAssignments(null, serverId, null,
+            RotationSource.ServerObserved, 100, 100, It.IsAny<CancellationToken>()), Times.Once);
+        Mock.Get(_serversApiClientMock.Object.Maps.V1).VerifyNoOtherCalls();
     }
 
     [Fact]

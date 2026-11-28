@@ -6,11 +6,13 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
+using XtremeIdiots.Portal.Repository.Abstractions.Constants.V1;
+using XtremeIdiots.Portal.Repository.Api.Client.V1;
 
 namespace XtremeIdiots.Portal.Sync.App.MapRotations;
 
 [Authorize(Roles = "ServiceAccount")]
-public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
+public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger, IRepositoryApiClient repositoryApiClient)
 {
     private readonly ILogger<MapRotationHttpTriggers> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -304,7 +306,7 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
         string gameType,
         string mapName)
     {
-        if (!Enum.TryParse<Portal.Repository.Abstractions.Constants.V1.GameType>(gameType, true, out var parsedGameType))
+        if (!Enum.TryParse<GameType>(gameType, true, out var parsedGameType))
         {
             var badGameTypeResponse = req.CreateResponse(HttpStatusCode.BadRequest);
             await badGameTypeResponse.WriteStringAsync($"Invalid game type: {gameType}").ConfigureAwait(false);
@@ -366,13 +368,26 @@ public class MapRotationHttpTriggers(ILogger<MapRotationHttpTriggers> logger)
     private static bool IsBusy(OrchestrationRuntimeStatus state) =>
         state is OrchestrationRuntimeStatus.Running or OrchestrationRuntimeStatus.Pending or OrchestrationRuntimeStatus.Suspended;
 
-    private static async Task<HttpResponseData?> RejectConflictingOperation(
+    private async Task<HttpResponseData?> RejectConflictingOperation(
         HttpRequestData req, DurableTaskClient client, Guid assignmentId, string requestedId)
     {
         var legacyConflict = await RejectLegacyOperation(req, client).ConfigureAwait(false);
         if (legacyConflict is not null)
         {
             return legacyConflict;
+        }
+        var assignment = await repositoryApiClient.MapRotations.V1.GetServerAssignment(assignmentId).ConfigureAwait(false);
+        if (!assignment.IsSuccess || assignment.Result?.Errors?.Length > 0 || assignment.Result?.Data is null)
+        {
+            throw new InvalidOperationException($"Could not verify rotation assignment ownership: {assignment.StatusCode}.");
+        }
+        if (assignment.Result.Data.Source != RotationSource.PortalManaged)
+        {
+            logger.LogWarning("Rejected managed operation for observed rotation assignment {AssignmentId}.", assignmentId);
+            var response = req.CreateResponse(HttpStatusCode.Conflict);
+            await response.WriteAsJsonAsync(new { error = "Server-observed rotations are read-only." }).ConfigureAwait(false);
+            response.StatusCode = HttpStatusCode.Conflict;
+            return response;
         }
         foreach (var action in new[] { "sync", "apply", "activate", "deactivate", "verify", "remove" })
         {
